@@ -15,6 +15,8 @@ import {
 import {
   classifyFacebookPageGraphError,
   facebookPageHealthUserMessage,
+  isOptionalFacebookPageMetadataProbeError,
+  messengerPageVerifiedWithoutMetadataRead,
 } from "../shared/facebookPageHealthMessage";
 
 const PSID = "27842272592092598";
@@ -164,6 +166,47 @@ run("does not classify every Graph error as revoked/unpublished", () => {
     "invalid_token",
   );
   assert.equal(classifyFacebookPageGraphError(null, "timeout"), "temporary_failure");
+});
+
+run("Page metadata-only (#100) denial does not invalidate valid Messenger authorization", () => {
+  const metadataError = {
+    httpStatus: 400,
+    code: 100,
+    message:
+      "(#100) Object does not exist, cannot be loaded due to missing permission or reviewable feature. " +
+      "This endpoint requires the 'pages_read_engagement' permission or the 'Page Public Content Access' feature " +
+      "or the 'Page Public Metadata Access' feature.",
+  };
+  assert.equal(isOptionalFacebookPageMetadataProbeError(metadataError), true);
+  const valid = {
+    metadataProbeError: metadataError,
+    tokenValid: true,
+    missingScopes: [] as string[],
+    subscriptionOk: true,
+  };
+  assert.equal(messengerPageVerifiedWithoutMetadataRead(valid), true);
+
+  // Missing actual Messenger authorization, stale tokens, or missing webhook
+  // remain unhealthy; do not silence them with the metadata-read exception.
+  assert.equal(messengerPageVerifiedWithoutMetadataRead({ ...valid, tokenValid: false }), false);
+  assert.equal(messengerPageVerifiedWithoutMetadataRead({ ...valid, tokenValid: null }), false);
+  assert.equal(messengerPageVerifiedWithoutMetadataRead({ ...valid, missingScopes: ["pages_messaging"] }), false);
+  assert.equal(messengerPageVerifiedWithoutMetadataRead({ ...valid, subscriptionOk: false }), false);
+  assert.equal(messengerPageVerifiedWithoutMetadataRead({ ...valid, subscriptionOk: null }), false);
+});
+
+run("only the precise optional Page metadata permission error qualifies", () => {
+  const messages = [
+    { httpStatus: 400, code: 100, message: "Object does not exist" },
+    { httpStatus: 400, code: 100, message: "Requires pages_messaging permission" },
+    { httpStatus: 400, code: 190, message: "Requires the 'pages_read_engagement' permission or Page Public Metadata Access" },
+    { httpStatus: 403, code: 100, message: "Requires the 'pages_read_engagement' permission or Page Public Metadata Access" },
+    { httpStatus: 400, code: 10, message: "Requires the 'pages_read_engagement' permission or Page Public Metadata Access" },
+    { httpStatus: 400, code: 100, message: "Requires the 'pages_read_engagement' permission" },
+  ];
+  for (const message of messages) {
+    assert.equal(isOptionalFacebookPageMetadataProbeError(message), false, message.message);
+  }
 });
 
 console.log("\nAll facebook-sender-profile-naming tests passed.");
