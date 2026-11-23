@@ -178,6 +178,10 @@ run("Page metadata-only (#100) denial does not invalidate valid Messenger author
       "or the 'Page Public Metadata Access' feature.",
   };
   assert.equal(isOptionalFacebookPageMetadataProbeError(metadataError), true);
+  // Our Graph diagnostic sanitizer limits messages to 220 characters.
+  assert.equal(isOptionalFacebookPageMetadataProbeError({
+    ...metadataError, message: metadataError.message.slice(0, 220),
+  }), true);
   const valid = {
     metadataProbeError: metadataError,
     tokenValid: true,
