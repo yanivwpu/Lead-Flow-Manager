@@ -121,9 +121,11 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
     'function Harness() {',
     ' const [saved, setSaved] = React.useState(original);',
     ' const [show, setShow] = React.useState(true);',
+    ' const [revision, setRevision] = React.useState(0);',
     ' window.__replaceBoundary = (boundary) => setSaved(boundary);',
     ' window.__switchDashboardTab = () => setShow((old) => !old);',
-    ' return show ? <NeighborhoodBoundaryEditor boundary={saved} name="Victoria Park" city="Fort Lauderdale"',
+    ' window.__discardNewMap = () => { sessionStorage.removeItem("rge-test-map-view"); setSaved(null); setRevision((v) => v + 1); };',
+    ' return show ? <NeighborhoodBoundaryEditor key={revision} boundary={saved} name="Victoria Park" city="Fort Lauderdale"',
     '  state="FL" country="US" sessionKey="rge-test-map-view" disabled={false} onChange={setSaved} />',
     ' : <p id="other-dashboard-tab">Other page</p>;',
     '}',
@@ -261,6 +263,14 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   assert.equal(await circles.count(), 4, "unapplied map work remains in the same browser tab");
   assert.equal(await page.locator("input").first().inputValue(), beforeSwitch,
     "the map center survives dashboard tab switching");
+
+  await page.evaluate(() => (window as any).__discardNewMap());
+  await disclosure.waitFor();
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "false",
+    "a discarded new neighborhood does not retain the previous expanded map");
+  await disclosure.click();
+  assert.equal(await circles.count(), 0,
+    "starting a different new neighborhood never restores discarded map corners");
 });
 test("Neighborhood Page declares one map and guards against stale sibling DOM duplication", () => {
   const owner = readFileSync("client/src/components/agentPage/NeighborhoodPageSettings.tsx", "utf8");
