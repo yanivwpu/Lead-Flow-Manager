@@ -20,8 +20,11 @@ on:
       - 'server/automationTimerHandlers.ts'
       - 'tests/rge-*.test.ts'
       - 'client/src/components/agentPage/NeighborhoodPageSettings.tsx'
+      - 'client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx'
       - 'client/src/components/agentPage/NeighborhoodGuideVisualEditor.tsx'
       - 'server/routes/agentNeighborhoodPages.ts'
+      - 'server/startupSchemaPatches.ts'
+      - 'migrations/*agent_neighborhood*.sql'
       - 'tests/inventory-contact-*.test.ts'
       - 'tests/ai-domain-eligibility.test.ts'
       - '.github/workflows/rge-contact-eligibility.yml'
@@ -66,6 +69,7 @@ jobs:
           tests/rge-neighborhood-verified-listings.test.ts
           tests/rge-neighborhood-municipal-providers.test.ts
           tests/rge-neighborhood-browse.test.ts
+          tests/rge-neighborhood-custom-boundary.test.ts
           tests/public-agent-page-publication.test.ts
           tests/public-listings-sitemap.test.ts
           tests/public-listing-publication.test.ts
