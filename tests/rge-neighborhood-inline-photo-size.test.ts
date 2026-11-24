@@ -95,5 +95,7 @@ test("editor opens chooser in the article and adjusts width in-place", () => {
   assert.match(ui, /anchor\.replaceWith\(figure\)/);
   assert.match(ui, /figure\.scrollIntoView/);
   assert.match(ui, /type="range" min=\{40\} max=\{100\} step=\{5\}/);
+  assert.match(ui, /data\.photoResizeHandle = "true"/);
+  assert.match(ui, /onPointerDown=\{startResizeFromHandle\}/);
   assert.match(ui, /syncEditor\(\)/);
 });
