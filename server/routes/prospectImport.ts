@@ -10,6 +10,7 @@ import { prospectImportService } from "../prospectImport/prospectImportService";
 import { requireProspectImportAccess } from "./prospectImportAccess";
 import { previewCsvProspects, startCsvProspectImport } from "../prospectImport/csvImportService";
 import { PROSPECT_CSV_MAX_BYTES } from "@shared/prospectCsvImport";
+import { previewShopifyCustomers, importShopifyCustomers, ShopifyProspectImportError } from "../prospectImport/shopifyCustomerImportService";
 import {
   canAccessProspectWorkspaceTools,
   resolveProspectWorkspaceUserId,
@@ -233,6 +234,55 @@ export function registerProspectImportRoutes(app: Express): void {
         res.status(202).json({job});
       }catch(e){
         res.status(400).json({error:e instanceof Error?e.message:"CSV import rejected"});
+      }
+    }
+  );
+
+  // Shopify customer identities are available only to their owning merchant.
+  // Import is a review-only link to synced CRM contacts: no Admin API export,
+  // AI processing, customer contact creation, templates, messages or campaigns.
+  app.get(
+    "/api/growth-tools/prospect-import/shopify/preview",
+    requireProspectImportAccess,
+    async(req,res)=>{
+      try {
+        const initiatedByUserId=(req.user as {id:string}).id;
+        const destinationUserId=await resolveProspectWorkspaceUserId(initiatedByUserId);
+        if(destinationUserId!==initiatedByUserId)
+          return res.status(403).json({error:"Shopify customer review requires your own active Prospect AI workspace."});
+        const preview=await previewShopifyCustomers(destinationUserId,initiatedByUserId);
+        res.json({preview});
+      }catch(error){
+        res.status(error instanceof ShopifyProspectImportError?error.status:500).json({
+          error:error instanceof ShopifyProspectImportError?error.message:"Shopify customer preview unavailable"
+        });
+      }
+    }
+  );
+  app.post(
+    "/api/growth-tools/prospect-import/shopify/import",
+    requireProspectImportAccess,
+    async(req,res)=>{
+      try{
+        const initiatedByUserId=(req.user as {id:string}).id;
+        const workspaceUserId=await resolveProspectWorkspaceUserId(initiatedByUserId);
+        if(workspaceUserId!==initiatedByUserId)
+          return res.status(403).json({error:"Shopify customer review requires your own active Prospect AI workspace."});
+        const body=req.body||{};
+        const result=await importShopifyCustomers({
+          workspaceUserId,initiatedByUserId,
+          previewJobId:typeof body.previewJobId==="string"?body.previewJobId:"",
+          fingerprint:typeof body.fingerprint==="string"?body.fingerprint:"",
+          batchName:typeof body.batchName==="string"?body.batchName:"",
+          selectedContactIds:Array.isArray(body.selectedContactIds)?body.selectedContactIds:[],
+          confirmReviewOnly:body.confirmReviewOnly===true,
+          confirmMerchantAuthority:body.confirmMerchantAuthority===true,
+        });
+        res.status(200).json({job:result});
+      }catch(error){
+        res.status(error instanceof ShopifyProspectImportError?error.status:500).json({
+          error:error instanceof ShopifyProspectImportError?error.message:"Shopify customer import unavailable"
+        });
       }
     }
   );
