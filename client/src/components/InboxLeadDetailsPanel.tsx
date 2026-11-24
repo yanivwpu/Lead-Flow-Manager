@@ -2310,7 +2310,7 @@ export function InboxLeadDetailsPanel({
             </p>
             {activeSuggestionCount > 0 && (
               <span className="text-[9px] text-gray-600 font-semibold shrink-0">
-                {activeSuggestionCount}{" " + inboxText("inboxUi.suggestion")}{activeSuggestionCount !== 1 ? "s" : ""}
+                {inboxText("inboxUi.suggestionCount", { count: activeSuggestionCount })}
               </span>
             )}
           </div>

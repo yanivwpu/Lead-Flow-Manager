@@ -60,7 +60,7 @@ function EmailAttachmentCard({
           target="_blank"
           rel="noopener noreferrer"
           className="block shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white"
-          title={`Preview ${att.filename}`}
+          title={inboxText("inboxUi.previewAttachment", { filename: att.filename })}
           data-testid="email-attachment-preview-link"
         >
           <img

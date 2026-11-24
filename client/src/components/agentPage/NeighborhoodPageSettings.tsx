@@ -28,12 +28,12 @@ function browserDraftStorage(): Storage | undefined {
 type Manager = { canPublish: boolean; pages: NeighborhoodPageSettings[] };
 
 export function NeighborhoodPageSettings({ publicPageUrl }: { publicPageUrl: string | null }) {
-  const { t } = useTranslation();
   const { user } = useAuth();
   return user ? <NeighborhoodManager key={user.id} userId={user.id} publicPageUrl={publicPageUrl} /> : null;
 }
 
 function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; publicPageUrl: string | null }) {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const storageKey = neighborhoodDraftKey(userId);
   const photoInput = useRef<HTMLInputElement>(null);
