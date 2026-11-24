@@ -78,6 +78,11 @@ export const PRODUCT_NAV: MarketingNavDropdown = {
           href: "/realtor-growth-engine",
           description: "Live Growth Engine for real estate teams",
         },
+        {
+          label: "Shopify Growth Engine",
+          href: "/shopify-growth-engine",
+          description: "AI Shopping, orders and consent-based WhatsApp journeys",
+        },
       ],
     },
     {
