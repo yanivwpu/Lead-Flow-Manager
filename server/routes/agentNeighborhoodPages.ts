@@ -112,7 +112,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const queryKey = [name, city, state, country].map((s) => s.toLowerCase()).join("|");
     const now = Date.now();
     const cached = mapCenterCache.get(queryKey);
-    if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude });
+    if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude, precision: cached.precision });
     if (now - lastMapCenterLookup < 1000) return res.status(429).json({ error: "Try locating again in a moment." });
     const day = new Date(now).toISOString().slice(0, 10);
     const usage = mapCenterDailyQuota.get(userId);
