@@ -35,10 +35,11 @@ test("exact provider name AND city are required; ambiguous polygons fail closed"
   assert.equal(selectExactNamedNeighborhood([valid, valid], "Harbor Village", ["NEIGHBORHO"], city), null);
   assert.equal(selectExactNamedNeighborhood([wrongCity], "Harbor Village", ["NEIGHBORHO"], city), null);
   assert.equal(selectExactNamedNeighborhood([valid], "Harbor", ["NEIGHBORHO"], city), null);
-  assert.deepEqual(boundaryBounds(selected!), {
-    minLon: -80.13, maxLon: -80.11999999999999,
-    minLat: 26.22, maxLat: 26.23,
-  });
+  const bounds = boundaryBounds(selected!);
+  assert.ok(Math.abs(bounds.minLon + 80.13) < 0.000001);
+  assert.ok(Math.abs(bounds.maxLon + 80.12) < 0.000001);
+  assert.ok(Math.abs(bounds.minLat - 26.22) < 0.000001);
+  assert.ok(Math.abs(bounds.maxLat - 26.23) < 0.000001);
 });
 
 test("municipal source retrieval is allowlisted, source-separated and cached", async () => {
