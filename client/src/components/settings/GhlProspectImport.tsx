@@ -73,6 +73,7 @@ import {
   PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT,
 } from "@shared/prospectImport";
 import { ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
+import { CsvProspectImport } from "./CsvProspectImport";
 import { ProspectOutreachQueuePanel } from "./ProspectOutreachQueuePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -177,7 +178,7 @@ export function GhlProspectImport({
       selectedIntegrationId,
       selectedLocationId,
     ],
-    enabled: Boolean(selectedIntegrationId && selectedLocationId),
+    enabled: provider === "gohighlevel" && Boolean(selectedIntegrationId && selectedLocationId),
     queryFn: () =>
       fetchJson<LocationMetadata>(
         `/api/growth-tools/prospect-import/ghl/locations/${selectedIntegrationId}/metadata?locationId=${encodeURIComponent(selectedLocationId)}`,
@@ -203,12 +204,14 @@ export function GhlProspectImport({
   });
 
   const applyTemplate = (tpl: {
+    provider?: ProspectImportProvider;
     templateName: string;
     filters: ProspectImportContactFilter;
     defaultInternalTag?: ProspectImportInternalTag | null;
     defaultImportReason?: string | null;
     defaultImportLimit?: number | null;
   }) => {
+    setProvider(tpl.provider || "gohighlevel");
     setFilters({ importLimit: 100, ...tpl.filters });
     setSelectedTagFilters(tpl.filters.tags ?? []);
     if (tpl.defaultInternalTag) setInternalTag(tpl.defaultInternalTag);
@@ -578,7 +581,7 @@ export function GhlProspectImport({
         </div>
       </div>
 
-      <div className="mb-8 flex flex-wrap gap-2">
+      {provider !== "csv" ? <div className="mb-8 flex flex-wrap gap-2">
         {STEPS.map((s) => (
           <div
             key={s.n}
@@ -593,7 +596,7 @@ export function GhlProspectImport({
             {s.n}. {s.label}
           </div>
         ))}
-      </div>
+      </div> : null}
 
       {step === 1 && (
         <section className="space-y-4">
@@ -608,21 +611,27 @@ export function GhlProspectImport({
             <Label>Provider</Label>
             <Select
               value={provider}
-              onValueChange={(v) => setProvider(v as ProspectImportProvider)}
+              onValueChange={(v) => {
+                setProvider(v as ProspectImportProvider);
+                setPreview(null);setPreviewJob(null);setPreviewJobId(null);
+                setStep(1);
+              }}
             >
               <SelectTrigger className="max-w-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {PROSPECT_IMPORT_PROVIDERS.map((p) => (
-                  <SelectItem key={p} value={p} disabled={p !== "gohighlevel"}>
+                  <SelectItem key={p} value={p} disabled={p !== "gohighlevel" && p !== "csv"}>
                     {PROSPECT_IMPORT_PROVIDER_LABELS[p]}
-                    {p !== "gohighlevel" ? " (coming soon)" : ""}
+                    {p !== "gohighlevel" && p !== "csv" ? " (coming soon)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {provider === "csv" ? <CsvProspectImport /> : null}
 
           {provider === "gohighlevel" ? (
             <>
@@ -674,7 +683,7 @@ export function GhlProspectImport({
             </>
           ) : null}
 
-          <div className="flex justify-end">
+          {provider === "gohighlevel" ? <div className="flex justify-end">
             <Button
               type="button"
               disabled={!canContinueFromStep1}
@@ -684,7 +693,7 @@ export function GhlProspectImport({
             >
               Continue <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-          </div>
+          </div> : null}
         </section>
       )}
 
