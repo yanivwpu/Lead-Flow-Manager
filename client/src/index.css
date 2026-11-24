@@ -1321,3 +1321,15 @@ section h2 + p {
   opacity: 1 !important;
   pointer-events: auto !important;
 }
+
+
+/*
+ * Guard the owner-only neighborhood editor against repeated map disclosure
+ * siblings caused by stale client DOM/third-party DOM mutation. There is one
+ * declared map per active neighborhood and only that first one is interactive.
+ * This rule never touches published Agent Pages or other <details> controls.
+ */
+[data-rge-neighborhood-editor="true"] > [data-rge-custom-map="true"] ~ [data-rge-custom-map="true"] {
+  display: none !important;
+  pointer-events: none !important;
+}
