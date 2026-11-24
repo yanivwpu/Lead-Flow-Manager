@@ -56,9 +56,9 @@ test("visual editor's photo reference renders an image between two paragraphs in
       photos: [{ url: image, alt: "Cover garden & park" }],
     },
   });
-  const start = html.indexOf("Paragraph one about the neighborhood.");
+  const start = html.indexOf("<p>Paragraph one about the neighborhood.</p>");
   const middle = html.indexOf('class="neighborhood-guide-inline-photo"');
-  const end = html.indexOf("Paragraph two about its parks.");
+  const end = html.indexOf("<p>Paragraph two about its parks.</p>");
   assert.ok(start > 0 && middle > start && end > middle);
   assert.match(html, /alt="Cover garden &amp; park"/);
   assert.match(html, /class="neighborhood-guide-cover"/);
