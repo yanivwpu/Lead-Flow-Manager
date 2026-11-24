@@ -32,6 +32,7 @@ jobs:
           node --import tsx tests/prospect-outreach-email-html.test.ts
           node --import tsx tests/prospect-outreach-writing-standard.test.ts
           node --import tsx tests/prospect-campaign-readiness-batch-db.test.ts
+          node --import tsx tests/shopify-growth-engine-public.test.ts
 
   postgres-race:
     runs-on: ubuntu-latest
