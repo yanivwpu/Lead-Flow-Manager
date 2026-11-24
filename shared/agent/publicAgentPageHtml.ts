@@ -326,7 +326,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ? neighborhood.content.trim().split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean)
     : [];
   const guideTitle = neighborhood ? escapeHtml(neighborhood.name) : "";
-  const guideSubtitle = neighborhood ? escapeHtml(`${neighborhood.city}, ${neighborhood.state}`) : "";
+  const guideSubtitle = neighborhood ? escapeHtml(`${neighborhood.city}, ${neighborhood.state}${neighborhood.country && neighborhood.country !== "US" ? ", " + neighborhood.country : ""}`) : "";
   const guideHero = guidePhotos[0];
   // Only saved neighborhood photo IDs can become inline images. This prevents
   // arbitrary article Markdown or HTML from injecting external image URLs.
