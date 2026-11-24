@@ -5,11 +5,12 @@ import { validateWidgetPageRules } from './webchatWidgetSettings';
 
 export const MARKETING_CHAT_OWNER_EMAIL = 'marketing@whachatcrm.com';
 
-// Routes audited in client/src/App.tsx. The Shopify preview uses /ecommerce-growth-engine.
+// Routes audited in client/src/App.tsx. Public Shopify product page is separate from the private /ecommerce-growth-engine preview.
 export const MARKETING_CHAT_PRODUCT_PAGES = [
   ['/unified-inbox', 'Unified Inbox', true],
   ['/ai-copilot', 'AI Copilot', true],
   ['/realtor-growth-engine', 'Realtor Growth Engine', true],
+  ['/shopify-growth-engine', 'Shopify Growth Engine', true],
   ['/ecommerce-growth-engine', 'Shopify Growth Engine', false],
   ['/ai-brain', 'AI Brain', true],
   ['/automations', 'Automations', true],
@@ -42,9 +43,15 @@ export function proposeMarketingChatPageCoverage(input: {
     const paths = [path, ...(translatedRoute ? [`/es${path}`, `/he${path}`] : [])];
     const missing = paths.filter(p => !covered(p));
     if (!missing.length) continue;
-    const en = { greeting: `Have questions about ${product}? Ask me about this product, pricing, or requesting a demo.`, suggestedQuestions: [`Tell me about ${product}`, 'Pricing and free trial', 'Book a demo'] };
-    const es = { greeting: `¿Tienes preguntas sobre ${product}? Pregúntame por el producto, los precios o cómo solicitar una demo.`, suggestedQuestions: [`Cuéntame sobre ${product}`, 'Precios y prueba gratuita', 'Reservar una demo'] };
-    const he = { greeting: `יש שאלות על ${product}? אפשר לשאול על המוצר, המחירים או בקשת הדגמה.`, suggestedQuestions: [`ספרו לי על ${product}`, 'מחירים ותקופת ניסיון', 'קביעת הדגמה'] };
+    const en = path === '/shopify-growth-engine'
+      ? { greeting: 'Ask about Shopify product sync, AI Shopping, consent-based WhatsApp messages, or setup. Cart Recovery delivery and AI checkout creation are not broadly available yet.', suggestedQuestions: ['Tell me about Shopify Growth Engine', 'Pricing and free trial', 'Book a demo'] }
+      : { greeting: `Have questions about ${product}? Ask me about this product, pricing, or requesting a demo.`, suggestedQuestions: [`Tell me about ${product}`, 'Pricing and free trial', 'Book a demo'] };
+    const es = path === '/shopify-growth-engine'
+      ? { greeting: 'Pregunta por Shopify, las compras con IA, la sincronización de productos y los mensajes con consentimiento. La recuperación y el checkout mediante IA siguen limitados.', suggestedQuestions: ['Cómo funciona Shopify Growth Engine', 'Precios y prueba gratuita', 'Reservar una demo'] }
+      : { greeting: `¿Tienes preguntas sobre ${product}? Pregúntame por el producto, los precios o cómo solicitar una demo.`, suggestedQuestions: [`Cuéntame sobre ${product}`, 'Precios y prueba gratuita', 'Reservar una demo'] };
+    const he = path === '/shopify-growth-engine'
+      ? { greeting: 'אפשר לשאול על סנכרון Shopify, קניות AI והודעות WhatsApp בהסכמה. שחזור עגלות ויצירת checkout ב-AI עדיין מוגבלים.', suggestedQuestions: ['איך עובד Shopify Growth Engine?', 'מחירים ותקופת ניסיון', 'קביעת הדגמה'] }
+      : { greeting: `יש שאלות על ${product}? אפשר לשאול על המוצר, המחירים או בקשת הדגמה.`, suggestedQuestions: [`ספרו לי על ${product}`, 'מחירים ותקופת ניסיון', 'קביעת הדגמה'] };
     rules.push({ urlContains: missing[0], matchType: 'pathname', urlAliases: missing.slice(1), prefilledMessage: '', ...en, localized: { en, es, he } });
   }
   const validation = validateWidgetPageRules(rules);
