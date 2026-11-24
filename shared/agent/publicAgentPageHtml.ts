@@ -165,7 +165,8 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
   const publicMode = !neighborhood.preview;
   const authorizedMode = publicMode ? listings?.mode === "public"
     : listings?.mode === "owner_preview";
-  const matched = listings?.boundaryStatus === "verified" && authorizedMode;
+  const matched = (listings?.boundaryStatus === "verified" || listings?.boundaryStatus === "custom") && authorizedMode;
+  const customArea = listings?.boundaryStatus === "custom";
   const sales = matched && listings ? listings.sale : [];
   const rentals = matched && listings ? listings.rent : [];
   const title = escapeHtml(neighborhood.name);
@@ -177,7 +178,9 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       ? "Some previously synced properties are not shown because their current MLS availability cannot be verified."
       : !publicMode && listings.hasOlderMatchingInventory
         ? "Private test: these are previously synced listings, not verified current availability. Do not share as active properties."
-        : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
+        : customArea
+          ? "Properties are matched to an agent-defined custom area, not an official neighborhood boundary, and checked against MLS display permissions."
+          : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
   const filtersHtml = matched && publicMode ? `<form id="neighborhood-filters" class="neighborhood-filters" aria-label="Filter neighborhood homes">
       <label>Property type
         <select name="propertyType"><option value="">All types</option><option value="house">House</option><option value="condo">Condo</option><option value="townhouse">Townhouse</option><option value="multi_family">Multi-family</option><option value="land">Land</option><option value="other">Other</option></select>
