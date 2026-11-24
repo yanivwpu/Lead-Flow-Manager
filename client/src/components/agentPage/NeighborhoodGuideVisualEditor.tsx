@@ -225,6 +225,10 @@ export function NeighborhoodGuideVisualEditor({
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="Neighborhood article editor">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <h5 className="text-sm font-semibold text-slate-900">Your local guide</h5>
+        <p className="text-xs text-slate-500">Write, format and insert photos directly in your article.</p>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
         <div className="flex flex-wrap items-center gap-0.5" role="toolbar" aria-label="Article formatting">
           {toolbarButton("Bold", <Bold className="h-4 w-4" />, () => format("bold"))}
