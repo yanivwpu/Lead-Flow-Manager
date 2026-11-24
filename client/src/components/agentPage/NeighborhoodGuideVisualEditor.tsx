@@ -300,7 +300,7 @@ export function NeighborhoodGuideVisualEditor({
         <span className="text-xs tabular-nums text-slate-500">{content.length.toLocaleString()} / 5,000</span>
       </div>
       {pickerHost && createPortal(
-        <div className="rounded-lg bg-white p-3" role="region" aria-label="Choose article image">
+        <div className="rounded-lg bg-white p-3" role="region" aria-label="Choose article image" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onKeyUp={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-slate-900">Choose a photo for this spot</p>
             <Button type="button" size="icon" variant="ghost" aria-label="Close photo picker" className="h-8 w-8"
