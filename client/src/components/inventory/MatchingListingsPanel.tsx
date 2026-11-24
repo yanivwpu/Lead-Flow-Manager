@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, Loader2, Sparkles } from "lucide-react";
@@ -51,6 +52,7 @@ export function MatchingListingsPanel({
   inventoryRelevant = true,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
+  const { t: inboxText } = useTranslation();
   const [showSaved, setShowSaved] = useState(false);
   const queryClient = useQueryClient();
   const cardsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -210,18 +212,18 @@ export function MatchingListingsPanel({
                 compact ? "text-[11px]" : "text-xs",
               )}
             >
-              Inventory matches
+              {inboxText("inboxUi.inventoryMatches")}
               {isFetching && hasCachedMatches && (
                 <Loader2 className="inline-block ml-1.5 h-3 w-3 animate-spin text-gray-400" aria-hidden />
               )}
             </p>
             {totalFound > 0 && (
               <p className="text-[10px] text-gray-500 leading-snug mt-0.5">
-                <span className="font-medium text-gray-700">{totalFound} found</span>
+                <span className="font-medium text-gray-700">{inboxText("inboxUi.matchesFound", { count: totalFound })}</span>
                 {showingCount > 0 && (
                   <>
                     <span className="text-gray-300 mx-1">·</span>
-                    <span>Showing {showingCount}</span>
+                    <span>{inboxText("inboxUi.showingMatches", { count: showingCount })}</span>
                   </>
                 )}
               </p>
@@ -238,7 +240,7 @@ export function MatchingListingsPanel({
             data-testid="button-saved-property-shortlist"
           >
             <Heart className="h-3 w-3" aria-hidden="true" />
-            {showSaved ? "Back to matches" : `Saved (${savedListingIds.length})`}
+            {showSaved ? inboxText("inboxUi.backToMatches") : inboxText("inboxUi.shortlistCount", { count: savedListingIds.length })}
           </button>
         </div>
       </div>
@@ -255,7 +257,7 @@ export function MatchingListingsPanel({
       {isLoading && !hasCachedMatches && (
         <div className="flex items-center gap-1.5 py-2 text-[11px] text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Finding matches…
+          {inboxText("inboxUi.findingMatches")}
         </div>
       )}
 
@@ -264,8 +266,8 @@ export function MatchingListingsPanel({
           className="text-[11px] text-amber-700 leading-snug py-1"
           data-testid="matching-listings-fetch-error"
         >
-          Unable to load matching listings right now.
-          {isRateLimited ? " Please wait a moment and try again." : ""}
+          {inboxText("inboxUi.unableToLoadMatchingListingsRightNow")}
+          {isRateLimited ? inboxText("inboxUi.pleaseWaitAMomentAndTryAgain") : ""}
         </p>
       )}
 
@@ -283,10 +285,10 @@ export function MatchingListingsPanel({
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
           {firstPage?.reason === "no_buyer_preferences" || firstPage?.reason === "no_active_inventory"
-            ? "Matches will appear once buyer preferences and inventory are available."
+            ? inboxText("inboxUi.matchesWillAppearOnceBuyerPreferencesAndInventory")
             : showHealthDiagnostics && firstPage?.diagnostics?.noMatchSummary?.trim()
               ? firstPage.diagnostics.noMatchSummary.trim()
-              : "No strong matches in active inventory yet."}
+              : inboxText("inboxUi.noStrongMatchesInActiveInventoryYet")}
         </p>
       )}
 
@@ -327,7 +329,7 @@ export function MatchingListingsPanel({
                 disabled={isFetchingNextPage}
                 data-testid="button-view-more-matches"
               >
-                {isFetchingNextPage ? "Loading more…" : "View more"}
+                {isFetchingNextPage ? inboxText("inboxUi.loadingMore") : inboxText("inboxUi.viewMore")}
               </Button>
             )}
           </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ function EmailMessageBodyContent({
   className,
   layout = "inline",
 }: EmailMessageBodyProps) {
+  const { t: inboxText } = useTranslation();
   const retriedFailedImage = useRef(false);
   const enabled = !!messageId && !messageId.startsWith("optimistic-");
   const { data, isPending, refetch } = useQuery<EmailDetailsResponse>({
@@ -111,12 +113,12 @@ function EmailMessageBodyContent({
         ) : null}
         {detail?.fromAddress ? (
           <p className="text-xs text-gray-600 [overflow-wrap:anywhere] break-words">
-            <span className="text-gray-400">From</span> {detail.fromAddress}
+            <span className="text-gray-400">{inboxText("inboxUi.from")}</span> {detail.fromAddress}
           </p>
         ) : null}
         {detail?.replyToAddress && detail.replyToAddress !== detail.fromAddress ? (
           <p className="text-xs text-gray-500 [overflow-wrap:anywhere] break-words">
-            <span className="text-gray-400">Reply-To</span> {detail.replyToAddress}
+            <span className="text-gray-400">{inboxText("inboxUi.replyTo2")}</span> {detail.replyToAddress}
           </p>
         ) : null}
       </div>

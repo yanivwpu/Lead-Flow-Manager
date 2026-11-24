@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Eye, Heart, Home, Loader2 } from "lucide-react";
@@ -37,6 +38,7 @@ export function InventoryMatchRecommendationCard({
   onInsertComposerDraft,
   layout = "modal",
 }: InventoryMatchRecommendationCardProps) {
+  const { t: inboxText } = useTranslation();
   const [detailOpen, setDetailOpen] = useState(false);
   const queryClient = useQueryClient();
   const recommendation = mapInventoryMatchToRecommendation(match);
@@ -96,7 +98,7 @@ export function InventoryMatchRecommendationCard({
           {
             id: "view",
             icon: <Eye className="h-3.5 w-3.5" />,
-            label: "View listing",
+            label: inboxText("inboxUi.viewListing"),
             onClick: viewListing,
             testId: `button-view-listing-${match.listingId}`,
           },
@@ -107,7 +109,7 @@ export function InventoryMatchRecommendationCard({
             ) : (
               <Heart className={cn("h-3.5 w-3.5", saved && "fill-rose-500 text-rose-500")} />
             ),
-            label: "Save to buyer shortlist",
+            label: inboxText("inboxUi.saveToBuyerShortlist"),
             onClick: () => saveMutation.mutate(),
             disabled: saveMutation.isPending,
             active: saved,

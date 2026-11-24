@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * Full-width regular email attachments section (outside HTML body).
  * CID/inline images stay in EmailMessageBody; remote images stay in the proxy path.
@@ -36,6 +37,7 @@ function EmailAttachmentCard({
   messageId: string;
   att: NormalizedEmailAttachmentMeta;
 }) {
+  const { t: inboxText } = useTranslation();
   const mime = normalizeAttachmentMime(att.mimeType);
   const kind = emailAttachmentFileKind(att.mimeType, att.filename);
   const sizeLabel = formatEmailAttachmentSize(att.size ?? null);
@@ -95,18 +97,14 @@ function EmailAttachmentCard({
               className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
               data-testid="email-attachment-open"
             >
-              <ExternalLink className="h-3 w-3" />
-              Open
-            </a>
+              <ExternalLink className="h-3 w-3" />{inboxText("inboxUi.open")}</a>
           ) : null}
           <a
             href={downloadUrl}
             className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
             data-testid="email-attachment-download"
           >
-            <Download className="h-3 w-3" />
-            Download
-          </a>
+            <Download className="h-3 w-3" />{inboxText("inboxUi.download")}</a>
         </div>
       </div>
     </div>
@@ -126,6 +124,7 @@ export function EmailAttachmentsSection({
   messageId: string;
   className?: string;
 }) {
+  const { t: inboxText } = useTranslation();
   const enabled = !!messageId && !messageId.startsWith("optimistic-");
   const { data, isLoading, isError } = useQuery<EmailDetailsResponse>({
     queryKey: ["/api/messages", messageId, "email-details"],
@@ -152,7 +151,7 @@ export function EmailAttachmentsSection({
         className={cn("w-full max-w-full border-t border-gray-100 px-3 py-3 sm:px-5", className)}
         data-testid="email-attachments-loading"
       >
-        <p className="text-xs text-muted-foreground">Checking attachments…</p>
+        <p className="text-xs text-muted-foreground">{inboxText("inboxUi.checkingAttachments")}</p>
       </div>
     );
   }
@@ -171,11 +170,11 @@ export function EmailAttachmentsSection({
       )}
       data-testid="email-attachments-section"
       data-attachment-count={attachments.length}
-      aria-label="Email attachments"
+      aria-label={inboxText("inboxUi.emailAttachments")}
     >
       <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
         <Paperclip className="h-3.5 w-3.5" aria-hidden />
-        Attachments ({attachments.length})
+        {inboxText("inboxUi.attachmentCount", { count: attachments.length })}
       </div>
       <div className="flex w-full max-w-full flex-col gap-2">
         {attachments.map((att) => (

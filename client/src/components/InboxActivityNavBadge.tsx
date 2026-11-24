@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useInboxNewActivityBadge } from "@/lib/useInboxNewActivityBadge";
 
@@ -9,16 +10,17 @@ export function InboxActivityNavBadge({
   className?: string;
   testId: string;
 }) {
+  const { t } = useTranslation();
   const { label } = useInboxNewActivityBadge();
   if (!label) return null;
   return (
     <span
       data-testid={testId}
       className={cn(
-        "pointer-events-none absolute -top-1 -right-1 z-10 flex h-[15px] min-w-[15px] items-center justify-center rounded-full border border-white bg-red-500 px-0.5 text-[9px] font-bold leading-none text-white",
+        "pointer-events-none absolute -top-1 -end-1 z-10 flex h-[15px] min-w-[15px] items-center justify-center rounded-full border border-white bg-red-500 px-0.5 text-[9px] font-bold leading-none text-white",
         className,
       )}
-      aria-label={`${label} new Inbox messages`}
+      aria-label={t("inboxUi.inboxActivityCount", { label })}
     >
       {label}
     </span>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { upgradeToProAI } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
@@ -9,6 +10,7 @@ interface TrialEndingSoonBannerProps {
 
 /** Last ~24h: compact reminder above main scroll area (not inside chat thread). */
 export function TrialEndingSoonBanner({ upgradeProviderLabel }: TrialEndingSoonBannerProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
   return (
@@ -18,7 +20,7 @@ export function TrialEndingSoonBanner({ upgradeProviderLabel }: TrialEndingSoonB
       data-testid="banner-trial-ending-soon"
     >
       <p className="font-medium">
-        Your Pro + AI trial ends soon. Keep automations and AI replies active with an upgrade.
+        {t("inboxUi.trialEndingSoon")}
       </p>
       <Button
         size="sm"
@@ -34,7 +36,7 @@ export function TrialEndingSoonBanner({ upgradeProviderLabel }: TrialEndingSoonB
         }}
         data-testid="button-trial-ending-upgrade"
       >
-        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Upgrade (${upgradeProviderLabel})`}
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("inboxUi.upgradePrice", { price: upgradeProviderLabel })}
       </Button>
     </div>
   );

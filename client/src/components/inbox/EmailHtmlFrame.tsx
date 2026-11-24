@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * Renders untrusted email HTML inside a sandboxed iframe so embedded CSS
  * (e.g. `a { color: blue !important }`) cannot affect Inbox chrome.
@@ -59,6 +60,7 @@ function MeasuredEmailHtmlFrame({
   className?: string;
   onImageError?: () => void;
 }) {
+  const { t: inboxText } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number | null>(null);
 
@@ -149,7 +151,7 @@ function MeasuredEmailHtmlFrame({
       {height === null ? <EmailBodyLoading /> : null}
       <iframe
         ref={iframeRef}
-        title="Email message"
+        title={inboxText("inboxUi.emailMessage")}
         srcDoc={srcDoc}
         sandbox={IFRAME_SANDBOX}
         referrerPolicy="no-referrer"

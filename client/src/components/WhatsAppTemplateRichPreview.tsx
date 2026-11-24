@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -41,13 +42,14 @@ export function templateCarouselCardCount(template: WhatsAppRichPreviewTemplate)
 
 /** Compact pill for cards / modal headers: carousel vs media vs plain. */
 export function TemplateShapeIndicator({ template }: { template: WhatsAppRichPreviewTemplate }) {
+  const { t: inboxText } = useTranslation();
   const tt = (template.templateType || "").toLowerCase();
   const n = templateCarouselCardCount(template);
   if (tt === "carousel" || n > 0) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-900">
         <LayoutGrid className="h-3 w-3 shrink-0" aria-hidden />
-        Carousel{n > 0 ? ` · ${n} cards` : ""}
+        {inboxText("inboxUi.carousel")}{n > 0 ? " " + inboxText("inboxUi.carouselCardCount", { count: n }) : ""}
       </span>
     );
   }
@@ -55,7 +57,7 @@ export function TemplateShapeIndicator({ template }: { template: WhatsAppRichPre
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-700">
         <Image className="h-3 w-3 shrink-0" aria-hidden />
-        Media header
+        {inboxText("inboxUi.mediaHeader")}
       </span>
     );
   }
@@ -123,6 +125,7 @@ export function WhatsAppTemplateRichPreview({
   savedCarouselDefaultsHint?: boolean;
   carouselInBubbleTight?: boolean;
 }) {
+  const { t: inboxText } = useTranslation();
   const ht = (template.headerType || "").toLowerCase();
   const hc = (template.headerContent || "").trim();
   const tt = (template.templateType || "").toLowerCase();
@@ -227,24 +230,22 @@ export function WhatsAppTemplateRichPreview({
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] text-emerald-700 underline-offset-2 hover:underline"
-            >
-              Open
-            </a>
+            >{inboxText("inboxUi.open")}</a>
           </div>
         </div>
       ) : isLibraryCard ? (
         <div className="flex items-center gap-2 border-b border-gray-200/80 bg-gray-50/90 px-2.5 py-2">
           <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
           <span className="text-[11px] font-medium leading-tight text-gray-600">
-            Media per card at send
+            {inboxText("inboxUi.mediaPerCardAtSend")}
           </span>
         </div>
       ) : (
         <div className="flex min-h-[100px] flex-col items-center justify-center gap-1 bg-gray-100 px-3 py-4 text-center">
           <LayoutGrid className="h-8 w-8 text-gray-400" aria-hidden />
-          <span className="text-xs font-medium text-gray-600">No card media to preview</span>
+          <span className="text-xs font-medium text-gray-600">{inboxText("inboxUi.noCardMediaToPreview")}</span>
           <span className="text-[11px] text-gray-500">
-            Upload or link media when sending if this card requires it.
+            {inboxText("inboxUi.uploadOrLinkMediaWhenSendingIfThis")}
           </span>
         </div>
       );
@@ -343,12 +344,11 @@ export function WhatsAppTemplateRichPreview({
               </div>
             ) : null}
             <p className={cn("text-gray-500", carouselTight ? "text-[10px] leading-tight" : "text-[11px]")}>
-              Card {carouselIndex + 1} of {cards.length}
+              {inboxText("inboxUi.carouselCardPosition", { current: carouselIndex + 1, total: cards.length })}
             </p>
             {savedCarouselDefaultsHint ? (
               <p className="text-[10px] leading-snug text-amber-900/85">
-                Preview uses saved default card images. Replace or remove any slide before sending if you need a
-                different asset.
+                {inboxText("inboxUi.previewUsesSavedDefaultCardImagesReplaceOr")}
               </p>
             ) : null}
           </div>
@@ -378,7 +378,7 @@ export function WhatsAppTemplateRichPreview({
           className={`${mediaRounded} flex min-h-[88px] items-center justify-center gap-2 ${pad} text-sm text-gray-500`}
         >
           <Image className="h-8 w-8 shrink-0 text-gray-400" aria-hidden />
-          <span>Image header</span>
+          <span>{inboxText("inboxUi.imageHeader")}</span>
         </div>
       );
     }
@@ -408,7 +408,7 @@ export function WhatsAppTemplateRichPreview({
           className={`${mediaRounded} flex min-h-[88px] items-center justify-center gap-2 ${pad} text-sm text-gray-500`}
         >
           <Video className="h-6 w-6 shrink-0 text-gray-400" aria-hidden />
-          <span>Video header</span>
+          <span>{inboxText("inboxUi.videoHeader")}</span>
         </div>
       );
     }
@@ -430,7 +430,7 @@ export function WhatsAppTemplateRichPreview({
           <FileIcon className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[11px] font-medium text-gray-800">{docTitle}</p>
-            <p className="text-[10px] text-gray-500">Approved file in WhatsApp Manager</p>
+            <p className="text-[10px] text-gray-500">{inboxText("inboxUi.approvedFileInWhatsappManager")}</p>
           </div>
         </div>
       ) : (
@@ -444,7 +444,7 @@ export function WhatsAppTemplateRichPreview({
               rel="noopener noreferrer"
               className="text-xs text-emerald-700 underline-offset-2 hover:underline"
             >
-              Open link
+              {inboxText("inboxUi.openLink")}
             </a>
           </div>
         </div>
@@ -457,7 +457,7 @@ export function WhatsAppTemplateRichPreview({
           className={`${mediaRounded} flex items-center gap-2 border-dashed ${pad} text-sm text-gray-500`}
         >
           <FileIcon className="h-5 w-5 shrink-0 text-gray-400" aria-hidden />
-          <span>Document attachment</span>
+          <span>{inboxText("inboxUi.documentAttachment")}</span>
         </div>
       );
     }

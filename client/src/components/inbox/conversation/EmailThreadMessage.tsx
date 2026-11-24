@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { InboxReplyAttribution } from "@/components/InboxReplyAttribution";
 import type { ReplySender } from "@shared/inboxTeam";
 /**
@@ -42,6 +43,7 @@ export function EmailThreadMessage({
   trashPending?: boolean;
   onRequestTrash?: () => void;
 }) {
+  const { t: inboxText } = useTranslation();
   const isOut = message.direction === "outbound";
   const isSending = message.status === "sending";
 
@@ -73,7 +75,7 @@ export function EmailThreadMessage({
                   isOut ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-900",
                 )}
               >
-                {isOut ? "Sent" : "Received"}
+                {isOut ? inboxText("inboxUi.sent") : inboxText("inboxUi.received")}
               </span>
               <span className="text-xs text-gray-500">
                 {format(new Date(message.createdAt), "MMM d, yyyy · h:mm a")}
@@ -81,26 +83,26 @@ export function EmailThreadMessage({
             </div>
             {contactEmail ? (
               <p className="truncate text-xs text-gray-600">
-                <span className="text-gray-400">{isOut ? "To" : "From"}</span>{" "}
+                <span className="text-gray-400">{isOut ? inboxText("inboxUi.to") : inboxText("inboxUi.from")}</span>{" "}
                 <span className="text-gray-800">{contactEmail}</span>
               </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {message.sentViaFallback ? (
-              <span className="text-[10px] text-amber-600">via {message.fallbackChannel}</span>
+              <span className="text-[10px] text-amber-600">{inboxText("inboxUi.via") + " "}{message.fallbackChannel}</span>
             ) : null}
             {isOut && isSending ? <Loader2 className="h-3 w-3 animate-spin text-gray-400" /> : null}
             {isOut && message.status === "failed" ? (
-              <span className="text-[10px] font-medium text-red-500">Not sent</span>
+              <span className="text-[10px] font-medium text-red-500">{inboxText("inboxUi.notSent")}</span>
             ) : null}
             {onRequestTrash && !message.id.startsWith("optimistic-") ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    title="Email actions"
-                    aria-label="Email actions"
+                    title={inboxText("inboxUi.emailActions")}
+                    aria-label={inboxText("inboxUi.emailActions")}
                     data-testid={`button-email-message-menu-${message.id}`}
                     className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                     onClick={(e) => e.stopPropagation()}
@@ -118,9 +120,7 @@ export function EmailThreadMessage({
                       onRequestTrash();
                     }}
                   >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                    Move to Trash
-                  </DropdownMenuItem>
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />{inboxText("inboxUi.moveToTrash")}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}

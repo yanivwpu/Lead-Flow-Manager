@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Home, RefreshCw } from "lucide-react";
 
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export function CopilotInventorySourcesUnavailable({ compact = true, onRetry }: Props) {
+  const { t: inboxText } = useTranslation();
   return (
     <div
       className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2.5 space-y-2"
@@ -22,11 +24,11 @@ export function CopilotInventorySourcesUnavailable({ compact = true, onRetry }: 
               : "text-xs font-semibold uppercase tracking-wide text-gray-600"
           }
         >
-          Inventory Intelligence
+          {inboxText("inboxUi.inventoryIntelligence")}
         </span>
       </div>
       <p className={compact ? "text-[11px] font-medium text-gray-800" : "text-sm font-medium text-gray-900"}>
-        Inventory connection status unavailable. Please retry.
+        {inboxText("inboxUi.inventoryConnectionStatusUnavailablePleaseRetry")}
       </p>
       {onRetry ? (
         <Button
@@ -38,7 +40,7 @@ export function CopilotInventorySourcesUnavailable({ compact = true, onRetry }: 
           onClick={onRetry}
         >
           <RefreshCw className="h-3 w-3 mr-1.5" aria-hidden />
-          Retry
+          {inboxText("inboxUi.retry")}
         </Button>
       ) : null}
     </div>

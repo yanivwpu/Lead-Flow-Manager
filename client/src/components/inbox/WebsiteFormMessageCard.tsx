@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * Polished renderer for inbound website form notifications (sourceType = website_form).
  * Visitor message is primary; raw notification remains available under Details.
@@ -55,6 +56,7 @@ export function WebsiteFormMessageCard({
   emailSubject?: string | null;
   className?: string;
 }) {
+  const { t: inboxText } = useTranslation();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const visitorName = meta.visitorName?.trim() || null;
   const visitorEmail = meta.visitorEmail?.trim() || null;
@@ -86,7 +88,7 @@ export function WebsiteFormMessageCard({
       )}
       data-testid="website-form-message-card"
       role="article"
-      aria-label="Website form submission"
+      aria-label={inboxText("inboxUi.websiteFormSubmission")}
     >
       <div className="flex items-start gap-2.5 border-b border-sky-100 px-3.5 py-2.5">
         <div
@@ -96,9 +98,7 @@ export function WebsiteFormMessageCard({
           <FileInput className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium tracking-wide text-sky-800/90">
-            Contact Form Submission
-          </p>
+          <p className="text-[11px] font-medium tracking-wide text-sky-800/90">{inboxText("inboxUi.contactFormSubmission")}</p>
           <p className="truncate text-sm font-semibold text-gray-900" data-testid="form-visitor-identity">
             {[visitorName, visitorEmail].filter(Boolean).join(" · ") || formTitle}
           </p>
@@ -141,7 +141,7 @@ export function WebsiteFormMessageCard({
             {message}
           </blockquote>
         ) : (
-          <p className="text-sm text-gray-600">No message body was detected in this form submission.</p>
+          <p className="text-sm text-gray-600">{inboxText("inboxUi.noMessageBodyWasDetectedInThisForm")}</p>
         )}
 
         {(pageLabel || submittedLabel) && (
@@ -163,9 +163,7 @@ export function WebsiteFormMessageCard({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-800 hover:underline"
               data-testid="form-view-source-page"
-            >
-              View Source Page
-              <ExternalLink className="h-3 w-3" aria-hidden />
+            >{inboxText("inboxUi.viewSourcePage")}<ExternalLink className="h-3 w-3" aria-hidden />
             </a>
           </div>
         ) : null}
@@ -176,9 +174,7 @@ export function WebsiteFormMessageCard({
           type="button"
           className="flex w-full items-center justify-between border-t border-sky-100 px-3.5 py-2 text-left text-xs font-medium text-sky-900 hover:bg-sky-50/80"
           data-testid="form-details-toggle"
-        >
-          Details
-          <ChevronDown
+        >{inboxText("inboxUi.details")}<ChevronDown
             className={cn("h-3.5 w-3.5 transition-transform", detailsOpen && "rotate-180")}
             aria-hidden
           />
@@ -186,7 +182,7 @@ export function WebsiteFormMessageCard({
         <CollapsibleContent className="border-t border-sky-50 bg-sky-50/40 px-3.5 py-2.5 text-[11px] text-gray-600 space-y-1.5">
           {meta.sourcePageUrl ? (
             <p className="break-all">
-              <span className="font-medium text-gray-700">Page URL:</span>{" "}
+              <span className="font-medium text-gray-700">{inboxText("inboxUi.pageUrl")}</span>{" "}
               <a
                 href={meta.sourcePageUrl}
                 target="_blank"
@@ -199,13 +195,13 @@ export function WebsiteFormMessageCard({
           ) : null}
           {meta.notificationFromEmail ? (
             <p data-testid="form-notification-sender">
-              <span className="font-medium text-gray-700">Notification sender:</span>{" "}
+              <span className="font-medium text-gray-700">{inboxText("inboxUi.notificationSender")}</span>{" "}
               {[meta.notificationFromName, meta.notificationFromEmail].filter(Boolean).join(" · ")}
             </p>
           ) : null}
           {meta.submittedAt ? (
             <p>
-              <span className="font-medium text-gray-700">Submitted at:</span> {meta.submittedAt}
+              <span className="font-medium text-gray-700">{inboxText("inboxUi.submittedAt")}</span> {meta.submittedAt}
             </p>
           ) : null}
           {extraFields.map(([key, value]) => (
@@ -216,10 +212,7 @@ export function WebsiteFormMessageCard({
               {value}
             </p>
           ))}
-          <p className="text-gray-500">
-            Original notification is preserved on this email for audit. Reply goes to the visitor
-            address when Reply-To is present.
-          </p>
+          <p className="text-gray-500">{inboxText("inboxUi.originalNotificationIsPreservedOnThisEmailFor")}</p>
         </CollapsibleContent>
       </Collapsible>
     </div>

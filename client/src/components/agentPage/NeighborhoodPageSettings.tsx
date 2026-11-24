@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Copy, Eye, ImagePlus, Pencil, Trash2 } from "lucide-react";
@@ -19,6 +20,7 @@ import {
   sameNeighborhoodContent, writeNeighborhoodDrafts, type NeighborhoodDrafts,
 } from "@/lib/neighborhoodDrafts";
 
+const defaultCountryCode = "US";
 const endpoint = "/api/agent-page/neighborhoods";
 function browserDraftStorage(): Storage | undefined {
   try { return window.localStorage; } catch { return undefined; }
@@ -26,6 +28,7 @@ function browserDraftStorage(): Storage | undefined {
 type Manager = { canPublish: boolean; pages: NeighborhoodPageSettings[] };
 
 export function NeighborhoodPageSettings({ publicPageUrl }: { publicPageUrl: string | null }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   return user ? <NeighborhoodManager key={user.id} userId={user.id} publicPageUrl={publicPageUrl} /> : null;
 }
@@ -262,11 +265,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             ))}
           </div>
           <div className="max-w-xs">
-            <Label htmlFor="neighborhood-country">Country (2-letter code)</Label>
+            <Label htmlFor="neighborhood-country">{t("inboxUi.neighborhoodCountryCode")}</Label>
             <Input id="neighborhood-country" value={values.country ?? "US"} maxLength={2}
-              disabled={save.isPending} readOnly={stale} placeholder="US"
+              disabled={save.isPending} readOnly={stale} placeholder={defaultCountryCode} dir="ltr"
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
-            <p className="mt-1 text-xs text-slate-500">Examples: US, CA, GB, IL. Existing U.S. guides stay unchanged.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("inboxUi.neighborhoodCountryExamples")}</p>
           </div>
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
             disabled={stale || save.isPending || photoUploading} uploading={photoUploading}

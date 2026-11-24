@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ type Props = {
 };
 
 export function CopilotInventoryEmptyState({ compact = true }: Props) {
+  const { t: inboxText } = useTranslation();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   if (hideGrowthEngine) return null;
 
@@ -27,14 +29,14 @@ export function CopilotInventoryEmptyState({ compact = true }: Props) {
               : "text-xs font-semibold uppercase tracking-wide text-gray-600"
           }
         >
-          Inventory Intelligence
+          {inboxText("inboxUi.inventoryIntelligence")}
         </span>
       </div>
       <p className={compact ? "text-[11px] font-medium text-gray-800" : "text-sm font-medium text-gray-900"}>
-        Connect inventory to enable matching listings and price reduction alerts.
+        {inboxText("inboxUi.connectInventoryToEnableMatchingListingsAndPrice")}
       </p>
       <p className={compact ? "text-[11px] text-gray-600 leading-snug" : "text-sm text-gray-600"}>
-        Set up an MLS or RESO feed in your Growth Engine:
+        {inboxText("inboxUi.setUpAnMlsOrResoFeedIn")}
       </p>
       <ul
         className={
@@ -43,8 +45,8 @@ export function CopilotInventoryEmptyState({ compact = true }: Props) {
             : "text-sm text-gray-600 leading-snug space-y-1 list-disc pl-5"
         }
       >
-        <li>Matching Listings</li>
-        <li>Price Reduction Alerts</li>
+        <li>{inboxText("inboxUi.matchingListings")}</li>
+        <li>{inboxText("inboxUi.priceReductionAlerts")}</li>
       </ul>
       <Button
         asChild
@@ -53,7 +55,7 @@ export function CopilotInventoryEmptyState({ compact = true }: Props) {
         className={compact ? "h-7 text-[11px] mt-1" : "mt-2"}
         data-testid="button-open-inventory-settings"
       >
-        <Link href={RGE_INVENTORY_SETTINGS_PATH}>Open Inventory Settings</Link>
+        <Link href={RGE_INVENTORY_SETTINGS_PATH}>{inboxText("inboxUi.openInventorySettings")}</Link>
       </Button>
     </div>
   );

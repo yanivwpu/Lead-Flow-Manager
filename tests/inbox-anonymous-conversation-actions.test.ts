@@ -129,8 +129,8 @@ test("Unknown conversation shows Delete conversation; identified contact does no
   assert.match(inbox, /menu-delete-conversation/);
   assert.match(inbox, /className="text-red-600"/);
   assert.match(inbox, /Trash2 className="w-4 h-4 mr-2"/);
-  assert.match(inbox, /Delete conversation\?/);
-  assert.match(inbox, /This will permanently remove this conversation and its messages\. This action cannot be undone\./);
+  assert.match(inbox, /inboxUi\.deleteConversation2/);
+  assert.match(inbox, /inboxUi\.thisWillPermanentlyRemoveThisConversationAndIts/);
   assert.match(inbox, /button-cancel-delete-conversation/);
   assert.match(inbox, /button-confirm-delete-conversation/);
   assert.match(inbox, /deleteConversationMutation\.isPending/);
@@ -198,7 +198,7 @@ test("Inbox updates without refresh and empty state is reachable", () => {
 test("failure preserves the conversation and displays an error", () => {
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const mut = inbox.slice(inbox.indexOf("const deleteConversationMutation"));
-  assert.match(mut, /Could not delete conversation/);
+  assert.match(mut, /inboxUi\.couldNotDeleteConversation/);
   assert.match(mut, /variant: "destructive"/);
   assert.doesNotMatch(mut.slice(mut.indexOf("onError"), mut.indexOf("onError") + 400), /setLocation/);
 });
@@ -239,7 +239,7 @@ test("mobile and desktop share the same menu and dialog", () => {
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const triggerIdx = inbox.indexOf('data-testid="button-contact-actions"');
   const triggerSlice = inbox.slice(triggerIdx - 280, triggerIdx + 420);
-  assert.match(triggerSlice, /aria-label="Conversation actions"/);
+  assert.match(triggerSlice, /aria-label=\{inboxText\("inboxUi\.conversationActions"\)\}/);
   assert.doesNotMatch(triggerSlice, /hidden md:/);
   assert.equal((inbox.match(/data-testid="menu-delete-conversation"/g) || []).length, 1);
   assert.equal((inbox.match(/data-testid="button-confirm-delete-conversation"/g) || []).length, 1);

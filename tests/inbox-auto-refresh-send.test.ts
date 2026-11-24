@@ -208,7 +208,7 @@ test("absent unattended allowlist cannot create a user-facing send from Inbox op
   assert.match(inbox, /automated_send_blocked/);
   assert.doesNotMatch(
     inbox.slice(inbox.indexOf("isAutomatedAutoSend"), inbox.indexOf("if (isReplyWindow")),
-    /Message not sent/,
+    /inboxUi\.messageNotSent|Message not sent/,
   );
 });
 
@@ -235,9 +235,9 @@ test("already-consumed idempotency key is shared and must not surface as a faile
   const handleAuto = inbox.slice(inbox.indexOf("const handleAutoSend"), inbox.indexOf("const ACCEPTED_TYPES"));
   assert.match(handleAuto, /source:\s*"ai_auto"/);
   const autoError = inbox.slice(inbox.indexOf("isAutomatedAutoSend"), inbox.indexOf("if (isReplyWindow"));
-  assert.doesNotMatch(autoError, /Message not sent/);
+  assert.doesNotMatch(autoError, /inboxUi\.messageNotSent|Message not sent/);
   const manualError = inbox.slice(inbox.indexOf("if (isMediaValidation"), inbox.indexOf("onSettled:"));
-  assert.match(manualError, /Message not sent/);
+  assert.match(manualError, /inboxUi\.messageNotSent|Message not sent/);
 });
 
 test("hydration suggest-reply cannot auto-dispatch without autoDispatch", () => {

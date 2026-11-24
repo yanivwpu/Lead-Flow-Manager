@@ -134,7 +134,7 @@ test("Contacts page uses a compact Contact type filter and keeps existing filter
   assert.doesNotMatch(page, /bg-gray-900 text-white border-gray-900/);
   assert.doesNotMatch(page, /function StatCard/);
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
-  assert.match(inbox, /Save to Contacts/);
+  assert.match(inbox, /inboxUi\.saveToContacts/);
   assert.match(inbox, /save-to-contacts/);
   assert.match(inbox, /input-save-to-contacts-name/);
 });

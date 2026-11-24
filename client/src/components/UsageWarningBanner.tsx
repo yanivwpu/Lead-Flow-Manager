@@ -1,4 +1,6 @@
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, X } from "lucide-react";
+import { formatRegionalNumber } from "@/lib/regionalFormatting";
 import { useState } from "react";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { useSubscription } from "@/lib/subscription-context";
@@ -12,6 +14,7 @@ interface UsageWarningBannerProps {
 }
 
 export function UsageWarningBanner({ conversationsUsed, conversationsLimit, planName }: UsageWarningBannerProps) {
+  const { t: inboxText, i18n } = useTranslation();
   const [dismissed, setDismissed] = useState(false);
   const { data: subscription } = useSubscription();
   const shopHint = useShopifyShopHint();
@@ -38,12 +41,16 @@ export function UsageWarningBanner({ conversationsUsed, conversationsLimit, plan
         <div>
           <span className={`font-medium ${isAtLimit ? "text-red-800" : "text-amber-800"}`}>
             {isAtLimit 
-              ? "You've reached your conversation limit" 
-              : `You've used ${Math.round(percentUsed)}% of your conversations`
+              ? inboxText("inboxUi.youVeReachedYourConversationLimit")
+              : inboxText("inboxUi.usagePercent", { percent: formatRegionalNumber(percentUsed / 100, i18n.language, { style: "percent" }) })
             }
           </span>
-          <span className={`ml-2 text-sm ${isAtLimit ? "text-red-600" : "text-amber-600"}`}>
-            ({conversationsUsed} of {conversationsLimit} on {planName})
+          <span className={`ms-2 text-sm ${isAtLimit ? "text-red-600" : "text-amber-600"}`}>
+            {inboxText("inboxUi.usagePlan", {
+              used: formatRegionalNumber(conversationsUsed, i18n.language),
+              limit: formatRegionalNumber(conversationsLimit, i18n.language),
+              plan: planName,
+            })}
           </span>
         </div>
       </div>
@@ -62,6 +69,7 @@ export function UsageWarningBanner({ conversationsUsed, conversationsLimit, plan
           <button 
             onClick={() => setDismissed(true)}
             className="text-amber-500 hover:text-amber-700 p-1"
+            aria-label={inboxText("inboxUi.dismiss")}
             data-testid="button-dismiss-banner"
           >
             <X className="h-4 w-4" />

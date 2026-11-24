@@ -294,7 +294,7 @@ test("AI Brain naming is used in nav, help, and pricing; page route stays /app/a
   assert.match(layout, /path="\/app\/ai-brain"/);
   assert.doesNotMatch(layout, /\/app\/ai-features/);
   const inbox = read("client/src/components/InboxLeadDetailsPanel.tsx");
-  assert.match(inbox, /Templates, then return via Campaigns/);
+  assert.match(inbox, /inboxUi\.noSavedCampaignsYetCreateOneUnderTemplates/);
   const channels = read("client/src/components/ChannelSettings.tsx");
   assert.match(channels, /label: 'Web Chat'/);
 });

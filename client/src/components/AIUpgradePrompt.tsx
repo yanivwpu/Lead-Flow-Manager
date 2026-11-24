@@ -88,7 +88,7 @@ export function AIUpgradePrompt({
       <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-semibold text-amber-800 leading-snug">
-          Unlock {feature}
+          {t("inboxUi.unlockFeature", { feature })}
         </p>
         {reason && (
           <p className="text-[10px] text-amber-700 leading-snug mt-0.5">{reason}</p>

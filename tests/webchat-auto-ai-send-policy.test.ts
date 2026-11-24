@@ -288,7 +288,7 @@ test("Inbox refresh cannot reprocess historical inbound or toast a blocked Auto 
   assert.match(routes, /auto_dispatch_not_requested/);
   const autoError = inbox.slice(inbox.indexOf("isAutomatedAutoSend"), inbox.indexOf("if (isReplyWindow"));
   assert.match(autoError, /automated_send_blocked/);
-  assert.doesNotMatch(autoError, /Message not sent/);
+  assert.doesNotMatch(autoError, /inboxUi\.messageNotSent|Message not sent/);
 });
 
 test("privacy-safe diagnostics log confidence source without visitor or message fields", () => {

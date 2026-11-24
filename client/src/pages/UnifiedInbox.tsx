@@ -152,7 +152,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { decideEmailTrashSelectionCleanup } from "@/lib/emailTrashSelectionCleanup";
-import { format } from "date-fns";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
 import { isCrmDisplayTag, nextActiveAppointmentByContact } from "@shared/activeAppointment";
@@ -493,40 +493,6 @@ function clampOutboundChannel(shown: Channel | undefined, reachable: Channel[]):
   return reachable[0];
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  manual: 'Manual',
-  whatsapp: 'WhatsApp',
-  instagram: 'Instagram DM',
-  facebook: 'Facebook',
-  webchat: 'Website Chat',
-  import: 'CSV Import',
-  api: 'API',
-  tiktok: 'TikTok',
-  sms: 'SMS',
-  telegram: 'Telegram',
-  calendly: 'Calendly',
-  shopify: 'Shopify',
-  woocommerce: 'WooCommerce',
-};
-
-const SOURCE_OPTIONS = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'instagram', label: 'Instagram DM' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'webchat', label: 'Website Chat' },
-  { value: 'import', label: 'CSV Import' },
-  { value: 'api', label: 'API' },
-];
-
-/** Shown when inbox quick-send blocks non–body-only templates (UI copy only; guard logic is in `@shared/metaTemplateSend`). */
-const INBOX_QUICK_SEND_ADVANCED_COPY =
-  "This approved WhatsApp template uses media, buttons, or carousel content. Quick-send supports text templates for now.";
-
-/** Preview modal for blocked templates — aligns with Templates library messaging (UI only). */
-const INBOX_ADVANCED_PREVIEW_MODAL_NOTE =
-  "This template includes media, buttons, or carousel content. Quick-send support is coming soon.";
-
 function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!followUpDate) return null;
   const due = new Date(followUpDate);
@@ -543,7 +509,7 @@ export function UnifiedInbox() {
   const [pathname, setLocation] = useLocation();
   const searchString = useSearch();
   const { user, sessionAligned } = useAuth();
-  const { t } = useTranslation();
+  const { t: inboxText, i18n } = useTranslation();
   const presenceSocket=useRef<WebSocket|null>(null);
   const presenceRoom=useRef<string|null>(null);
   const activityTimers=useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -643,8 +609,8 @@ export function UnifiedInbox() {
             if (msg.replyWindowReopened) {
               queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
               toast({
-                title: "Reply window reopened",
-                description: "This conversation is back in your Inbox with a fresh messaging window.",
+                title: inboxText("inboxUi.replyWindowReopened"),
+                description: inboxText("inboxUi.thisConversationIsBackInYourInboxWith"),
               });
             }
             if (msg.conversationId) {
@@ -666,11 +632,11 @@ export function UnifiedInbox() {
               });
             }
             toast({
-              title: "Booking confirmed",
+              title: inboxText("inboxUi.bookingConfirmed"),
               description:
                 typeof msg.title === "string" && msg.title
                   ? msg.title
-                  : "A lead completed scheduling via Calendly.",
+                  : inboxText("inboxUi.aLeadCompletedSchedulingViaCalendly"),
             });
           } else if (msg.type === "buyer_preferences_updated" && typeof msg.contactId === "string") {
             const contactId = msg.contactId;
@@ -1777,7 +1743,7 @@ export function UnifiedInbox() {
       displaySuffix = `${hours}h left`;
     }
     return { expired: false as const, displaySuffix, amber };
-  }, [replyWindowDerived]);
+  }, [replyWindowDerived, inboxText]);
 
   // Inline composer notice (subtle): only when < 1h left or expired.
   // Uses the same expiry buffer rule as the header hint; UI-only change.
@@ -1788,13 +1754,13 @@ export function UnifiedInbox() {
     if (remainingMs <= 0) {
       return {
         variant: 'expired' as const,
-        text: 'Reply window expired. Use a template or switch channel.',
+        text: inboxText("inboxUi.replyWindowUseTemplate"),
       };
     }
 
     if (remainingMs < 60 * 60 * 1000) {
       const mins = Math.max(1, Math.floor(remainingMs / (60 * 1000)));
-      return { variant: 'soon' as const, text: `Reply window: ${mins}m left` };
+      return { variant: 'soon' as const, text: inboxText("inboxUi.replyMinutes", { minutes: mins }) };
     }
 
     return null;
@@ -2428,7 +2394,7 @@ export function UnifiedInbox() {
         }, 0);
       }
       toast({
-        title: "Message not sent",
+        title: inboxText("inboxUi.messageNotSent"),
         description: formatOutboundSendErrorDescription(
           errMsg,
           (error as Error & { sendPayload?: { errorCode?: string } }).sendPayload?.errorCode,
@@ -2507,7 +2473,7 @@ export function UnifiedInbox() {
       return { previousContact, previousInbox, contactId };
     },
     onError: (_err, _data, context) => {
-      toast({ title: t("inboxTeam.assignmentFailed"), variant: "destructive" });
+      toast({ title: inboxText("inboxTeam.assignmentFailed"), variant: "destructive" });
       if (context?.previousContact) {
         queryClient.setQueryData(["/api/contacts", context.contactId], context.previousContact);
       }
@@ -2577,10 +2543,10 @@ export function UnifiedInbox() {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       setShowSaveToContacts(false);
-      toast({ title: "Saved to Contacts" });
+      toast({ title: inboxText("inboxUi.savedToContacts") });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not save contact", description: err.message, variant: "destructive" });
+      toast({ title: inboxText("inboxUi.couldNotSaveContact"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -2644,12 +2610,12 @@ export function UnifiedInbox() {
       if (!res.ok) {
         const message =
           body.code === "identified_contact"
-            ? "This conversation belongs to a saved contact."
+            ? inboxText("inboxUi.savedContactConversation")
             : body.error === "insufficient_identity"
-              ? "Not enough identity to save this visitor."
+              ? inboxText("inboxUi.notEnoughIdentity")
               : typeof body.error === "string"
                 ? body.error
-                : "Failed to delete conversation";
+                : inboxText("inboxUi.couldNotDelete");
         throw new Error(message);
       }
       return body as {
@@ -2680,7 +2646,7 @@ export function UnifiedInbox() {
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not delete conversation",
+        title: inboxText("inboxUi.couldNotDeleteConversation"),
         description: err.message,
         variant: "destructive",
       });
@@ -2721,7 +2687,7 @@ export function UnifiedInbox() {
         queryClient.setQueryData(["/api/inbox"], context.previousInbox);
       }
       toast({
-        title: "Email could not be moved to Trash. Please try again.",
+        title: inboxText("inboxUi.emailCouldNotBeMovedToTrashPlease"),
         variant: "destructive",
       });
     },
@@ -2775,7 +2741,7 @@ export function UnifiedInbox() {
         });
       }
       void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      toast({ title: "Email moved to Trash" });
+      toast({ title: inboxText("inboxUi.emailMovedToTrash") });
     },
   });
 
@@ -2807,8 +2773,8 @@ export function UnifiedInbox() {
       !emailSubject.trim()
     ) {
       toast({
-        title: "Subject required",
-        description: "Enter a subject to start a new email.",
+        title: inboxText("inboxUi.subjectRequired"),
+        description: inboxText("inboxUi.enterASubjectToStartANewEmail"),
         variant: "destructive",
       });
       return;
@@ -2821,9 +2787,9 @@ export function UnifiedInbox() {
       })
     ) {
       toast({
-        title: "Add listing details text",
+        title: inboxText("inboxUi.addListingDetailsText"),
         description:
-          "When sending a photo with a listing recommendation, include the property message text so the customer receives price, location, and the View listing link.",
+          inboxText("inboxUi.whenSendingAPhotoWithAListingRecommendation"),
         variant: "destructive",
         duration: 5000,
       });
@@ -2848,8 +2814,8 @@ export function UnifiedInbox() {
     }
     if (contactReachableChannels.length === 0) {
       toast({
-        title: 'Cannot send',
-        description: 'No available messaging channel for this contact.',
+        title: inboxText("inboxUi.cannotSend"),
+        description: inboxText("inboxUi.noAvailableMessagingChannelForThisContact"),
         variant: 'destructive',
       });
       return;
@@ -2872,8 +2838,8 @@ export function UnifiedInbox() {
     if(!meta?.sendAttemptId||typeof meta.replyRevision!=="string"||typeof meta.aiEpoch!=="number")return;
     if (contactReachableChannels.length === 0) {
       toast({
-        title: 'Cannot send',
-        description: 'No available messaging channel for this contact.',
+        title: inboxText("inboxUi.cannotSend"),
+        description: inboxText("inboxUi.noAvailableMessagingChannelForThisContact"),
         variant: 'destructive',
       });
       return;
@@ -2967,7 +2933,7 @@ export function UnifiedInbox() {
       });
     } catch (err: any) {
       URL.revokeObjectURL(localPreview);
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: inboxText("inboxUi.uploadFailed"), description: err.message, variant: "destructive" });
     } finally {
       setIsUploading(false);
     }
@@ -3059,7 +3025,7 @@ export function UnifiedInbox() {
       setTimeout(() => scrollToBottom(), 0);
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to send template", description: error.message, variant: "destructive" });
+      toast({ title: inboxText("inboxUi.failedToSendTemplate"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -3209,7 +3175,7 @@ export function UnifiedInbox() {
   const getChannelIcon = (channel: Channel | undefined, size = "w-3 h-3") => {
     if (!channel) {
       return (
-        <span title="No messaging channel">
+        <span title={inboxText("inboxUi.noMessagingChannel")}>
           <AlertCircle className={cn(size, 'text-amber-500')} aria-hidden />
         </span>
       );
@@ -3224,10 +3190,10 @@ export function UnifiedInbox() {
     const date = new Date(dateStr);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return format(date, "h:mm a");
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return format(date, "EEEE");
-    return format(date, "MMM d");
+    if (diffDays === 0) return formatRegionalDate(date, i18n.language, { hour: "numeric", minute: "2-digit" });
+    if (diffDays === 1) return inboxText("inboxUi.yesterday");
+    if (diffDays < 7) return formatRegionalDate(date, i18n.language, { weekday: "long" });
+    return formatRegionalDate(date, i18n.language, { month: "short", day: "numeric" });
   };
 
   /** Matched detail contact or inbox-list fallback — never previous contact via keepPreviousData. */
@@ -3395,29 +3361,30 @@ export function UnifiedInbox() {
 
       {/* ── LEFT COLUMN: Conversation List ── */}
       <div className={cn(
-        "w-full md:w-72 md:min-w-[18rem] lg:w-80 lg:min-w-[20rem] border-r flex flex-col flex-shrink-0 bg-gray-50",
+        "w-full md:w-72 md:min-w-[18rem] lg:w-80 lg:min-w-[20rem] border-e flex flex-col flex-shrink-0 bg-gray-50",
         selectedContactId ? "hidden md:flex" : "flex"
       )}>
         {/* Header */}
         <div className="p-3 border-b border-gray-200">
           <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-base font-semibold flex-1">Inbox</h2>
+            <h2 className="text-base font-semibold flex-1">{inboxText("inboxUi.inbox")}</h2>
             {/* Channel Filter */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
                   className="h-7 px-2.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                  aria-label={inboxText("inboxUi.filterByChannel")}
                   data-testid="button-channel-filter"
                 >
                   {selectedChannels.size === allChannels.length ? (
-                    <><Globe className="w-3 h-3" /> All</>
+                    <><Globe className="w-3 h-3" />{" " + inboxText("inboxUi.all")}</>
                   ) : (
-                    <><Globe className="w-3 h-3" /> {selectedChannels.size} ch</>
+                    <><Globe className="w-3 h-3" />{inboxText("inboxUi.channelCount", { count: selectedChannels.size })}</>
                   )}
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-52 p-2" align="end">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-2 mb-1">Filter by channel</p>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-2 mb-1">{inboxText("inboxUi.filterByChannel")}</p>
                 {allChannels.map(ch => {
                   const cfg = CHANNEL_CONFIG[ch];
                   const Icon = cfg.icon;
@@ -3435,21 +3402,21 @@ export function UnifiedInbox() {
                         data-testid={`checkbox-channel-${ch}`}
                       />
                       <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: cfg.color }} />
-                      <span className="text-sm text-gray-700">{cfg.label}</span>
+                      <span className="text-sm text-gray-700">{ch === "webchat" ? inboxText("inboxUi.websiteChat") : ch === "email" ? inboxText("inboxUi.emailChannel") : cfg.label}</span>
                     </label>
                   );
                 })}
                 <div className="border-t mt-1 pt-1 flex gap-1 px-2">
-                  <button onClick={() => setSelectedChannels(new Set(allChannels))} className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 py-1">All</button>
-                  <button onClick={() => setSelectedChannels(new Set())} className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 py-1">None</button>
+                  <button onClick={() => setSelectedChannels(new Set(allChannels))} className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 py-1">{inboxText("inboxUi.all")}</button>
+                  <button onClick={() => setSelectedChannels(new Set())} className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 py-1">{inboxText("inboxUi.none")}</button>
                 </div>
               </PopoverContent>
             </Popover>
           </div>
           {/* Search */}
           <div className="relative mb-2">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input placeholder="Search contacts..." className="pl-8 h-8 text-sm" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} data-testid="input-search-inbox" />
+            <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input placeholder={inboxText("inboxUi.searchContacts")} className="ps-8 h-8 text-sm" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} data-testid="input-search-inbox" />
           </div>
           {/* Filter tabs */}
           <div className="flex gap-1" data-testid="filter-tabs">
@@ -3465,7 +3432,7 @@ export function UnifiedInbox() {
                 )}
                 data-testid={`filter-tab-${tab}`}
               >
-                {t(`inboxTeam.${tab}`)}
+                {inboxText(`inboxTeam.${tab}`)}
               </button>
             ))}
           </div>
@@ -3475,49 +3442,49 @@ export function UnifiedInbox() {
             const rows = buildInboxChannelHealthRows(channelHealth);
 
             const channelFullName = (key: string) =>
-              t(`chats.channelHealth.${key}.full`, {
+              inboxText(`chats.channelHealth.${key}.full`, {
                 defaultValue:
                   INBOX_CHANNEL_HEALTH_LABELS[key as InboxChannelHealthKey] ?? key,
               });
             const channelShortName = (key: string) =>
-              t(`chats.channelHealth.${key}.short`, {
+              inboxText(`chats.channelHealth.${key}.short`, {
                 defaultValue:
                   INBOX_CHANNEL_HEALTH_SHORT_LABELS[key as InboxChannelHealthKey] ?? key,
               });
 
             const getTooltip = (ch: (typeof rows)[0]) => {
-              const label = channelFullName(ch.channel);
-              if (!ch.isConnected) return `${label}: not configured — set up in Settings`;
+              const channel = channelFullName(ch.channel);
+              if (!ch.isConnected) return inboxText("inboxUi.channelSetup", { channel });
+              const warning = ch.warnings?.[0] ?? inboxText("inboxUi.metaVerificationTemporarilyUnavailable");
               if (ch.healthy === true) {
-                if (ch.channel === 'whatsapp') return `${label}: account verified and ready`;
-                if (ch.channel === 'telegram') return `${label}: bot token valid, webhook active`;
-                if (ch.channel === 'tiktok')   return `${label}: lead intake is active`;
-                if (ch.channel === 'email') {
-                  return ch.pageName
-                    ? `${label}: connected (${ch.pageName})`
-                    : `${label}: Gmail mailbox connected`;
+                if (ch.channel === "whatsapp") return inboxText("inboxUi.channelVerified", { channel });
+                if (ch.channel === "telegram") return inboxText("inboxUi.channelTelegramReady", { channel });
+                if (ch.channel === "tiktok") return inboxText("inboxUi.channelTikTokReady", { channel });
+                if (ch.channel === "email") {
+                  return ch.pageName ? inboxText("inboxUi.channelConnectedPage", { channel, page: ch.pageName }) :
+                    inboxText("inboxUi.channelMailboxReady", { channel });
                 }
-                if (ch.healthState === "degraded" || (ch.warnings && ch.warnings.length))
-                  return `${label}: connected — ${ch.warnings?.[0] ?? "Meta verification temporarily unavailable."}`;
-                return `${label}: token valid, page accessible, webhook subscribed`;
+                if (ch.healthState === "degraded" || ch.warnings?.length)
+                  return inboxText("inboxUi.channelWarning", { channel, warning });
+                return inboxText("inboxUi.channelReady", { channel });
               }
-              if (ch.healthy === false) return `${label} issue: ${ch.issues[0] ?? 'check Settings'}`;
-              if (ch.healthState === "degraded" || (ch.warnings && ch.warnings.length))
-                return `${label}: ${ch.warnings?.[0] ?? "Verification temporarily unavailable"}`;
-              return `${label}: status unknown`;
+              if (ch.healthy === false)
+                return inboxText("inboxUi.channelTrouble", { channel, issue: ch.issues[0] ?? inboxText("inboxUi.checkSettings") });
+              if (ch.healthState === "degraded" || ch.warnings?.length) return `${channel}: ${warning}`;
+              return inboxText("inboxUi.channelStatusUnknown", { channel });
             };
 
             const statusPhrase = (ch: (typeof rows)[0]) => {
-              if (!ch.isConnected) return t("chats.channelHealth.status.notConfigured", { defaultValue: "not configured" });
+              if (!ch.isConnected) return inboxText("chats.channelHealth.status.notConfigured", { defaultValue: "not configured" });
               if (ch.healthy === true) {
                 const isDegraded =
                   ch.healthState === "degraded" || (!!ch.warnings && ch.warnings.length > 0);
                 return isDegraded
-                  ? t("chats.channelHealth.status.degraded", { defaultValue: "connected with warnings" })
-                  : t("chats.channelHealth.status.connected", { defaultValue: "connected" });
+                  ? inboxText("chats.channelHealth.status.degraded", { defaultValue: "connected with warnings" })
+                  : inboxText("chats.channelHealth.status.connected", { defaultValue: "connected" });
               }
-              if (ch.healthy === false) return t("chats.channelHealth.status.issue", { defaultValue: "needs attention" });
-              return t("chats.channelHealth.status.unknown", { defaultValue: "status unknown" });
+              if (ch.healthy === false) return inboxText("chats.channelHealth.status.issue", { defaultValue: "needs attention" });
+              return inboxText("chats.channelHealth.status.unknown", { defaultValue: "status unknown" });
             };
 
             return (
@@ -3525,7 +3492,7 @@ export function UnifiedInbox() {
                 className="flex flex-nowrap items-center gap-x-1.5 mt-2 pt-2 border-t overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 data-testid="channel-health-bar"
                 role="list"
-                aria-label={t("chats.channelHealth.barLabel", { defaultValue: "Channel connection status" })}
+                aria-label={inboxText("chats.channelHealth.barLabel", { defaultValue: "Channel connection status" })}
               >
                 {rows.map(ch => {
                   const isDegraded =
@@ -3573,30 +3540,26 @@ export function UnifiedInbox() {
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-amber-900 leading-tight">
-                  Meta verification temporarily unavailable
-                </p>
+                <p className="text-xs font-semibold text-amber-900 leading-tight">{inboxText("inboxUi.metaVerificationTemporarilyUnavailable")}</p>
                 {degradedChannels.map((ch) => (
                   <p key={ch.channel} className="text-[11px] text-amber-900/85 mt-0.5 leading-tight">
                     {(ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1))}:{" "}
-                    {ch.warnings?.[0] ?? "Live checks timed out; your saved connection may still work."}
+                    {ch.warnings?.[0] ?? inboxText("inboxUi.liveChecksTimedOut")}
                   </p>
                 ))}
-                <p className="text-[10px] text-amber-800/80 mt-1 leading-tight">
-                  Messaging and template sends are not blocked by this banner alone. If problems persist, open Settings.
-                </p>
+                <p className="text-[10px] text-amber-800/80 mt-1 leading-tight">{inboxText("inboxUi.messagingAndTemplateSendsAreNotBlockedBy")}</p>
                 <a
                   href="/app/settings"
                   className="text-[11px] text-amber-900 font-medium underline underline-offset-2 mt-1 inline-block"
                   data-testid="channel-health-degraded-settings-link"
                 >
-                  Settings →
+                  {inboxText("inboxUi.openSettings")}
                 </a>
               </div>
               <button
                 onClick={() => setDismissedDegradedAlert(degradedKey)}
                 className="text-amber-500 hover:text-amber-700 flex-shrink-0"
-                title="Dismiss"
+                title={inboxText("inboxUi.dismiss")}
                 data-testid="channel-health-degraded-dismiss"
               >
                 <X className="w-3.5 h-3.5" />
@@ -3612,12 +3575,12 @@ export function UnifiedInbox() {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-red-700 leading-tight">
                   {unhealthyChannels.length === 1
-                    ? `${unhealthyChannels[0].channel.charAt(0).toUpperCase() + unhealthyChannels[0].channel.slice(1)} channel issue`
-                    : `${unhealthyChannels.length} channel issues detected`}
+                    ? inboxText("inboxUi.channelIssueName", { channel: unhealthyChannels[0].channel })
+                    : inboxText("inboxUi.channelIssue", { count: unhealthyChannels.length })}
                 </p>
                 {unhealthyChannels.map(ch => (
                   <p key={ch.channel} className="text-[11px] text-red-600 mt-0.5 leading-tight">
-                    {ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1)}: {ch.issues[0] ?? 'unknown issue'}
+                    {ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1)}: {ch.issues[0] ?? inboxText("inboxUi.unknownIssue")}
                   </p>
                 ))}
                 <a
@@ -3625,13 +3588,13 @@ export function UnifiedInbox() {
                   className="text-[11px] text-red-700 font-medium underline underline-offset-2 mt-1 inline-block"
                   data-testid="channel-health-alert-settings-link"
                 >
-                  Fix in Settings →
+                  {inboxText("inboxUi.fixInSettings")}
                 </a>
               </div>
               <button
                 onClick={() => setDismissedHealthAlert(alertKey)}
                 className="text-red-400 hover:text-red-600 flex-shrink-0"
-                title="Dismiss"
+                title={inboxText("inboxUi.dismiss")}
                 data-testid="channel-health-alert-dismiss"
               >
                 <X className="w-3.5 h-3.5" />
@@ -3645,8 +3608,8 @@ export function UnifiedInbox() {
           {showListError ? (
             <div className="p-6 text-center" data-testid="inbox-list-error">
               <AlertCircle className="w-10 h-10 mx-auto mb-3 text-red-400" aria-hidden />
-              <p className="text-sm font-medium text-gray-900 mb-1">Couldn’t load conversations</p>
-              <p className="text-xs text-muted-foreground mb-4">Check your connection and try again.</p>
+              <p className="text-sm font-medium text-gray-900 mb-1">{inboxText("inboxUi.couldnTLoadConversations")}</p>
+              <p className="text-xs text-muted-foreground mb-4">{inboxText("inboxUi.checkYourConnectionAndTryAgain")}</p>
               <Button
                 type="button"
                 size="sm"
@@ -3655,9 +3618,7 @@ export function UnifiedInbox() {
                 onClick={() => {
                   void refetchInbox();
                 }}
-              >
-                Retry
-              </Button>
+              >{inboxText("inboxUi.retry")}</Button>
             </div>
           ) : showListSkeleton ? (
             <div className="p-3 space-y-3" data-testid="inbox-list-skeleton">
@@ -3675,11 +3636,11 @@ export function UnifiedInbox() {
             showInboxEmptyNoChannels ? (
               <div className="p-6 text-center" data-testid="inbox-empty-no-channels">
                 <Smartphone className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden />
-                <p className="text-sm font-medium text-gray-900 mb-1">{t("unifiedInbox.emptyNoChannelsTitle")}</p>
+                <p className="text-sm font-medium text-gray-900 mb-1">{inboxText("unifiedInbox.emptyNoChannelsTitle")}</p>
                 <p className="text-xs text-muted-foreground mb-4">
                   {subscription?.subscription?.isShopify
-                    ? t("unifiedInbox.emptyNoChannelsHintShopify")
-                    : t("unifiedInbox.emptyNoChannelsHint")}
+                    ? inboxText("unifiedInbox.emptyNoChannelsHintShopify")
+                    : inboxText("unifiedInbox.emptyNoChannelsHint")}
                 </p>
                 <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
                   <a>
@@ -3690,7 +3651,7 @@ export function UnifiedInbox() {
                       data-testid="inbox-cta-connect-whatsapp"
                     >
                       <MessageCircle className="w-4 h-4 shrink-0" />
-                      {t("unifiedInbox.connectWhatsAppCta")}
+                      {inboxText("unifiedInbox.connectWhatsAppCta")}
                     </Button>
                   </a>
                 </Link>
@@ -3699,7 +3660,7 @@ export function UnifiedInbox() {
               <div className="p-6 text-center text-muted-foreground">
                 <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">
-                  {t(`inboxTeam.empty_${emptyKind}`)}
+                  {inboxText(`inboxTeam.empty_${emptyKind}`)}
                 </p>
               </div>
             )
@@ -3793,22 +3754,20 @@ export function UnifiedInbox() {
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
                       ) : null}
-                      {item.contact.assignedTo && <span className="ml-auto shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>}
+                      {item.contact.assignedTo && <span className="ms-auto shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>}
                     </div>
                     <div className={INBOX_ROW_LINE2}>
                       <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
                         {getChannelIcon(item.channel, "w-3 h-3")}
                       </span>
                       {isAgentInquiryThread(item.conversation) && <span className="max-w-[60%] truncate text-xs text-sky-700">
-                        {agentInquiryLabel(item.contact) ?? "Agent Page Inquiry"}
+                        {agentInquiryLabel(item.contact) ?? inboxText("inboxUi.agentInquiry")}
                       </span>}
                       {rowIsForm ? (
                         <span
                           className="mr-1 shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-900"
                           data-testid={`badge-form-row-${item.contact.id}`}
-                        >
-                          Form
-                        </span>
+                        >{inboxText("inboxUi.form")}</span>
                       ) : null}
                       <p
                         className={cn(
@@ -3824,16 +3783,12 @@ export function UnifiedInbox() {
                         <span
                           className={cn(INBOX_ROW_CHIP, "border-red-200 bg-red-50 font-semibold text-red-600")}
                           data-testid={`badge-overdue-${item.contact.id}`}
-                        >
-                          Overdue
-                        </span>
+                        >{inboxText("inboxUi.overdue")}</span>
                       ) : showFollowUpBadge && fuStatus === 'today' ? (
                         <span
                           className={cn(INBOX_ROW_CHIP, "border-amber-200 bg-amber-50 text-amber-600")}
                           data-testid={`badge-today-${item.contact.id}`}
-                        >
-                          Today
-                        </span>
+                        >{inboxText("inboxUi.today")}</span>
                       ) : showFollowUpBadge && fuStatus === 'upcoming' ? (
                         <span
                           className={cn(INBOX_ROW_CHIP, "border-slate-200 bg-slate-50 text-slate-500")}
@@ -3856,12 +3811,10 @@ export function UnifiedInbox() {
                       {bookedAppt ? (
                         <span
                           className={cn(INBOX_ROW_CHIP, "border-emerald-200 bg-emerald-50 text-emerald-700")}
-                          title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
+                          title={`${inboxText("inboxUi.bookedDot")} ${formatRegionalDate(new Date(bookedAppt.appointmentDate), i18n.language, { dateStyle: "medium", timeStyle: "short" })}`}
                           data-testid={`badge-booked-${item.contact.id}`}
                         >
-                          <CalendarCheck className="h-2.5 w-2.5 shrink-0" aria-hidden />
-                          Booked
-                        </span>
+                          <CalendarCheck className="h-2.5 w-2.5 shrink-0" aria-hidden />{inboxText("inboxUi.booked")}</span>
                       ) : null}
                     </div> : null}
                   </div>
@@ -3875,8 +3828,8 @@ export function UnifiedInbox() {
                 {isEmailRow && item.lastEmailMessageId ? (
                   <button
                     type="button"
-                    title="Move latest email to Trash"
-                    aria-label="Move latest email to Trash"
+                    title={inboxText("inboxUi.moveLatestEmailToTrash")}
+                    aria-label={inboxText("inboxUi.moveLatestEmailToTrash")}
                     data-testid={`button-trash-email-row-${rowId}`}
                     data-inbox-email-trash="true"
                     disabled={pendingTrashMessageId === item.lastEmailMessageId}
@@ -3935,42 +3888,34 @@ export function UnifiedInbox() {
                   </h3>
                   {getChannelIcon(inquiryThread ? "webchat" : activeChannel)}
                   {inquiryThread && <Badge variant="secondary" data-testid="badge-rge-inquiry-source">
-                    {agentInquiryLabel(contact) ?? "Agent Page Inquiry"}
+                    {agentInquiryLabel(contact) ?? inboxText("inboxUi.agentInquiry")}
                   </Badge>}
                   {isWebsiteFormThread ? (
                     <Badge
                       variant="secondary"
                       className="h-5 rounded-md bg-sky-100 px-1.5 text-[10px] font-semibold text-sky-900 hover:bg-sky-100"
                       data-testid="badge-website-form"
-                    >
-                      Form
-                    </Badge>
+                    >{inboxText("inboxUi.form")}</Badge>
                   ) : null}
                   {hasConversation ? (
                     <span className={cn("text-[10px] font-medium tracking-tight", conversationStatusRow.textClass)}>
                       {conversationStatusRow.label}
                     </span>
                   ) : (
-                    <span className="text-[10px] font-medium tracking-tight text-muted-foreground">
-                      No conversation
-                    </span>
+                    <span className="text-[10px] font-medium tracking-tight text-muted-foreground">{inboxText("inboxUi.noConversation")}</span>
                   )}
                   {contact.automationsPaused && !isInboxOnlyParticipant ? (
                     <span
                       className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
                       data-testid="chip-automation-paused"
-                      title="Workflows, timers, campaigns, and AI auto will not send until you Resume Automations"
-                    >
-                      Automation Paused
-                    </span>
+                      title={inboxText("inboxUi.workflowsTimersCampaignsAndAiAutoWillNot")}
+                    >{inboxText("inboxUi.automationPaused")}</span>
                   ) : null}
                   {isInboxOnlyParticipant ? (
                     <span
                       className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-600"
                       data-testid="chip-inbox-only-participant"
-                    >
-                      Inbox only
-                    </span>
+                    >{inboxText("inboxUi.inboxOnly")}</span>
                   ) : null}
                 </div>
                 {isEmailChannel && (primaryConversation?.subject || emailSubject) ? (
@@ -3998,7 +3943,7 @@ export function UnifiedInbox() {
                   className="md:hidden h-7 w-7 p-0"
                   onClick={() => setShowDetailsSheet(true)}
                   data-testid="button-mobile-crm-details"
-                  title="CRM Details"
+                  title={inboxText("inboxUi.crmDetails")}
                 >
                   <PanelRight className="w-4 h-4" />
                 </Button>
@@ -4012,12 +3957,12 @@ export function UnifiedInbox() {
                       metaWindowHeaderHint.expired && "bg-rose-50 border-rose-200 text-rose-700",
                       metaWindowHeaderHint.amber && !metaWindowHeaderHint.expired && "bg-amber-50 border-amber-200 text-amber-800"
                     )}
-                    title="Time left for free-form messaging on this channel"
+                    title={inboxText("inboxUi.timeLeftForFreeFormMessagingOnThis")}
                     data-testid="meta-window-timer"
                   >
                     {metaWindowHeaderHint.expired
-                      ? "Reply window expired"
-                      : `Reply window: ${metaWindowHeaderHint.displaySuffix}`}
+                      ? inboxText("inboxUi.replyWindowExpired")
+                      : `${inboxText("inboxUi.replyWindow")} ${metaWindowHeaderHint.displaySuffix}`}
                   </span>
                 ) : null}
 
@@ -4030,11 +3975,11 @@ export function UnifiedInbox() {
                       className="h-7 max-w-[min(100%,12rem)] gap-1 rounded-md border border-gray-200/90 bg-white px-2 text-xs font-normal text-gray-600 shadow-none hover:bg-gray-50/90 hover:text-gray-700 focus-visible:ring-1 focus-visible:ring-gray-300/50 focus-visible:ring-offset-0"
                       data-testid="button-switch-channel"
                       disabled={contactReachableChannels.length === 0}
-                      title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}
+                      title={contactReachableChannels.length === 0 ? inboxText("inboxUi.noMessagingChannelAvailableForThisContact") : undefined}
                     >
                       {getChannelIcon(activeChannel)}
                       <span className="hidden min-w-0 truncate sm:inline">
-                        {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : 'No channel'}
+                        {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : inboxText("inboxUi.noChannel")}
                       </span>
                       <ChevronDown className="h-3 w-3 shrink-0 text-gray-500" />
                     </Button>
@@ -4078,22 +4023,20 @@ export function UnifiedInbox() {
                       size="sm"
                       className="h-7 w-7 p-0"
                       data-testid="button-contact-actions"
-                      aria-label="Conversation actions"
-                      title="Conversation actions"
+                      aria-label={inboxText("inboxUi.conversationActions")}
+                      title={inboxText("inboxUi.conversationActions")}
                     >
                       <MoreVertical className="w-4 h-4" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" aria-label="Conversation actions">
+                  <DropdownMenuContent align="end" aria-label={inboxText("inboxUi.conversationActions")}>
                     {conversationMenuActions.includes("save_to_contacts") ? (
                       <DropdownMenuItem onClick={handleSaveToContacts} data-testid="menu-save-to-contacts">
-                        <UserPlus className="w-4 h-4 mr-2" /> Save to Contacts
-                      </DropdownMenuItem>
+                        <UserPlus className="w-4 h-4 mr-2" />{" " + inboxText("inboxUi.saveToContacts")}</DropdownMenuItem>
                     ) : null}
                     {conversationMenuActions.includes("edit_contact") ? (
                       <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">
-                        <Edit className="w-4 h-4 mr-2" /> Edit Contact
-                      </DropdownMenuItem>
+                        <Edit className="w-4 h-4 mr-2" />{" " + inboxText("inboxUi.editContact")}</DropdownMenuItem>
                     ) : null}
                     {conversationMenuActions.includes("pause_automations") ? (
                       <DropdownMenuItem
@@ -4105,18 +4048,16 @@ export function UnifiedInbox() {
                         ) : (
                           <PauseCircle className="w-4 h-4 mr-2" />
                         )}
-                        {contact.automationsPaused ? "Resume Automations" : "Pause Automations"}
+                        {contact.automationsPaused ? inboxText("inboxUi.resumeAutomations") : inboxText("inboxUi.pauseAutomations")}
                       </DropdownMenuItem>
                     ) : null}
                     {conversationMenuActions.includes("activity_timeline") ? (
                       <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">
-                        <History className="w-4 h-4 mr-2" /> Activity Timeline
-                      </DropdownMenuItem>
+                        <History className="w-4 h-4 mr-2" />{" " + inboxText("inboxUi.activityTimeline")}</DropdownMenuItem>
                     ) : null}
                     {conversationMenuActions.includes("delete_contact") ? (
                       <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600" data-testid="menu-delete-contact">
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete Contact
-                      </DropdownMenuItem>
+                        <Trash2 className="w-4 h-4 mr-2" />{" " + inboxText("inboxUi.deleteContact")}</DropdownMenuItem>
                     ) : null}
                     {conversationMenuActions.includes("delete_conversation") ? (
                       <DropdownMenuItem
@@ -4124,8 +4065,7 @@ export function UnifiedInbox() {
                         className="text-red-600"
                         data-testid="menu-delete-conversation"
                       >
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete conversation
-                      </DropdownMenuItem>
+                        <Trash2 className="w-4 h-4 mr-2" />{" " + inboxText("inboxUi.deleteConversation")}</DropdownMenuItem>
                     ) : null}
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -4149,9 +4089,8 @@ export function UnifiedInbox() {
                       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                       setShowNewMsgBanner(false);
                     }}
-                    className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 bg-white text-gray-700 text-xs font-medium px-3 py-1.5 rounded-full shadow-md border border-gray-200 hover:bg-gray-50 transition-all"
-                  >
-                    New messages <ChevronDown className="w-3.5 h-3.5" />
+                    className="absolute bottom-3 end-3 z-20 flex items-center gap-1.5 bg-white text-gray-700 text-xs font-medium px-3 py-1.5 rounded-full shadow-md border border-gray-200 hover:bg-gray-50 transition-all"
+                  >{inboxText("inboxUi.newMessages") + " "}<ChevronDown className="w-3.5 h-3.5" />
                   </button>
                 ) : null
               }
@@ -4184,18 +4123,16 @@ export function UnifiedInbox() {
                     data-testid="inbox-no-conversation-yet"
                   >
                     <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm font-medium text-gray-800">No conversation yet</p>
-                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                      This contact has no message history.
-                      {contactReachableChannels.length > 0
-                        ? " Choose an available channel below to start a conversation."
-                        : " Add a phone number or connect a messaging channel to start a conversation."}
+                    <p className="text-sm font-medium text-gray-800">{inboxText("inboxUi.noConversationYet")}</p>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{inboxText("inboxUi.thisContactHasNoMessageHistory")}{contactReachableChannels.length > 0
+                        ? inboxText("inboxUi.chooseAnAvailableChannelBelowToStartA")
+                        : inboxText("inboxUi.addAPhoneNumberOrConnectAMessaging")}
                     </p>
                   </div>
                 ) : !messagesLoading && messages.length === 0 ? (
                   <div className="text-center text-gray-500 py-8 self-center" data-testid="inbox-no-messages-yet">
                     <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No messages yet</p>
+                    <p className="text-sm">{inboxText("inboxUi.noMessagesYet")}</p>
                   </div>
                 ) : (
                   messages.map((msg, i) => {
@@ -4339,9 +4276,7 @@ export function UnifiedInbox() {
                               ) {
                                 return (
                                   <div className="space-y-1.5 rounded-xl border border-rose-200/90 bg-rose-50/50 px-3 py-2 leading-snug">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-900/85">
-                                      Template not sent
-                                    </p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-900/85">{inboxText("inboxUi.templateNotSent")}</p>
                                     <p className="whitespace-pre-wrap text-sm text-rose-950 [overflow-wrap:anywhere] break-words">
                                       {msg.errorMessage.trim()}
                                     </p>
@@ -4406,9 +4341,7 @@ export function UnifiedInbox() {
                                       className="min-w-0"
                                     />
                                     <div className="flex min-w-0 items-center gap-1.5 overflow-hidden border-t border-emerald-200/35 px-1.5 py-0.5">
-                                      <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wide text-emerald-900/65">
-                                        WhatsApp template
-                                      </span>
+                                      <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wide text-emerald-900/65">{inboxText("inboxUi.whatsappTemplate")}</span>
                                       {provider === "meta" ? (
                                         <span className="shrink-0 rounded-full border border-emerald-200/60 bg-white/60 px-1 py-px text-[8px] font-medium leading-none text-emerald-900/75">
                                           Meta
@@ -4505,7 +4438,7 @@ export function UnifiedInbox() {
                                         null,
                                       mediaUrl: effectiveMediaUrl,
                                     })
-                                  : "Document";
+                                  : inboxText("inboxUi.document");
 
                               const hasTemplateBubbleMedia =
                                 !!effectiveMediaUrl &&
@@ -4573,9 +4506,7 @@ export function UnifiedInbox() {
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="font-medium text-emerald-800 underline-offset-2 hover:underline"
-                                        >
-                                          Open
-                                        </a>
+                                        >{inboxText("inboxUi.open")}</a>
                                         <span className="text-gray-300" aria-hidden>
                                           ·
                                         </span>
@@ -4583,9 +4514,7 @@ export function UnifiedInbox() {
                                           href={templateMediaDisplayUrl}
                                           download={documentBubbleTitle}
                                           className="font-medium text-emerald-800 underline-offset-2 hover:underline"
-                                        >
-                                          Download
-                                        </a>
+                                        >{inboxText("inboxUi.download")}</a>
                                       </div>
                                     </div>
                                   ) : null}
@@ -4595,9 +4524,7 @@ export function UnifiedInbox() {
                                       hasTemplateBubbleMedia && "border-t border-emerald-200/35"
                                     )}
                                   >
-                                    <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wide text-emerald-900/65">
-                                      WhatsApp template
-                                    </span>
+                                    <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wide text-emerald-900/65">{inboxText("inboxUi.whatsappTemplate")}</span>
                                     {provider === "meta" ? (
                                       <span className="shrink-0 rounded-full border border-emerald-200/60 bg-white/60 px-1 py-px text-[8px] font-medium leading-none text-emerald-900/75">
                                         Meta
@@ -4635,7 +4562,7 @@ export function UnifiedInbox() {
                               return (
                                 <div className="min-w-0 space-y-1" data-testid="inbox-webchat-form-result">
                                   <p className="text-xs font-semibold text-gray-700">
-                                    {submission?.title || "Form submitted"}
+                                    {submission?.title || inboxText("inboxUi.formSubmitted")}
                                   </p>
                                   {(submission?.fields || []).map((field, idx) => (
                                     <p key={`${field.label || "field"}-${idx}`} className="text-sm leading-snug [overflow-wrap:anywhere] break-words">
@@ -4644,8 +4571,7 @@ export function UnifiedInbox() {
                                     </p>
                                   ))}
                                   {submission?.consent ? (
-                                    <p className="text-xs text-gray-500 [overflow-wrap:anywhere] break-words">
-                                      Consent{submission.consent.accepted ? " accepted" : ""}: {submission.consent.text}
+                                    <p className="text-xs text-gray-500 [overflow-wrap:anywhere] break-words">{inboxText("inboxUi.consent")}{submission.consent.accepted ? inboxText("inboxUi.accepted") : ""}: {submission.consent.text}
                                     </p>
                                   ) : null}
                                 </div>
@@ -4655,7 +4581,7 @@ export function UnifiedInbox() {
                               <div className="min-w-0 max-w-full">
                                 <img
                                   src={imageSrc}
-                                  alt="Image"
+                                  alt={inboxText("inboxUi.image")}
                                   className="max-h-64 max-w-full rounded object-cover cursor-pointer"
                                   onClick={() => window.open(imageSrc, '_blank')}
                                   onLoad={() => {
@@ -4674,7 +4600,7 @@ export function UnifiedInbox() {
                                     }
                                   }}
                                 />
-                                {msg.content && <p className="mt-1 whitespace-pre-wrap text-sm leading-snug [overflow-wrap:anywhere] break-words">{<SafeMessageText text={msg.content} />}</p>}
+                                {msg.content && <p dir="auto" className="mt-1 whitespace-pre-wrap text-sm leading-snug [overflow-wrap:anywhere] break-words">{<SafeMessageText text={msg.content} />}</p>}
                               </div>
                             );
                             if (hasMedia && isVideo) return (
@@ -4696,7 +4622,7 @@ export function UnifiedInbox() {
                             if (hasMedia && isDoc) return (
                               <a href={mediaDisplayUrl} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-2 text-blue-600 underline">
                                 <FileText className="w-4 h-4 flex-shrink-0" />
-                                <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] break-words">{msg.mediaFilename || msg.content || 'Document'}</span>
+                                <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] break-words">{msg.mediaFilename || msg.content || inboxText("inboxUi.document")}</span>
                               </a>
                             );
                             if (
@@ -4713,18 +4639,17 @@ export function UnifiedInbox() {
                             }
                             const submittedName = msg.templateVariables?.agentInquirySubmittedName;
                             return <>
-                              {inquiryThread && !isOut && typeof submittedName === "string" && <p className="mb-1 break-words text-xs font-medium text-gray-600">
-                                Submitted name: {submittedName}
+                              {inquiryThread && !isOut && typeof submittedName === "string" && <p className="mb-1 break-words text-xs font-medium text-gray-600">{inboxText("inboxUi.submittedName") + " "}{submittedName}
                               </p>}
-                              <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words"><SafeMessageText text={msg.content || (ct === 'sticker' ? 'Sticker received' : '')} /></p>
+                              <p dir="auto" className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words"><SafeMessageText text={msg.content || (ct === "sticker" ? inboxText("inboxUi.stickerReceived") : "")} /></p>
                             </>;
                             })()}
                           </div>
                           <div className="mt-1 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-0.5 self-end">
                             {msg.sentViaFallback && (
-                              <span className="text-[10px] text-amber-600 [overflow-wrap:anywhere] break-words">via {msg.fallbackChannel}</span>
+                              <span className="text-[10px] text-amber-600 [overflow-wrap:anywhere] break-words">{inboxText("inboxUi.via") + " "}{msg.fallbackChannel}</span>
                             )}
-                            {!isOut && <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>{format(new Date(msg.createdAt), 'h:mm a')}</span>}
+                            {!isOut && <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>{formatRegionalDate(new Date(msg.createdAt), i18n.language, { hour: "numeric", minute: "2-digit" })}</span>}
                             {isOut && (
                               isSending
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
@@ -4734,7 +4659,7 @@ export function UnifiedInbox() {
                                       msg.errorCode === 'meta_reply_window' ||
                                       isMetaReplyWindowExpiredError(errBubbleText)
                                     ? null
-                                    : <span className="text-[10px] text-red-500 font-medium">Not sent</span>
+                                    : <span className="text-[10px] text-red-500 font-medium">{inboxText("inboxUi.notSent")}</span>
                                   : <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>
                                       {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
                                     </span>
@@ -4745,7 +4670,7 @@ export function UnifiedInbox() {
                             msg.deliveryFailureKind !== "media_validation" && (
                             <div
                               className={cn(
-                                "mt-1 w-full text-left",
+                                "mt-1 w-full text-start",
                                 showReplyWindowFailureUi &&
                                   "rounded-md border border-rose-200/70 bg-rose-50/50 px-2 py-1.5",
                               )}
@@ -4761,9 +4686,7 @@ export function UnifiedInbox() {
                                   {webchatSendErrorDescription(errBubbleText, msg.errorCode, { expanded: true }) || errBubbleText}
                                 </p>
                               ) : (
-                                <p className="whitespace-pre-wrap text-[11px] leading-snug text-gray-600 [overflow-wrap:anywhere] break-words">
-                                  Couldn&apos;t send this message. Check your connection or try again.
-                                </p>
+                                <p className="whitespace-pre-wrap text-[11px] leading-snug text-gray-600 [overflow-wrap:anywhere] break-words">{inboxText("inboxUi.couldnTSendThisMessageCheckYourConnection")}</p>
                               )}
                             </div>
                           )}
@@ -4790,13 +4713,11 @@ export function UnifiedInbox() {
               <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 flex items-center gap-3">
                 {isUploading ? (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-                    Uploading…
-                  </div>
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-500" />{inboxText("inboxUi.uploading")}</div>
                 ) : pendingFile ? (
                   <>
                     {pendingFile.mediaType === 'image' && (
-                      <img src={pendingFile.localPreview} alt="Preview" className="h-16 w-16 object-cover rounded border border-gray-200" />
+                      <img src={pendingFile.localPreview} alt={inboxText("inboxUi.preview")} className="h-16 w-16 object-cover rounded border border-gray-200" />
                     )}
                     {pendingFile.mediaType === 'video' && (
                       <video src={pendingFile.localPreview} className="h-16 w-16 object-cover rounded border border-gray-200" />
@@ -4818,7 +4739,7 @@ export function UnifiedInbox() {
                         URL.revokeObjectURL(pendingFile.localPreview);
                       }}
                       className="ml-auto p-1 rounded-full hover:bg-gray-200 text-gray-500"
-                      title="Remove attachment"
+                      title={inboxText("inboxUi.removeAttachment")}
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -4840,9 +4761,7 @@ export function UnifiedInbox() {
               <div
                 className="border-t border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-900 shrink-0"
                 data-testid="inbox-new-outreach-compose-banner"
-              >
-                New outreach email — review subject and message, then Send. This starts a new thread (not a reply).
-              </div>
+              >{inboxText("inboxUi.newOutreachEmailReviewSubjectAndMessageThen")}</div>
             ) : null}
 
             {!inquiryThread && isEmailChannel && (
@@ -4852,7 +4771,7 @@ export function UnifiedInbox() {
                 data-composer-layout="email"
               >
                 <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="w-10 shrink-0">To</span>
+                  <span className="w-10 shrink-0">{inboxText("inboxUi.to")}</span>
                   <span className="truncate text-gray-800" data-testid="inbox-email-to">
                     {emailComposeTo || contact.email || "No email on contact"}
                   </span>
@@ -4861,27 +4780,22 @@ export function UnifiedInbox() {
                   <p
                     className="text-[11px] text-amber-700"
                     data-testid="inbox-email-to-warning"
-                  >
-                    No safe external reply address — confirm the visitor email before sending.
-                  </p>
+                  >{inboxText("inboxUi.noSafeExternalReplyAddressConfirmTheVisitor")}</p>
                 ) : null}
                 {isWebsiteFormThread && emailComposeTo ? (
-                  <p className="text-[11px] text-sky-800/90" data-testid="inbox-email-to-form-hint">
-                    Replying to form visitor{emailReplyDetails?.replyTarget?.source === "reply_to" ? " (Reply-To)" : ""}
+                  <p className="text-[11px] text-sky-800/90" data-testid="inbox-email-to-form-hint">{inboxText("inboxUi.replyingToFormVisitor")}{emailReplyDetails?.replyTarget?.source === "reply_to" ? inboxText("inboxUi.replyTo") : ""}
                   </p>
                 ) : null}
                 <div className="flex items-center gap-2">
-                  <label htmlFor="inbox-email-subject" className="w-10 shrink-0 text-xs text-gray-500">
-                    Subj
-                  </label>
+                  <label htmlFor="inbox-email-subject" className="w-10 shrink-0 text-xs text-gray-500">{inboxText("inboxUi.subj")}</label>
                   <Input
                     id="inbox-email-subject"
                     value={emailSubject}
                     onChange={(e) => setEmailSubject(e.target.value)}
                     placeholder={
                       forceNewEmailCompose || !primaryConversation?.externalThreadId
-                        ? "Subject"
-                        : "Re: …"
+                        ? inboxText("inboxUi.subject")
+                        : inboxText("inboxUi.re")
                     }
                     className="h-9 text-sm w-full max-w-full"
                     data-testid="input-inbox-email-subject"
@@ -4897,12 +4811,10 @@ export function UnifiedInbox() {
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <div className="px-3" aria-live="polite">
-              {teammateActivity.length>0&&<div className="flex flex-wrap items-center gap-2 py-1 text-xs text-slate-500" data-testid="inbox-teammate-activity">{teammateActivity.map(v=><span key={v.userId} className="inline-flex items-center gap-1"><ChatAvatar src={v.avatarUrl} name={v.userName} size="sm" className="h-5 w-5 text-[9px]" />{t(v.isTyping?"inboxCollaboration.replying":"inboxCollaboration.viewing",{name:v.userName})}</span>)}</div>}
+              {teammateActivity.length>0&&<div className="flex flex-wrap items-center gap-2 py-1 text-xs text-slate-500" data-testid="inbox-teammate-activity">{teammateActivity.map(v=><span key={v.userId} className="inline-flex items-center gap-1"><ChatAvatar src={v.avatarUrl} name={v.userName} size="sm" className="h-5 w-5 text-[9px]" />{inboxText(v.isTyping?"inboxCollaboration.replying":"inboxCollaboration.viewing",{name:v.userName})}</span>)}</div>}
               <InboxReplyConflict code={collaboration.conflict} latestReply={collaboration.latestReply} onReview={()=>void reviewLatestReply()} />
             </div>
-            {inquiryThread ? <p className="border-t bg-white px-4 py-3 text-sm text-muted-foreground" data-testid="rge-inquiry-reply-notice">
-              This inquiry came through a contact form. Follow up using the contact’s email or phone.
-            </p> : <AIComposer
+            {inquiryThread ? <p className="border-t bg-white px-4 py-3 text-sm text-muted-foreground" data-testid="rge-inquiry-reply-notice">{inboxText("inboxUi.thisInquiryCameThroughAContactFormFollow")}</p> : <AIComposer
               key={
                 hasConversation && primaryConversation?.id
                   ? `conv-${primaryConversation.id}`
@@ -4970,8 +4882,8 @@ export function UnifiedInbox() {
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <MessageCircle className="w-8 h-8 text-gray-600" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a contact</h2>
-              <p className="text-gray-500 text-sm">Choose a contact from the list to view messages and manage their CRM details.</p>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">{inboxText("inboxUi.selectAContact")}</h2>
+              <p className="text-gray-500 text-sm">{inboxText("inboxUi.chooseAContactFromTheListToView")}</p>
             </div>
           </div>
         )}
@@ -4981,12 +4893,12 @@ export function UnifiedInbox() {
       {!isMobile && (
         <aside
           className={cn(
-            "hidden h-full min-h-0 w-[272px] shrink-0 flex-col border-l border-gray-100 bg-white min-[1200px]:w-[400px]",
+            "hidden h-full min-h-0 w-[272px] shrink-0 flex-col border-s border-gray-100 bg-white min-[1200px]:w-[400px]",
             selectedContactId && "lg:flex",
           )}
           data-testid="inbox-copilot-column"
           data-copilot-visible={Boolean(selectedContactId)}
-          aria-label="Contact details and Copilot"
+          aria-label={inboxText("inboxUi.contactDetailsAndCopilot")}
         >
           {selectedContactId && contact?.id === selectedContactId && (
             <InboxLeadDetailsPanel
@@ -5034,8 +4946,8 @@ export function UnifiedInbox() {
             <SheetHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
               <SheetTitle className="text-sm font-semibold">
                 {formDisplayContact || contact
-                  ? `${(formDisplayContact || contact)!.name} — Details`
-                  : "Details"}
+                  ? `${(formDisplayContact || contact)!.name} ${inboxText("inboxUi.detailsSuffix")}`
+                  : inboxText("inboxUi.details")}
               </SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -5078,7 +4990,7 @@ export function UnifiedInbox() {
               ) : !selectedContactId || !contact ? (
                 <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm gap-2">
                   <PanelRight className="w-6 h-6 opacity-40" />
-                  <p>No contact selected</p>
+                  <p>{inboxText("inboxUi.noContactSelected")}</p>
                 </div>
               ) : null}
             </div>
@@ -5091,24 +5003,24 @@ export function UnifiedInbox() {
       {/* Edit Contact */}
       <Dialog open={showEditContact} onOpenChange={setShowEditContact}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Contact</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{inboxText("inboxUi.editContact")}</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <div>
-              <Label>Name</Label>
+              <Label>{inboxText("inboxUi.name")}</Label>
               <Input value={editContactForm.name} onChange={e => setEditContactForm({ ...editContactForm, name: e.target.value })} data-testid="input-edit-name" />
             </div>
             <div>
-              <Label>Phone</Label>
+              <Label>{inboxText("inboxUi.phone")}</Label>
               <Input value={editContactForm.phone} onChange={e => setEditContactForm({ ...editContactForm, phone: e.target.value })} placeholder="+1234567890" data-testid="input-edit-phone" />
             </div>
             <div>
               <Label>Email</Label>
-              <Input value={editContactForm.email} onChange={e => setEditContactForm({ ...editContactForm, email: e.target.value })} placeholder="email@example.com" data-testid="input-edit-email" />
+              <Input value={editContactForm.email} onChange={e => setEditContactForm({ ...editContactForm, email: e.target.value })} dir="ltr" placeholder="email@example.com" data-testid="input-edit-email" />
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowEditContact(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setShowEditContact(false)}>{inboxText("inboxUi.cancel")}</Button>
               <Button onClick={handleSaveEditContact} disabled={updateContactMutation.isPending} data-testid="button-save-edit-contact">
-                {updateContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                {updateContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : inboxText("inboxUi.save")}
               </Button>
             </div>
           </div>
@@ -5117,13 +5029,11 @@ export function UnifiedInbox() {
 
       <Dialog open={showSaveToContacts} onOpenChange={setShowSaveToContacts}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Save to Contacts</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-500">
-            Review the name and email, then save this Inbox participant as a CRM contact. Conversation history stays attached.
-          </p>
+          <DialogHeader><DialogTitle>{inboxText("inboxUi.saveToContacts")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500">{inboxText("inboxUi.reviewTheNameAndEmailThenSaveThis")}</p>
           <div className="space-y-4 mt-2">
             <div>
-              <Label>Name</Label>
+              <Label>{inboxText("inboxUi.name")}</Label>
               <Input
                 value={saveToContactsForm.name}
                 onChange={(e) => setSaveToContactsForm({ ...saveToContactsForm, name: e.target.value })}
@@ -5135,18 +5045,18 @@ export function UnifiedInbox() {
               <Input
                 value={saveToContactsForm.email}
                 onChange={(e) => setSaveToContactsForm({ ...saveToContactsForm, email: e.target.value })}
-                placeholder="email@example.com"
+                dir="ltr" placeholder="email@example.com"
                 data-testid="input-save-to-contacts-email"
               />
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowSaveToContacts(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setShowSaveToContacts(false)}>{inboxText("inboxUi.cancel")}</Button>
               <Button
                 onClick={handleConfirmSaveToContacts}
                 disabled={saveToContactsMutation.isPending}
                 data-testid="button-confirm-save-to-contacts"
               >
-                {saveToContactsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save to Contacts"}
+                {saveToContactsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : inboxText("inboxUi.saveToContacts")}
               </Button>
             </div>
           </div>
@@ -5156,30 +5066,30 @@ export function UnifiedInbox() {
       {/* Activity Timeline */}
       <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Activity Timeline</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{inboxText("inboxUi.activityTimeline")}</DialogTitle></DialogHeader>
           <div className="space-y-2 mt-2 max-h-80 overflow-y-auto pr-1">
             {timeline.length === 0 ? (
-              <p className="text-center text-muted-foreground py-6 text-sm">No activity yet</p>
+              <p className="text-center text-muted-foreground py-6 text-sm">{inboxText("inboxUi.noActivityYet")}</p>
             ) : (
               timeline.map(event => {
                 const data = event.eventData as any;
                 let description = "";
                 if (event.eventType === "message") description = `${event.actorType === 'contact' ? 'Received' : 'Sent'}: "${data?.preview || data?.content || ''}"`;
-                else if (event.eventType === "tag_change") description = `Tag changed to "${data?.to || data?.tag}"`;
-                else if (event.eventType === "stage_change") description = `Pipeline: ${data?.from} → ${data?.to}`;
-                else if (event.eventType === "channel_switch") description = `Channel: ${data?.from} → ${data?.to}`;
+                else if (event.eventType === "tag_change") description = inboxText("inboxUi.eventTag", { tag: data?.to || data?.tag });
+                else if (event.eventType === "stage_change") description = inboxText("inboxUi.eventPipeline", { from: data?.from, to: data?.to });
+                else if (event.eventType === "channel_switch") description = inboxText("inboxUi.eventChannel", { from: data?.from, to: data?.to });
                 else if (event.eventType === "note") {
                   if (data?.kind === "workflow_task") {
-                    description = data?.content || `Task: ${data?.title || "Workflow task"}`;
+                    description = data?.content || inboxText("inboxUi.eventTask", { title: data?.title || inboxText("inboxUi.workflowTask") });
                   } else if (data?.kind === "language_detected") {
-                    description = data?.content || `Language: ${data?.language || ""}`;
+                    description = data?.content || inboxText("inboxUi.eventLanguage", { language: data?.language || "" });
                   } else {
-                    description = `Note: "${data?.content || ''}"`;
+                    description = inboxText("inboxUi.eventNote", { content: data?.content || "" });
                   }
                 }
-                else if (event.eventType === "assignment") description = `Assigned to ${data?.assignee || data?.to || "team member"}`;
-                else if (event.eventType === "contact_created") description = "Contact created";
-                else description = Object.entries(data || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || "Activity recorded";
+                else if (event.eventType === "assignment") description = inboxText("inboxUi.eventAssigned", { name: data?.assignee || data?.to || inboxText("inboxUi.teamMember") });
+                else if (event.eventType === "contact_created") description = inboxText("inboxUi.contactCreated");
+                else description = Object.entries(data || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || inboxText("inboxUi.activityRecorded");
 
                 return (
                   <div key={event.id} className="flex gap-3 p-2.5 bg-gray-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
@@ -5187,7 +5097,7 @@ export function UnifiedInbox() {
                     <div className="flex-1">
                       <p className="text-xs font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
                       <p className="text-xs text-muted-foreground">{description}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRegionalDate(new Date(event.createdAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })}</p>
                     </div>
                   </div>
                 );
@@ -5206,20 +5116,16 @@ export function UnifiedInbox() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-red-600">Delete conversation?</DialogTitle>
+            <DialogTitle className="text-red-600">{inboxText("inboxUi.deleteConversation2")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This will permanently remove this conversation and its messages. This action cannot be undone.
-          </p>
+          <p className="text-sm text-muted-foreground">{inboxText("inboxUi.thisWillPermanentlyRemoveThisConversationAndIts")}</p>
           <div className="flex justify-end gap-2 mt-4">
             <Button
               variant="outline"
               onClick={() => setShowDeleteConversationConfirm(false)}
               disabled={deleteConversationMutation.isPending}
               data-testid="button-cancel-delete-conversation"
-            >
-              Cancel
-            </Button>
+            >{inboxText("inboxUi.cancel")}</Button>
             <Button
               variant="destructive"
               onClick={() => {
@@ -5229,9 +5135,7 @@ export function UnifiedInbox() {
               disabled={deleteConversationMutation.isPending || !primaryConversation?.id}
               data-testid="button-confirm-delete-conversation"
             >
-              {deleteConversationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Delete conversation
-            </Button>
+              {deleteConversationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}{inboxText("inboxUi.deleteConversation")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -5239,16 +5143,14 @@ export function UnifiedInbox() {
       {/* Delete Confirmation */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="text-red-600">Delete Contact</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-red-600">{inboxText("inboxUi.deleteContact")}</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete <strong>{contact?.name}</strong>? This will remove all conversations and messages. This cannot be undone.
+            {inboxText("inboxUi.deleteContactConfirm", { name: contact?.name ?? "" })}
           </p>
           <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} data-testid="button-cancel-delete">Cancel</Button>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} data-testid="button-cancel-delete">{inboxText("inboxUi.cancel")}</Button>
             <Button variant="destructive" onClick={() => { if (selectedContactId) deleteContactMutation.mutate(selectedContactId); }} disabled={deleteContactMutation.isPending} data-testid="button-confirm-delete">
-              {deleteContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Delete Contact
-            </Button>
+              {deleteContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}{inboxText("inboxUi.deleteContact")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -5269,27 +5171,23 @@ export function UnifiedInbox() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <LayoutTemplate className="w-4 h-4 text-gray-600" />
-              {selectedInboxTemplate ? selectedInboxTemplate.name : "Send WhatsApp template"}
+              {selectedInboxTemplate ? selectedInboxTemplate.name : inboxText("inboxUi.sendWhatsappTemplate")}
             </DialogTitle>
             {selectedInboxTemplate ? (
-              <p className="text-left text-sm text-muted-foreground">
-                Sending to this conversation. Fill any variables, then send.
-              </p>
+              <p className="text-start text-sm text-muted-foreground">{inboxText("inboxUi.sendingToThisConversationFillAnyVariablesThen")}</p>
             ) : null}
           </DialogHeader>
           <InboxReplyConflict code={collaboration.conflict} latestReply={collaboration.latestReply} onReview={()=>void reviewLatestReply()} />
           {!selectedInboxTemplate ? (
             <div className="flex flex-col gap-3">
               <Input
-                placeholder="Search templates…"
+                placeholder={inboxText("inboxUi.searchTemplates")}
                 value={templateSearch}
                 onChange={(e) => setTemplateSearch(e.target.value)}
                 data-testid="input-template-search"
               />
               {inboxTemplates.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-6">
-                  No templates found. Go to the Templates page to sync your WhatsApp templates.
-                </p>
+                <p className="text-sm text-gray-500 text-center py-6">{inboxText("inboxUi.noTemplatesFoundGoToTheTemplatesPage")}</p>
               ) : (
                 <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
                   {inboxTemplates
@@ -5328,7 +5226,7 @@ export function UnifiedInbox() {
                               if (!blocked) handleSelectTemplate(t);
                             }}
                             className={cn(
-                              "min-w-0 flex-1 rounded-md px-1 py-0.5 text-left transition-colors",
+                              "min-w-0 flex-1 rounded-md px-1 py-0.5 text-start transition-colors",
                               blocked ? "cursor-not-allowed opacity-90" : "hover:bg-white/60"
                             )}
                           >
@@ -5339,7 +5237,7 @@ export function UnifiedInbox() {
                             <p className="line-clamp-2 break-words text-xs text-gray-500">{t.bodyText}</p>
                             {blocked ? (
                               <p className="mt-2 rounded-md border border-gray-200 bg-white/90 px-2.5 py-2 text-[11px] leading-snug text-gray-600">
-                                {INBOX_QUICK_SEND_ADVANCED_COPY}
+                                {inboxText("inboxUi.quickTemplateLimit")}
                               </p>
                             ) : null}
                           </button>
@@ -5352,9 +5250,7 @@ export function UnifiedInbox() {
                               }}
                               className="shrink-0 self-start rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-gray-700 shadow-sm hover:bg-gray-50"
                               data-testid={`button-template-preview-${t.id}`}
-                            >
-                              Preview
-                            </button>
+                            >{inboxText("inboxUi.preview")}</button>
                           ) : null}
                         </div>
                       );
@@ -5365,7 +5261,7 @@ export function UnifiedInbox() {
                       (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
                         t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
                   ).length === 0 && (
-                    <p className="py-4 text-center text-sm text-gray-500">No approved templates match your search.</p>
+                    <p className="py-4 text-center text-sm text-gray-500">{inboxText("inboxUi.noApprovedTemplatesMatchYourSearch")}</p>
                   )}
                 </div>
               )}
@@ -5377,11 +5273,11 @@ export function UnifiedInbox() {
               </div>
               {inboxQuickSendBlocked ? (
                 <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-snug text-gray-600">
-                  {INBOX_QUICK_SEND_ADVANCED_COPY}
+                  {inboxText("inboxUi.quickTemplateLimit")}
                 </p>
               ) : (selectedInboxTemplate.variables || []).length > 0 ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-xs font-medium text-gray-500">Fill in the variables:</p>
+                  <p className="text-xs font-medium text-gray-500">{inboxText("inboxUi.fillInTheVariables")}</p>
                   {(selectedInboxTemplate.variables || [])
                     .slice()
                     .sort((a, b) => {
@@ -5393,7 +5289,7 @@ export function UnifiedInbox() {
                       <div key={v} className="flex flex-col gap-1">
                         <label className="text-xs font-medium text-gray-600">{v}</label>
                         <Input
-                          placeholder={`Value for ${v}`}
+                          placeholder={inboxText("inboxUi.valueFor", { name: v })}
                           value={varValues[v] || ""}
                           onChange={(e) => setVarValues((prev) => ({ ...prev, [v]: e.target.value }))}
                           data-testid={`input-template-var-${v.replace(/[{}]/g, "")}`}
@@ -5402,7 +5298,7 @@ export function UnifiedInbox() {
                     ))}
                 </div>
               ) : (
-                <p className="text-xs text-gray-500">This template has no variables. Ready to send.</p>
+                <p className="text-xs text-gray-500">{inboxText("inboxUi.thisTemplateHasNoVariablesReadyToSend")}</p>
               )}
               <div className="mt-1 flex justify-end gap-2">
                 <Button
@@ -5412,9 +5308,7 @@ export function UnifiedInbox() {
                     setVarValues({});
                   }}
                   data-testid="button-template-back"
-                >
-                  Back
-                </Button>
+                >{inboxText("inboxUi.back")}</Button>
                 <Button
                   onClick={handleSendTemplateFromInbox}
                   disabled={sendTemplateFromInboxMutation.isPending || inboxQuickSendBlocked}
@@ -5426,16 +5320,12 @@ export function UnifiedInbox() {
                 >
                   {sendTemplateFromInboxMutation.isPending ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending…
-                    </>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />{inboxText("inboxUi.sending")}</>
                   ) : inboxQuickSendBlocked ? (
                     "Not available in quick-send"
                   ) : (
                     <>
-                      <Send className="mr-2 h-4 w-4" />
-                      Send Template
-                    </>
+                      <Send className="mr-2 h-4 w-4" />{inboxText("inboxUi.sendTemplate")}</>
                   )}
                 </Button>
               </div>
@@ -5454,7 +5344,7 @@ export function UnifiedInbox() {
       >
         <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto" data-testid="dialog-inbox-template-preview">
           <DialogHeader>
-            <DialogTitle className="pr-8 text-left leading-snug">{inboxPreviewTemplate?.name}</DialogTitle>
+            <DialogTitle className="pe-8 text-start leading-snug">{inboxPreviewTemplate?.name}</DialogTitle>
           </DialogHeader>
           {inboxPreviewTemplate ? (
             <>
@@ -5474,12 +5364,10 @@ export function UnifiedInbox() {
                 }
               />
               <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
-                {INBOX_ADVANCED_PREVIEW_MODAL_NOTE}
+                {inboxText("inboxUi.quickTemplatePreview")}
               </p>
               <div className="flex justify-end pt-2">
-                <Button type="button" variant="outline" onClick={() => setInboxTemplatePreviewOpen(false)}>
-                  Close
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setInboxTemplatePreviewOpen(false)}>{inboxText("inboxUi.close")}</Button>
               </div>
             </>
           ) : null}
