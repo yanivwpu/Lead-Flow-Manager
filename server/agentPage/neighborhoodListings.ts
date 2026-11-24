@@ -85,12 +85,14 @@ export async function findNeighborhoodListings(input: {
   const allRent: AgentPageListingCard[] = [];
   let hasOlderMatchingInventory = false;
 
+  const cityKey = (value: string) => normalizeNeighborhoodName(value)
+    .replace(/^ft /, "fort ").replace(/^st /, "saint ");
   for (const row of rows) {
     if (!coordinateWithinNeighborhood(row.latitude, row.longitude, boundary.geometry)) continue;
     // A hand-drawn area is not independently tied to the typed locality.
     // Do not advertise properties from a different city or country.
     if (boundary.status === "custom" && (
-      normalizeNeighborhoodName(row.city ?? "") !== normalizeNeighborhoodName(input.neighborhood.city) ||
+      cityKey(row.city ?? "") !== cityKey(input.neighborhood.city) ||
       (row.country ?? "US").toUpperCase() !== (input.neighborhood.country ?? "US").toUpperCase()
     )) continue;
     const listing = {
