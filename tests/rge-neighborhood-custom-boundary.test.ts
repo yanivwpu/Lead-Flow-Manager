@@ -243,9 +243,9 @@ test("Neighborhood Page declares one map and guards against stale sibling DOM du
   const owner = readFileSync("client/src/components/agentPage/NeighborhoodPageSettings.tsx", "utf8");
   const editor = readFileSync("client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx", "utf8");
   const css = readFileSync("client/src/index.css", "utf8");
-  assert.equal((owner.match(/<NeighborhoodBoundaryEditor\\b/g) ?? []).length, 1);
+  assert.equal(owner.split("<NeighborhoodBoundaryEditor ").length - 1, 1);
   assert.match(owner, /data-rge-neighborhood-editor="true"/);
   assert.match(editor, /data-rge-map-toggle="true"/);
   assert.ok(!editor.includes("<details"), "native disclosure replaced by controlled button");
-  assert.match(css, /\\[data-rge-neighborhood-editor="true"\\].*\\[data-rge-custom-map="true"\\]/);
+  assert.ok(css.includes('[data-rge-neighborhood-editor="true"] > [data-rge-custom-map="true"] ~ [data-rge-custom-map="true"]'));
 });
