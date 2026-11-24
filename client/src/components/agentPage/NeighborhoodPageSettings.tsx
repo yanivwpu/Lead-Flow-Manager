@@ -290,7 +290,9 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             value={values.content} onChange={(event) => editField("content", event.target.value)} />
           <p className="text-xs text-muted-foreground">
             Write at least two distinct paragraphs with useful local information, totaling 240 characters or more.
-            Add optional headings on their own lines, such as ## Parks &amp; Recreation, to organize your guide.\n            To place an uploaded photo between paragraphs, click in the article where you want it, then choose Insert in article below. Preview shows the photo in place.\n            Changing the neighborhood name can change its URL.
+            Add optional headings on their own lines, such as ## Parks &amp; Recreation, to organize your guide.
+            To place an uploaded photo between paragraphs, click in the article where you want it, then choose Insert in article below. Preview shows the photo in place.
+            Changing the neighborhood name can change its URL.
           </p>
 
           <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
