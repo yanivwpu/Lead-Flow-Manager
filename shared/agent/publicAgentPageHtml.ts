@@ -1053,11 +1053,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           var countEl = document.getElementById("neighborhood-" + kind + "-count");
           var button = document.getElementById("neighborhood-" + kind + "-more");
           if (!group || !gridEl) return;
-          if (data.boundaryStatus !== "verified") {
+          if (data.boundaryStatus !== "verified" && data.boundaryStatus !== "custom") {
             gridEl.innerHTML = "";
             var msg = document.createElement("div");
             msg.className = "neighborhood-property-empty";
-            msg.textContent = "Verified neighborhood boundaries are temporarily unavailable. Contact the agent for current options.";
+            msg.textContent = "Neighborhood area boundaries are temporarily unavailable. Contact the agent for current options.";
             gridEl.appendChild(msg);
             group.dataset.loaded = "0";
             group.dataset.total = "0";
