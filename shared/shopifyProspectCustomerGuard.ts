@@ -1,3 +1,4 @@
+import { normalizeShopifyShopDomain } from "./shopifyBilling";
 /** A synced Shopify shopper is not a cold B2B prospect.
  * Identifies genuine merchant-owned customer records, not a GHL "Shopify Merchants" tag.
  * This guard is deliberately independent of marketing-consent states.
@@ -7,11 +8,11 @@ export type ShopifyCustomerContactShape = {
   sourceDetails?: unknown;
   customFields?: unknown;
 };
-const object = (value: unknown): Record<string, unknown> =>
+const guardObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 export function isShopifyCustomerContact(contact: ShopifyCustomerContactShape): boolean {
-  const custom = object(contact.customFields);
-  const details = object(contact.sourceDetails);
+  const custom = guardObject(contact.customFields);
+  const details = guardObject(contact.sourceDetails);
   const provider = String(details.prospectImportProvider || "");
   return contact.source === "shopify" ||
     provider === "shopify" ||
@@ -39,3 +40,12 @@ export type ShopifyProspectReviewImportResult = {
   imported:number;skipped:number;duplicates:number;errors:number;
   progressCurrent:number;progressTotal:number;
 };
+
+export function linkedShopifyCustomerId(contact:ShopifyCustomerContactShape,shop:string):string|null {
+  if(!isShopifyCustomerContact(contact))return null;
+  const sd=guardObject(contact.sourceDetails),cf=guardObject(contact.customFields);
+  const sourceShop=normalizeShopifyShopDomain(String(cf.shopifyShop||sd.shop||""));
+  if(sourceShop!==shop)return null;
+  const id=String(cf.shopifyCustomerId||sd.shopifyCustomerId||"");
+  return /^[1-9][0-9]{0,24}$/.test(id)?id:null;
+}
