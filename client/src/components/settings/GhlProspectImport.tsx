@@ -75,6 +75,7 @@ import {
 import { ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
 import { CsvProspectImport } from "./CsvProspectImport";
 import { ShopifyCustomerProspectImport } from "./ShopifyCustomerProspectImport";
+import { MarketingEmailAudienceReview } from "./MarketingEmailAudienceReview";
 import { ProspectOutreachQueuePanel } from "./ProspectOutreachQueuePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -1272,6 +1273,8 @@ export function GhlProspectImport({
           onUndo={(job) => void openUndoDialog(job)}
         />
       ) : null}
+
+      {!embedded ? <MarketingEmailAudienceReview /> : null}
 
       {!embedded ? (
         <ProspectIntelligencePanel

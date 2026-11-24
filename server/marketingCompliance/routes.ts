@@ -82,6 +82,51 @@ export function registerMarketingComplianceRoutes(app: Express) {
       return res.json({ suppressed: true });
     } catch { return res.status(503).json({ error: "Unable to save do-not-contact" }); }
   });
+  // Read-only source-specific audience classification. This endpoint never
+  // starts, resumes or sends a marketing campaign.
+  app.get("/api/marketing/email-audience", requireProspectImportAccess, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user?.id) return res.status(401).json({ error: "Authentication required" });
+    try {
+      const { previewMarketingEmailAudience } = await import("./audiencePreview");
+      const allowed = ["all","shopify","csv","crm"] as const;
+      const source = typeof req.query.source === "string" ? req.query.source : "all";
+      if (!allowed.includes(source as typeof allowed[number]))
+        return res.status(400).json({ error: "Invalid audience source" });
+      const offset = req.query.offset == null ? 0 : Number(req.query.offset);
+      const limit = req.query.limit == null ? 50 : Number(req.query.limit);
+      const preview = await previewMarketingEmailAudience({
+        workspaceUserId:req.user.id,source:source as typeof allowed[number],offset,limit,
+      });
+      return res.json({preview});
+    } catch {
+      return res.status(503).json({ error: "Audience preview unavailable; email sending remains restricted." });
+    }
+  });
+
+  // Explicit merchant action: persist an EMAIL-only marketing opt-out.
+  // The existing ledger also skips queued marketing mail for this identity.
+  // Transactional order mail and Shopify/WhatsApp consent are not modified.
+  app.post("/api/marketing/contacts/:contactId/email-opt-out", requireProspectImportAccess, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user?.id) return res.status(401).json({ error: "Authentication required" });
+    try {
+      const { storage } = await import("../storage");
+      const contact = await storage.getContact(req.params.contactId);
+      if (!contact || contact.userId !== req.user.id)
+        return res.status(404).json({ error: "Contact not found" });
+      if (!contact.email) return res.status(400).json({ error: "Contact does not have an email address" });
+      const email = normalizeMarketingEmail(contact.email);
+      await suppressMarketingIdentity({
+        workspace:req.user.id,email,reason:"unsubscribe",
+        source:"merchant_email_opt_out",scope:"email",
+      });
+      return res.json({suppressed:true});
+    } catch {
+      return res.status(503).json({error:"Unable to save email opt-out; no marketing email should be sent."});
+    }
+  });
+
   app.get("/api/marketing/sender-profiles", async (req, res) => {
     if (!req.user?.id) return res.status(401).json({ error: "Authentication required" });
     try {
