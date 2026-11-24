@@ -34,6 +34,7 @@ jobs:
           node --import tsx tests/prospect-campaign-readiness-batch-db.test.ts
           node --import tsx tests/shopify-growth-engine-public.test.ts
           node --import tsx tests/prospect-csv-import.test.ts
+          node --import tsx tests/prospect-shopify-customer-import.test.ts
 
   postgres-race:
     runs-on: ubuntu-latest

@@ -74,6 +74,7 @@ import {
 } from "@shared/prospectImport";
 import { ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
 import { CsvProspectImport } from "./CsvProspectImport";
+import { ShopifyCustomerProspectImport } from "./ShopifyCustomerProspectImport";
 import { ProspectOutreachQueuePanel } from "./ProspectOutreachQueuePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -415,13 +416,16 @@ export function GhlProspectImport({
         { method: "POST" },
       ),
     onSuccess: (data) => {
+      const isShopifyReviewUnlink = undoJob?.provider === "shopify";
       setUndoJob(null);
       setUndoPreview(null);
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-import/history"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-import/dashboard"] });
       toast({
-        title: "Import undone",
-        description: `${data.result.deleted} contact(s) removed. ${data.result.blocked} could not be deleted.`,
+        title: isShopifyReviewUnlink ? "Shopify review links removed" : "Import undone",
+        description: isShopifyReviewUnlink
+          ? `${data.result.deleted} customer review link(s) removed. ${data.result.blocked} preserved. Shopify CRM customer records remain intact.`
+          : `${data.result.deleted} contact(s) removed. ${data.result.blocked} could not be deleted.`,
       });
     },
     onError: (err: Error) => {
@@ -581,7 +585,7 @@ export function GhlProspectImport({
         </div>
       </div>
 
-      {provider !== "csv" ? <div className="mb-8 flex flex-wrap gap-2">
+      {provider !== "csv" && provider !== "shopify" ? <div className="mb-8 flex flex-wrap gap-2">
         {STEPS.map((s) => (
           <div
             key={s.n}
@@ -622,9 +626,9 @@ export function GhlProspectImport({
               </SelectTrigger>
               <SelectContent>
                 {PROSPECT_IMPORT_PROVIDERS.map((p) => (
-                  <SelectItem key={p} value={p} disabled={p !== "gohighlevel" && p !== "csv"}>
+                  <SelectItem key={p} value={p} disabled={p !== "gohighlevel" && p !== "csv" && p !== "shopify"}>
                     {PROSPECT_IMPORT_PROVIDER_LABELS[p]}
-                    {p !== "gohighlevel" && p !== "csv" ? " (coming soon)" : ""}
+                    {p !== "gohighlevel" && p !== "csv" && p !== "shopify" ? " (coming soon)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -632,6 +636,7 @@ export function GhlProspectImport({
           </div>
 
           {provider === "csv" ? <CsvProspectImport /> : null}
+          {provider === "shopify" ? <ShopifyCustomerProspectImport /> : null}
 
           {provider === "gohighlevel" ? (
             <>
@@ -1280,13 +1285,14 @@ export function GhlProspectImport({
       <Dialog open={Boolean(undoJob)} onOpenChange={(open) => !open && setUndoJob(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Undo import batch?</DialogTitle>
+            <DialogTitle>{undoJob?.provider === "shopify" ? "Unlink Shopify customers from Prospect AI?" : "Undo import batch?"}</DialogTitle>
             <DialogDescription>
               {undoJob ? (
                 <>
-                  Batch: <strong>{undoJob.batchName}</strong>. Only contacts created by this import
-                  will be deleted. Existing contacts, those with messages, or advanced pipeline stages
-                  are protected.
+                  Batch: <strong>{undoJob.batchName}</strong>.{" "}
+                  {undoJob.provider === "shopify"
+                    ? "Only untouched Prospect AI review links will be removed. All Shopify CRM contacts, customer history and conversations stay intact."
+                    : "Only contacts created by this import will be deleted. Existing contacts, those with messages, or advanced pipeline stages are protected."}
                 </>
               ) : null}
             </DialogDescription>
@@ -1294,12 +1300,16 @@ export function GhlProspectImport({
           {undoPreview ? (
             <div className="space-y-2 text-sm">
               <p>
-                <strong>{undoPreview.deletableCount}</strong> contact(s) will be deleted.
+                <strong>{undoPreview.deletableCount}</strong>{" "}
+                {undoJob?.provider === "shopify"
+                  ? "Shopify customer review link(s) will be removed — no customer records deleted."
+                  : "contact(s) will be deleted."}
               </p>
               {undoPreview.blockedCount > 0 ? (
                 <p className="text-amber-700">
-                  {undoPreview.blockedCount} contact(s) cannot be deleted (conversations, pipeline stage,
-                  or prior existence).
+                  {undoJob?.provider === "shopify"
+                    ? `${undoPreview.blockedCount} changed or already unlinked review records will be preserved.`
+                    : `${undoPreview.blockedCount} contact(s) cannot be deleted (conversations, pipeline stage, or prior existence).`}
                 </p>
               ) : null}
             </div>
@@ -1316,7 +1326,11 @@ export function GhlProspectImport({
               disabled={!undoPreview || undoPreview.deletableCount === 0 || undoMutation.isPending}
               onClick={() => undoJob && undoMutation.mutate(undoJob.id)}
             >
-              {undoMutation.isPending ? "Deleting…" : `Delete ${undoPreview?.deletableCount ?? 0} contacts`}
+              {undoMutation.isPending
+                ? "Updating…"
+                : undoJob?.provider === "shopify"
+                  ? `Unlink ${undoPreview?.deletableCount ?? 0} review records`
+                  : `Delete ${undoPreview?.deletableCount ?? 0} contacts`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1391,7 +1405,7 @@ export function ProspectImportHistoryPanel({
                       {onUndo && job.canUndo ? (
                         <Button type="button" variant="ghost" size="sm" onClick={() => onUndo(job)}>
                           <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                          Undo
+                          {job.provider === "shopify" ? "Unlink" : "Undo"}
                         </Button>
                       ) : job.undoBlockedReason ? (
                         <span className="text-xs text-gray-400" title={job.undoBlockedReason}>

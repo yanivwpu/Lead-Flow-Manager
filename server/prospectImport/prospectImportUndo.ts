@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Contact } from "@shared/schema";
-import { conversations, messages, prospectImportJobs } from "@shared/schema";
+import { contacts, conversations, messages, prospectImportJobs, prospectIntelligence, type ProspectImportJob } from "@shared/schema";
 import type {
   ProspectImportPipelineStage,
   ProspectImportUndoPreview,
@@ -31,6 +31,73 @@ export function getContactsCreatedByImportJob(allContacts: Contact[], jobId: str
     if (meta.createdByImportJob === false) return false;
     if (meta.createdByImportJob === true) return true;
     return c.source === "import";
+  });
+}
+
+/** A Shopify import links EXISTING merchant customers; Undo unlinks the Prospect AI
+ * review record only. It must NEVER delete the merchant's customer/contact/messages.
+ */
+function shopifyReviewContactIds(job: ProspectImportJob): string[] {
+  const details=(job.resultDetails||{}) as {linkedContactIds?:unknown};
+  return Array.isArray(details.linkedContactIds)
+    ? [...new Set(details.linkedContactIds.filter((id):id is string=>typeof id==="string"&&/^[0-9a-f-]{36}$/i.test(id)))].slice(0,250)
+    : [];
+}
+function canUnlinkShopifyReview(contact: Contact|undefined, row:typeof prospectIntelligence.$inferSelect|undefined, jobId:string):boolean {
+  if(!contact||!row||row.importJobId!==jobId)return false;
+  const sd=(contact.sourceDetails||{}) as Record<string,unknown>;
+  const meta=sd.prospectImport && typeof sd.prospectImport==="object" ? sd.prospectImport as Record<string,unknown> : {};
+  const raw=(row.rawResult||{}) as Record<string,unknown>;
+  return sd.prospectImportProvider==="shopify" && meta.importJobId===jobId
+    && meta.createdByImportJob===false && raw.shopifyCustomerReviewOnly===true
+    && row.analysisStatus==="needs_review" && row.reviewStatus==="needs_review"
+    && row.approvedAt==null && row.outreachSentAt==null && row.outreachStatus==="not_sent"
+    && (row.enrichmentStatus==="none"||row.enrichmentStatus==null);
+}
+async function previewShopifyReviewUnlink(job: ProspectImportJob): Promise<ProspectImportUndoPreview> {
+  const ids=shopifyReviewContactIds(job);
+  if(!ids.length)return {jobId:job.id,deletableCount:0,blockedCount:0,blockedReasons:[]};
+  const [contactRows,intelRows]=await Promise.all([
+    db.select().from(contacts).where(and(eq(contacts.userId,job.destinationUserId),inArray(contacts.id,ids))),
+    db.select().from(prospectIntelligence).where(inArray(prospectIntelligence.contactId,ids)),
+  ]);
+  const contactById=new Map(contactRows.map(c=>[c.id,c]));
+  const rowById=new Map(intelRows.map(r=>[r.contactId,r]));
+  const deletableCount=ids.filter(id=>canUnlinkShopifyReview(contactById.get(id),rowById.get(id),job.id)).length;
+  const blockedCount=ids.length-deletableCount;
+  return {jobId:job.id,deletableCount,blockedCount,
+    blockedReasons:blockedCount?[{reason:"Review changed or already unlinked; customer records preserved",count:blockedCount}]:[]};
+}
+async function executeShopifyReviewUnlink(job:ProspectImportJob,undoneByUserId:string) {
+  return db.transaction(async tx=>{
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"shopify-prospect-undo:"+job.id},0))`);
+    const [current]=await tx.select().from(prospectImportJobs).where(eq(prospectImportJobs.id,job.id)).for("update").limit(1);
+    if(!current||current.undoStatus==="undone")throw new Error("Shopify review import already undone");
+    const ids=shopifyReviewContactIds(current);
+    const contactRows=ids.length?await tx.select().from(contacts).where(and(
+      eq(contacts.userId,current.destinationUserId),inArray(contacts.id,ids))).for("update"):[];
+    const piRows=ids.length?await tx.select().from(prospectIntelligence).where(
+      inArray(prospectIntelligence.contactId,ids)).for("update"):[];
+    const byId=new Map(contactRows.map(c=>[c.id,c]));
+    const byPi=new Map(piRows.map(p=>[p.contactId,p]));
+    let deleted=0,blocked=0;
+    for(const id of ids){
+      const contact=byId.get(id),pi=byPi.get(id);
+      if(!canUnlinkShopifyReview(contact,pi,current.id)){blocked++;continue;}
+      const sd=(contact!.sourceDetails||{}) as Record<string,unknown>;
+      const {prospectImportProvider:_provider,prospectImport:_import,...preserved}=sd;
+      await tx.delete(prospectIntelligence).where(and(
+        eq(prospectIntelligence.contactId,id),eq(prospectIntelligence.importJobId,current.id)
+      ));
+      await tx.update(contacts).set({sourceDetails:preserved}).where(and(
+        eq(contacts.id,id),eq(contacts.userId,current.destinationUserId)
+      ));
+      deleted++;
+    }
+    const undoStatus=blocked?"partial" as const:"undone" as const;
+    await tx.update(prospectImportJobs).set({undoStatus,undoneAt:new Date(),undoneByUserId})
+      .where(eq(prospectImportJobs.id,current.id));
+    return {deleted,blocked,undoStatus};
   });
 }
 
@@ -97,6 +164,7 @@ export async function previewProspectImportUndo(
   const job = rows[0];
   if (!job) return null;
   if (workspaceUserId && job.destinationUserId !== workspaceUserId) return null;
+  if (job.provider === "shopify") return previewShopifyReviewUnlink(job);
 
   const { deletable, blocked } = await classifyUndoCandidates(job.destinationUserId, jobId);
 
@@ -125,6 +193,7 @@ export async function executeProspectImportUndo(params: {
     throw new Error("Import job not found");
   }
   if (job.undoStatus === "undone") throw new Error("This import batch was already undone");
+  if (job.provider === "shopify") return executeShopifyReviewUnlink(job,params.undoneByUserId);
 
   const { deletable, blocked } = await classifyUndoCandidates(job.destinationUserId, params.jobId);
 
