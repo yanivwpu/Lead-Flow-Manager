@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isOwnedNeighborhoodGuidePhotoUrl } from "../shared/agent/neighborhoodPages";
+import { isOwnedNeighborhoodGuidePhotoUrl, neighborhoodPhotoMarker } from "../shared/agent/neighborhoodPages";
 import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
 import {
   EMPTY_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts, sameNeighborhoodContent,
@@ -73,4 +73,40 @@ test("neighborhood guide renders responsive photo hero/gallery with accessible a
   assert.doesNotMatch(html, /class="neighborhood-guide-contact"/);
   assert.match(html, /class="neighborhood-guide-editorial"/);
   assert.doesNotMatch(html, /mailto:/);
+});
+
+
+test("inline neighborhood photos use existing owned upload IDs rather than arbitrary HTML", () => {
+  const inlinePhoto = photo.replace("2e089653-eaa7-4bee-abce-a3f6f4aa99b3", "a21a8653-eaa7-4bee-abce-a3f6f4aa99b3");
+  const marker = neighborhoodPhotoMarker(inlinePhoto);
+  assert.equal(marker, "[[photo:a21a8653-eaa7-4bee-abce-a3f6f4aa99b3]]");
+  assert.equal(neighborhoodPhotoMarker("not a URL"), null);
+  assert.equal(neighborhoodPhotoMarker("https://other.test/image.svg"), null);
+
+  const html = buildPublicAgentPageHtml({
+    userId: owner, agentPageSlug: "jane-agent", displayName: "Jane Agent",
+    bio: "Serving local buyers and sellers.", marketArea: "Fort Lauderdale",
+    brokerageName: "Summit Realty", avatarUrl: null, companyLogo: null,
+    socialLinks: { websiteUrl: "", facebookUrl: "", instagramUrl: "", linkedinUrl: "", youtubeUrl: "" },
+    publicPhone: "+19545550100", schedulingUrl: "", widgetEnabled: false,
+    preferredLeadCapture: "email", showHomeValueCta: true, listings: [],
+    browseTotal: 0, browseHasMore: false, browsePageSize: 24,
+    agentPageUrl: "https://app.whachatcrm.com/agents/jane-agent",
+    canonicalUrl: "https://app.whachatcrm.com/agents/jane-agent/victoria-park",
+    allowSearchIndexing: true,
+    neighborhood: {
+      name: "Victoria Park", city: "Fort Lauderdale", state: "Florida", slug: "victoria-park",
+      parentUrl: "https://app.whachatcrm.com/agents/jane-agent",
+      content: `A guide to Victoria Park homes and daily life.\n\n${marker}\n\n## Parks\n\nParks and recreation close to downtown.\n\n[[photo:ffffffff-ffff-ffff-ffff-ffffffffffff]]`,
+      photos: [{ url: photo, alt: "Cover photo" },
+        { url: inlinePhoto, alt: "Neighborhood park & walking trail" }],
+    },
+  });
+  assert.match(html, /class="neighborhood-guide-inline-photo"/);
+  assert.match(html, /alt="Neighborhood park &amp; walking trail"/);
+  assert.match(html, /<h3 class="neighborhood-guide-subheading">Parks<\/h3>/);
+  assert.doesNotMatch(html, /class="neighborhood-guide-gallery"/);
+  assert.doesNotMatch(html, /\[\[photo:/);
+  assert.ok(html.indexOf("A guide to Victoria Park") < html.indexOf('class="neighborhood-guide-inline-photo"'));
+  assert.ok(html.indexOf('class="neighborhood-guide-inline-photo"') < html.indexOf("Parks</h3>"));
 });

@@ -1,5 +1,5 @@
 import { agentPageNavigationCss, agentPageNavigationScript } from "./publicAgentPageNavigation";
-import { neighborhoodTitle } from "./neighborhoodPages";
+import { neighborhoodPhotoMarker, neighborhoodTitle } from "./neighborhoodPages";
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { listingTypeChipClass } from "./agentPageEmbed";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
@@ -292,6 +292,26 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const guideTitle = neighborhood ? escapeHtml(neighborhood.name) : "";
   const guideSubtitle = neighborhood ? escapeHtml(`${neighborhood.city}, ${neighborhood.state}`) : "";
   const guideHero = guidePhotos[0];
+  // Only saved neighborhood photo IDs can become inline images. This prevents
+  // arbitrary article Markdown or HTML from injecting external image URLs.
+  const inlineGuidePhotoMarkers = new Set<string>();
+  const guideEditorialHtml = guideParagraphs.map((text) => {
+    const photo = guidePhotos.slice(1).find((candidate) => neighborhoodPhotoMarker(candidate.url) === text);
+    if (photo) {
+      inlineGuidePhotoMarkers.add(text);
+      return `<figure class="neighborhood-guide-inline-photo"><img src="${escapeHtml(photo.url)}"
+        alt="${escapeHtml(photo.alt)}" loading="lazy" decoding="async" />
+        <figcaption>${escapeHtml(photo.alt)}</figcaption></figure>`;
+    }
+    // Removed photos should not leave visible technical tokens on public pages.
+    if (/^\[\[photo:[a-f0-9-]{36}\]\]$/i.test(text)) return "";
+    return text.startsWith("## ") && text.length <= 84
+      ? `<h3 class="neighborhood-guide-subheading">${escapeHtml(text.slice(3).trim())}</h3>`
+      : `<p>${escapeHtml(text)}</p>`;
+  }).join("");
+  const galleryGuidePhotos = guidePhotos.slice(1).filter((photo) =>
+    !inlineGuidePhotoMarkers.has(neighborhoodPhotoMarker(photo.url) ?? ""));
+
   const guideHtml = neighborhood ? `<article class="neighborhood-guide" aria-labelledby="local-guide-title">
     <div class="neighborhood-guide-hero${guideHero ? " has-photo" : ""}">
       ${guideHero ? `<img class="neighborhood-guide-cover" src="${escapeHtml(guideHero.url)}"
@@ -307,16 +327,13 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       <div class="neighborhood-guide-editorial">
         <div class="neighborhood-guide-section-label">GET TO KNOW THE AREA</div>
         <h2>Living in ${guideTitle}</h2>
-        ${guideParagraphs.length ? guideParagraphs.map((text) =>
-          text.startsWith("## ") && text.length <= 84
-            ? `<h3 class="neighborhood-guide-subheading">${escapeHtml(text.slice(3).trim())}</h3>`
-            : `<p>${escapeHtml(text)}</p>`).join("") :
+        ${guideParagraphs.length ? guideEditorialHtml :
           neighborhood.preview ? '<p>Add your own neighborhood insights to see how the guide will appear.</p>' : ""}
       </div>
-      ${guidePhotos.length > 1 ? `<section class="neighborhood-guide-gallery" aria-labelledby="guide-gallery-title">
+      ${galleryGuidePhotos.length > 0 ? `<section class="neighborhood-guide-gallery" aria-labelledby="guide-gallery-title">
         <div class="neighborhood-guide-section-label">PICTURE THE NEIGHBORHOOD</div>
         <h3 id="guide-gallery-title">Around ${guideTitle}</h3>
-        <div class="neighborhood-gallery-grid">${guidePhotos.slice(1).map((photo) =>
+        <div class="neighborhood-gallery-grid">${galleryGuidePhotos.map((photo) =>
           `<figure><img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.alt)}" loading="lazy" decoding="async" />
           <figcaption>${escapeHtml(photo.alt)}</figcaption></figure>`).join("")}</div>
       </section>` : ""}
@@ -356,7 +373,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     primaryMarket ? `Serving ${data.marketArea}.` : "",
     data.bio || "Contact the agent for help buying or selling a home.",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const summary = neighborhood ? neighborhood.content.trim().replace(/(^|\n)##\s+/g, "$1").replace(/\s+/g, " ") : profileSummary;
+  const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\s+/g, " ").trim() : profileSummary;
   const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
   const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
     ? "index, follow"
@@ -678,6 +695,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-guide-editorial { padding: 4px 0 14px; }
     .neighborhood-guide-editorial p { font-size: 1rem; line-height: 1.85; color: #334155; margin: 0 0 20px; }
     .neighborhood-guide-editorial .neighborhood-guide-subheading { font-size: 1.15rem; margin: 28px 0 10px; }
+    .neighborhood-guide-inline-photo { margin: 26px 0; }
+    .neighborhood-guide-inline-photo img { display: block; width: 100%; max-height: 480px; object-fit: cover; border-radius: 12px; }
+    .neighborhood-guide-inline-photo figcaption { margin-top: 8px; color: #64748b; font-size: .85rem; line-height: 1.5; }
     .neighborhood-guide-gallery { margin-top: 10px; padding-top: 26px; border-top: 1px solid var(--border); }
     .neighborhood-gallery-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
     .neighborhood-gallery-grid figure { overflow: hidden; margin: 0; border: 1px solid var(--border);

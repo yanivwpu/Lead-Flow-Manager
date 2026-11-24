@@ -54,3 +54,17 @@ export function isOwnedNeighborhoodGuidePhotoUrl(
     return /^[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(filename);
   } catch { return false; }
 }
+
+/**
+ * Stable inline reference to an existing, owner-validated neighborhood photo.
+ * Never render an arbitrary URL from article text: the public renderer resolves
+ * this marker only against the page's saved photo list.
+ */
+export function neighborhoodPhotoMarker(photoUrl: string): string | null {
+  try {
+    const match = new URL(photoUrl).pathname.match(/\/([a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})\.(?:jpg|png|webp)$/i);
+    return match ? `[[photo:${match[1].toLowerCase()}]]` : null;
+  } catch {
+    return null;
+  }
+}
