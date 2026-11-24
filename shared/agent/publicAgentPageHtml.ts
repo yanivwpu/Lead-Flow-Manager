@@ -373,7 +373,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     primaryMarket ? `Serving ${data.marketArea}.` : "",
     data.bio || "Contact the agent for help buying or selling a home.",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const summary = neighborhood ? neighborhood.content.trim().replace(/(^|\n)##\s+/g, "$1").replace(/\s+/g, " ") : profileSummary;
+  const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\s+/g, " ").trim() : profileSummary;
   const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
   const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
     ? "index, follow"
