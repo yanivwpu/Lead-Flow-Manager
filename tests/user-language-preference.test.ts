@@ -72,7 +72,7 @@ test("LanguageSelector notes explicit selection before persist and skips unauthe
   const sel = read("client/src/components/LanguageSelector.tsx");
   assert.match(sel, /noteExplicitLanguageSelection/);
   assert.match(sel, /persistAuthenticatedLanguage/);
-  assert.match(sel, /changeLanguage\(lang\)/);
+  assert.match(sel, /changeLanguage\(lang,/);
   assert.match(read("client/src/lib/userLanguagePreference.ts"), /TRUSTED_LANGUAGE_SOURCE/);
   // Must not raw-fetch PATCH for every visitor (including logged-out)
   assert.doesNotMatch(sel, /fetch\(\s*['"]\/api\/user\/language['"]/);
@@ -80,8 +80,7 @@ test("LanguageSelector notes explicit selection before persist and skips unauthe
 
 test("persistAuthenticatedLanguage skips redundant PATCH and keeps UI on failure", () => {
   const pref = read("client/src/lib/userLanguagePreference.ts");
-  assert.match(pref, /lastKnownPersistedLanguage === lang/);
-  assert.match(pref, /persistInFlightFor/);
+  assert.match(pref, /languageSaveQueue\.enqueue/);
   assert.match(pref, /generationAtStart === explicitGeneration/);
   assert.match(pref, /Failed to save language preference/);
   assert.match(pref, /explicitSessionLanguage/);
@@ -120,9 +119,10 @@ test("schema language field exists — no migration required", () => {
   assert.match(schema, /language:\s*text\("language"\)\.default\("en"\)/);
 });
 
-test("i18n changeLanguage updates localStorage, lang, dir, and notifies listeners", () => {
+test("i18n applies language and direction after bundle loading without writing account cache", () => {
   const i18n = read("client/src/lib/i18n.ts");
-  assert.match(i18n, /localStorage\.setItem\(LANGUAGE_CACHE_KEY/);
+  assert.doesNotMatch(i18n, /localStorage\.setItem\(LANGUAGE_CACHE_KEY/);
+  assert.match(i18n, /await loadLocale\(lng\)/);
   assert.match(i18n, /document\.documentElement\.dir/);
   assert.match(i18n, /document\.documentElement\.lang/);
   assert.match(i18n, /languageChanged/);
@@ -151,7 +151,7 @@ test("marketing URL sync still forces public locale (Phase 2 regression guard)",
   assert.match(routing, /useSyncLanguageFromMarketingUrl/);
   assert.match(routing, /hasLocalizedVersion/);
   assert.match(routing, /changeLanguage\(parsed\.locale/);
-  assert.match(routing, /changeLanguage\("en"\)/);
+  assert.match(routing, /changeLanguage\("en",/);
 });
 
 test("bootstrap prefers URL locale and forces English i18n on unprefixed Phase 2", () => {

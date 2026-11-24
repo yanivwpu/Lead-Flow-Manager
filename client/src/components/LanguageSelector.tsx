@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
+import { useToast } from '@/hooks/use-toast';
 import { Globe, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,10 +16,11 @@ import type { MarketingLocale } from '@shared/marketingLocale';
 import { isPublicLocaleAuthoritativePath } from '@shared/localeRoutes';
 import { useAuth } from '@/lib/auth-context';
 import {
+  finishExplicitLanguageSelection,
+  isCurrentLanguageSelection,
   noteExplicitLanguageSelection,
   persistAuthenticatedLanguage,
 } from '@/lib/userLanguagePreference';
-import type { UserLanguage } from '@shared/userLanguage';
 
 interface LanguageSelectorProps {
   variant?: 'default' | 'compact';
@@ -32,7 +34,8 @@ export function LanguageSelector({
   className,
   navigateOnChange = false,
 }: LanguageSelectorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { toast } = useToast();
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const urlLocale = useMarketingUrlLocale();
@@ -59,8 +62,11 @@ export function LanguageSelector({
 
   const handleLanguageChange = async (lang: SupportedLanguage) => {
     // Explicit session selection first so a slower /api/auth/me cannot overwrite it.
-    noteExplicitLanguageSelection(lang as UserLanguage);
-    await changeLanguage(lang);
+    const generation = noteExplicitLanguageSelection();
+    const pathname = window.location.pathname;
+    const applied = await changeLanguage(lang, () => isCurrentLanguageSelection(generation) && window.location.pathname === pathname);
+    if (!finishExplicitLanguageSelection(generation, lang, applied)) return;
+    if (!applied) return;
     setCurrentLang(lang);
 
     if (navigateOnChange) {
@@ -71,7 +77,10 @@ export function LanguageSelector({
     }
 
     // Persist only when logged in; skip redundant PATCH for the current saved value.
-    void persistAuthenticatedLanguage(lang as UserLanguage, !!user);
+    const result = await persistAuthenticatedLanguage(lang, user?.id);
+    if (!result.ok && isCurrentLanguageSelection(generation) && getCurrentLanguage() === lang) {
+      toast({ description: i18n.t("language.saveFailed"), variant: "destructive" });
+    }
   };
 
   const currentLanguageInfo = supportedLanguages[currentLang];
@@ -88,7 +97,7 @@ export function LanguageSelector({
         >
           <Globe className="h-4 w-4" aria-hidden />
           {variant === 'default' && (
-            <span className="ml-2 hidden sm:inline">{currentLanguageInfo.nativeName}</span>
+            <span className="ms-2 hidden sm:inline">{currentLanguageInfo.nativeName}</span>
           )}
         </Button>
       </DropdownMenuTrigger>

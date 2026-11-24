@@ -1,5 +1,7 @@
+import { useDirection } from "@radix-ui/react-direction"
 "use client"
 
+import { useTranslation } from "react-i18next"
 import React, {
   forwardRef,
   type ComponentPropsWithoutRef,
@@ -59,22 +61,27 @@ interface SheetContentProps
 const SheetContent = forwardRef<
   ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
-  <SheetPortal>
-    <SheetOverlay />
-    <SheetPrimitive.Content
-      ref={ref}
-      className={cn(sheetVariants({ side }), className)}
-      {...props}
-    >
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </SheetPrimitive.Close>
-      {children}
-    </SheetPrimitive.Content>
-  </SheetPortal>
-))
+>(({ side, className, children, dir, ...props }, ref) => {
+  const { t } = useTranslation()
+  const direction = useDirection(dir === "ltr" || dir === "rtl" ? dir : undefined)
+  return (
+    <SheetPortal>
+      <SheetOverlay />
+      <SheetPrimitive.Content
+        dir={dir ?? direction}
+        ref={ref}
+        className={cn(sheetVariants({ side: side ?? (direction === "rtl" ? "left" : "right") }), className)}
+        {...props}
+      >
+        <SheetPrimitive.Close className="absolute end-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+          <X className="h-4 w-4" />
+          <span className="sr-only">{t("common.close")}</span>
+        </SheetPrimitive.Close>
+        {children}
+      </SheetPrimitive.Content>
+    </SheetPortal>
+  )
+})
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
 const SheetHeader = ({
@@ -83,7 +90,7 @@ const SheetHeader = ({
 }: HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col space-y-2 text-center sm:text-left",
+      "flex flex-col space-y-2 text-center sm:text-start",
       className
     )}
     {...props}

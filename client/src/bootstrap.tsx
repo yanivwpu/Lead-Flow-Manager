@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import i18n, { loadLocale } from "./lib/i18n";
+import i18n, { changeLanguage } from "./lib/i18n";
 import { parseLocalizedPath, hasLocalizedVersion } from "@shared/localeRoutes";
 import {
   LANGUAGE_CACHE_KEY,
@@ -18,11 +18,9 @@ async function mount() {
   if (parsed.isLocalePrefixed && parsed.isSupported) {
     // Explicit /es or /he URL is authoritative — ignore stale storage.
     lang = parsed.locale;
-    localStorage.setItem(LANGUAGE_CACHE_KEY, lang);
   } else if (!parsed.isLocalePrefixed && hasLocalizedVersion(parsed.englishPath)) {
     // Unprefixed Phase 2 marketing URL → English is authoritative.
     lang = "en";
-    localStorage.setItem(LANGUAGE_CACHE_KEY, "en");
   } else if (
     (window.location.pathname === "/app" || window.location.pathname.startsWith("/app/")) &&
     !isTrustedExplicitLanguageSource(languageSource)
@@ -38,15 +36,10 @@ async function mount() {
   createRoot(document.getElementById("root")!).render(<App />);
 
   if (lang === "he" || lang === "es") {
-    try {
-      await loadLocale(lang);
-      await i18n.changeLanguage(lang);
-    } catch {
-      // keep English fallback
-    }
+    await changeLanguage(lang);
   } else if (lang === "en" && i18n.language !== "en") {
     // Clear stale non-English i18n (LanguageDetector / localStorage).
-    await i18n.changeLanguage("en");
+    await changeLanguage("en");
   }
 }
 

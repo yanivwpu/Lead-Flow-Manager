@@ -28,42 +28,45 @@ i18n
     },
     detection: {
       // Authenticated + first-visit locale must not follow Accept-Language / navigator.
-      // Explicit user choice and URL locale write whachatcrm_language; DB restore is authoritative in-app.
+      // The preference layer owns cache writes; public route changes only update i18n.
       order: ['localStorage'],
       lookupLocalStorage: LANGUAGE_CACHE_KEY,
-      caches: ['localStorage'],
+      caches: [],
     },
   });
 
 export async function loadLocale(lng: string): Promise<void> {
-  if (lng === 'en') return;
-  if (i18n.hasResourceBundle(lng, 'translation')) return;
-  try {
-    const mod = await import(`../locales/${lng}.json`);
-    i18n.addResourceBundle(lng, 'translation', mod.default, true, true);
-  } catch (e) {
-    console.warn(`[i18n] Failed to load locale "${lng}"`, e);
-  }
+  if (lng === 'en' || i18n.hasResourceBundle(lng, 'translation')) return;
+  const mod = await import(`../locales/${lng}.json`);
+  i18n.addResourceBundle(lng, 'translation', mod.default, true, true);
 }
 
-export const changeLanguage = async (lng: SupportedLanguage) => {
-  await loadLocale(lng);
-  await i18n.changeLanguage(lng);
-  localStorage.setItem(LANGUAGE_CACHE_KEY, lng);
+let languageRequest = 0;
+
+export const changeLanguage = async (
+  lng: SupportedLanguage,
+  canApply: () => boolean = () => true,
+): Promise<boolean> => {
+  const request = ++languageRequest;
+  try {
+    await loadLocale(lng);
+    if (request !== languageRequest || !canApply()) return false;
+    await i18n.changeLanguage(lng);
+  } catch (error) {
+    console.warn(`[i18n] Failed to load locale "${lng}"`, error);
+    if (request === languageRequest && canApply()) {
+      window.dispatchEvent(new CustomEvent('whachatcrm:locale-load-failed', { detail: lng }));
+    }
+    return false;
+  }
+  if (request !== languageRequest || !canApply()) return false;
 
   const dir = supportedLanguages[lng].dir;
   document.documentElement.dir = dir;
   document.documentElement.lang = lng;
-
-  if (dir === 'rtl') {
-    document.documentElement.classList.add('rtl');
-  } else {
-    document.documentElement.classList.remove('rtl');
-  }
-
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('languageChanged'));
-  }
+  document.documentElement.classList.toggle('rtl', dir === 'rtl');
+  window.dispatchEvent(new Event('languageChanged'));
+  return true;
 };
 
 export const getCurrentLanguage = (): SupportedLanguage => {

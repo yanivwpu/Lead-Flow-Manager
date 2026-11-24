@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "react-i18next";
-import { getDirection } from "@/lib/i18n";
 import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
 import { useAppNavCategories } from "@/lib/useAppNav";
 
@@ -22,8 +21,8 @@ function scrollFocusedNavItemIntoView(event: FocusEvent<HTMLElement>) {
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const { logout, user } = useAuth();
-  const { t } = useTranslation();
-  const isRTL = getDirection() === "rtl";
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.dir() === "rtl";
   const { mobilePrimaryItems, mobileMoreCategories } = useAppNavCategories();
 
   const bindMoreListRef = useCallback((node: HTMLDivElement | null) => {
@@ -32,11 +31,12 @@ export function MobileNav() {
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom" dir={isRTL ? "rtl" : "ltr"}>
-      <nav className="flex items-center justify-around h-14 px-2">
+      <nav aria-label={t("nav.mobileNavigation")} className="flex items-center justify-around h-14 px-2">
         {mobilePrimaryItems.map((item) => {
           return (
             <Link key={item.id} href={item.href}>
               <a
+                aria-current={item.active ? "page" : undefined}
                 data-testid={`mobile-nav-${item.mobileTestId}`}
                 className={cn(
                   "flex flex-col items-center justify-center px-3 py-1 rounded-lg transition-colors",

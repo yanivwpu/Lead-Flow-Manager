@@ -142,7 +142,7 @@ export function Sidebar() {
                   sidebarMotion,
                   collapsed ? "top-10" : "top-3",
                 )}
-                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
                 aria-expanded={!collapsed}
                 aria-controls="desktop-sidebar-navigation"
               >
@@ -154,7 +154,7 @@ export function Sidebar() {
               </button>
             </TooltipTrigger>
             <TooltipContent side={tooltipSide} className={sidebarTooltipClass}>
-              {collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              {collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -177,7 +177,7 @@ export function Sidebar() {
                     data-testid={`sidebar-section-${category.id}`}
                   >
                     <span className="truncate">{category.label}</span>
-                    {isCategoryCollapsed ? <ChevronRight className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
+                    {isCategoryCollapsed ? <ChevronRight className="h-3 w-3 shrink-0 rtl:rotate-180" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
                   </button>
                 </SidebarSection>
 
@@ -230,12 +230,12 @@ export function Sidebar() {
                             <button
                               type="button"
                               data-testid="ecommerce-sidebar-toggle"
-                              aria-label={commerceExpanded ? "Collapse E-Commerce modules" : "Expand E-Commerce modules"}
+                              aria-label={commerceExpanded ? t("nav.collapseCommerce") : t("nav.expandCommerce")}
                               aria-expanded={commerceExpanded}
                               onClick={() => setCommerceExpanded(v => !v)}
                               className="ms-9 mb-1 mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
                             >
-                              {commerceExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                              {commerceExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />}
                               <span>{commerceExpanded ? (isRTL ? "הסתרה" : commerceLocale === "es" ? "Ocultar" : "Hide") : (isRTL ? "הצגה" : commerceLocale === "es" ? "Mostrar" : "Show")}</span>
                             </button>
                             {commerceExpanded && (

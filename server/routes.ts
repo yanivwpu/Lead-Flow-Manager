@@ -1,3 +1,5 @@
+import { resolveInboxReplyLanguage } from "@shared/inboxReplyLanguage";
+import { readConversationAiControl } from "@shared/webchatAiPolicy";
 import { replyState } from "./inboxSendCoordination";
 import { registerInboxSendStateRoutes } from "./routes/inboxSendState";
 import { inboxTeamProfiles } from "./inboxTeamProfiles";
@@ -1048,6 +1050,10 @@ export async function registerRoutes(
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
+      }
+      const expectedAccountId = req.body?.expectedAccountId;
+      if (expectedAccountId !== undefined && expectedAccountId !== req.user.id) {
+        return res.status(409).json({ error: "Account changed" });
       }
       const language = normalizeUserLanguage(req.body?.language);
       if (!language) {
@@ -11703,15 +11709,11 @@ export async function registerRoutes(
       const validTones = ["neutral", "friendly", "professional", "sales"];
       const selectedTone = validTones.includes(tone) ? tone : undefined;
       
-      // Use explicit language override from request, fall back to user's preferred language
-      const validLanguages = ["en", "he", "es", "ar"];
-      const requestLanguage = req.body.language;
-      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : req.user.language) as
-        | "en"
-        | "he"
-        | "es"
-        | "ar"
-        | undefined;
+      const aiLanguage = resolveInboxReplyLanguage({
+        explicit: req.body.language,
+        conversationLanguage: readConversationAiControl(conversationAiControlForGate).conversationLanguage,
+        history: historyTurns,
+      });
 
       const businessMode = normalizeBusinessAiMode((settings as any)?.aiMode);
       const wantsAuto = requestedMode === "auto";
@@ -12086,7 +12088,7 @@ export async function registerRoutes(
           settings || undefined,
           selectedTone,
           aiLanguage,
-          enrichedContactContext || undefined,
+          enrichedContactContext ? { ...enrichedContactContext, conversationLanguage: aiLanguage } : undefined,
           aiRouting,
           messagingChannel,
         );

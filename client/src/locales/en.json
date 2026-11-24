@@ -75,6 +75,13 @@
     "page": "Page"
   },
   "common": {
+    "pageError": "This page could not load. Refresh the page or try again.",
+    "tryAgain": "Try again",
+    "previousPage": "Previous",
+    "nextPage": "Next",
+    "pagination": "Pagination",
+    "morePages": "More pages",
+    "toastNotifications": "Notifications",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
@@ -121,6 +128,11 @@
     "businessTypePlaceholder": "Enter a business type in your language, for example: plumbers, dentists, real estate agents"
   },
   "nav": {
+    "mobileNavigation": "Main navigation",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "expandCommerce": "Expand E-Commerce modules",
+    "collapseCommerce": "Collapse E-Commerce modules",
     "salesCatalog": "Sales Catalog",
     "main": "Main",
     "automationAi": "Automation & AI",
@@ -241,6 +253,15 @@
     }
   },
   "contacts": {
+    "contactType": "Contact type",
+    "identifiedContacts": "Identified contacts",
+    "websiteVisitors": "Website visitors",
+    "allContacts": "All contacts",
+    "emptyVisitors": "No anonymous website chat visitors",
+    "emptyIdentified": "No identified contacts match your filters",
+    "selectAllFiltered": "Select all",
+    "colAppointment": "Appointment",
+    "addNewContact": "Add new contact",
     "title": "Contacts",
     "subtitle": "All your contacts in one place",
     "addContact": "Add Contact",
@@ -261,7 +282,6 @@
     "loading": "Loading contacts…",
     "emptyState": "No contacts yet",
     "emptyHint": "Contacts are created automatically when someone messages you",
-    "noResults": "No contacts match your filters",
     "fieldName": "Name",
     "fieldPhone": "Phone",
     "fieldEmail": "Email",
@@ -437,98 +457,6 @@
       "availableFor": "Included with Pro",
       "unlockButton": "Upgrade to Pro",
       "getStarterButton": "Upgrade to Pro"
-    },
-    "notices": {
-      "messageCosts": {
-        "title": "Important: WhatsApp Message Costs",
-        "description": "Meta/WhatsApp conversation pricing is billed separately by Meta based on Meta's pricing model.",
-        "noCharge": "WhachatCRM does not add per-message markups.",
-        "planControls": "Your plan only controls how many conversations you manage inside the CRM.",
-        "transparent": "This keeps pricing transparent and predictable.",
-        "viewCosts": "View message costs:",
-        "twilioLink": "Twilio WhatsApp Pricing",
-        "metaLink": "Meta WhatsApp Business API Pricing"
-      },
-      "activeConversation": {
-        "title": "What Is an \"Active Conversation\"?",
-        "description": "An active conversation is:",
-        "point1": "One unique WhatsApp contact within a rolling 30-day window",
-        "point2": "Unlimited messages can happen inside that conversation — the count stays the same"
-      },
-      "reachLimit": {
-        "title": "What Happens When I Reach My Limit?",
-        "inboundContinue": "Inbound messages continue normally",
-        "outboundPaused": "Outbound replies are paused",
-        "upgradePrompt": "You'll see a clear upgrade prompt",
-        "instantUpgrade": "Upgrade instantly — no downtime",
-        "inControl": "You're always in control."
-      }
-    },
-    "faq": {
-      "title": "Frequently Asked Questions",
-      "payTwice": {
-        "q": "Do I pay twice — once to my provider and once to WhachatCRM?",
-        "a1": "No. You're paying for two different things:",
-        "provider": "Meta/WhatsApp:",
-        "providerDesc": "Conversation fees based on Meta's pricing model",
-        "whachat": "WhachatCRM:",
-        "whachatDesc": "Managing conversations, teams, notes, tasks & workflows",
-        "analogy": "Think of it like email: Gmail sends emails, CRM manages customers."
-      },
-      "noMessageFees": {
-        "q": "Why don't your plans include WhatsApp message fees?",
-        "a1": "Because WhatsApp pricing varies by:",
-        "country": "Country",
-        "type": "Message type",
-        "volume": "Volume",
-        "a2": "By letting customers connect their own provider:",
-        "noHidden": "You avoid hidden fees",
-        "transparent": "Costs stay transparent",
-        "control": "You keep full control",
-        "standard": "This is the standard SaaS model."
-      },
-      "channels": {
-        "q": "Which channels do you support?",
-        "a1": "WhachatCRM supports 7 messaging channels in one unified inbox:",
-        "whatsapp": "Through Meta Embedded Signup",
-        "sms": "Via Twilio",
-        "telegram": "Connect your bot",
-        "instagram": "Via Meta integration",
-        "facebook": "Via Meta integration",
-        "webchat": "Embeddable widget for your website",
-        "tiktok": "Lead intake only (capture leads from TikTok ads)",
-        "note": "Note: SMS requires Twilio. Meta only supports WhatsApp, not SMS."
-      },
-      "providers": {
-        "q": "Which WhatsApp providers do you support?",
-        "a1": "WhachatCRM guides WhatsApp setup through Meta Embedded Signup.",
-        "twilio": "Legacy Twilio connections may still be available for existing setups.",
-        "meta": "Meta Embedded Signup guides you through selecting your business, WhatsApp account, and phone number.",
-        "a2": "We verify the connection automatically after Meta returns you to WhachatCRM.",
-        "note": "The WhatsApp Business mobile app is not supported."
-      },
-      "twilioVsMeta": {
-        "q": "How does WhatsApp setup work?",
-        "chooseTwilio": "Before you start:",
-        "twilio1": "Use the correct Facebook/Meta admin account",
-        "twilio2": "Make sure your business and WhatsApp assets are ready in Meta",
-        "twilio3": "Some Meta features may require approval before live customer messaging works",
-        "chooseMeta": "During setup:",
-        "meta1": "Continue with Meta Embedded Signup",
-        "meta2": "Choose your business account",
-        "meta3": "Choose your WhatsApp Business Account",
-        "meta4": "Choose the phone number to connect"
-      },
-      "otherProviders": {
-        "q": "Do you support other WhatsApp providers?",
-        "a1": "WhatsApp setup is guided through Meta Embedded Signup. Legacy Twilio-based setups may remain available where already enabled.",
-        "a2": "We're collecting demand for additional providers like:",
-        "contact": "Contact us to help shape future integrations."
-      },
-      "upgradeDowngrade": {
-        "q": "Can I upgrade or downgrade anytime?",
-        "a": "Yes. Plans are monthly, flexible, and update instantly."
-      }
     }
   },
   "settings": {
@@ -581,6 +509,8 @@
     "passwordTooShort": "Password must be at least 7 characters"
   },
   "language": {
+    "loadFailed": "Could not load the selected language. Try again.",
+    "saveFailed": "Language changed for this session. Your account preference could not be saved.",
     "select": "Select Language",
     "english": "English",
     "hebrew": "עברית",
@@ -588,6 +518,10 @@
     "arabic": "العربية"
   },
   "templates": {
+    "campaignSaveFailed": "Could not save campaign",
+    "useThisTemplate": "Use this template",
+    "previewPresetAria": "Preview template",
+    "readOnlyPreviewHint": "Read-only preview with sample values. “Alex” is the example contact name.",
     "title": "Automation Templates",
     "subtitle": "Pre-built message sequences for your industry",
     "category": "Category",
@@ -1973,5 +1907,13 @@
     "busy": "Another reply is being sent. Your draft is saved. Wait for the result, then review the conversation.",
     "unknown": "Delivery is uncertain. Your draft is saved. Do not resend this reply until its delivery is verified. Review the conversation before sending a different reply.",
     "reviewed": "Latest activity reviewed. Send deliberately when ready; a newer reply will still stop the send."
+  },
+  "calendar": {
+    "today": "Today, {{date}}",
+    "selected": "{{date}}, selected",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "chooseMonth": "Choose month",
+    "chooseYear": "Choose year"
   }
 }

@@ -3,6 +3,7 @@
  * Public Phase 2 URL locales remain authoritative on scoped marketing routes.
  */
 
+import { createLanguageSaveQueue } from "./languageSaveQueue";
 import {
   isPublicLocaleAuthoritativePath,
   parseLocalizedPath,
@@ -29,9 +30,22 @@ import {
 /** Explicit selection in this tab — must not be overwritten by slower /api/auth/me. */
 let explicitSessionLanguage: UserLanguage | null = null;
 let explicitGeneration = 0;
-/** Last value we successfully persisted (or confirmed from DB) — skip redundant PATCH. */
-let lastKnownPersistedLanguage: UserLanguage | null = null;
-let persistInFlightFor: UserLanguage | null = null;
+let selectionPending = false;
+const languageSaveQueue = createLanguageSaveQueue(async (language, expectedAccountId) => {
+  try {
+    const response = await fetch("/api/user/language", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ language, expectedAccountId }),
+    });
+    if (response.ok) return true;
+    console.error("Failed to save language preference:", response.status);
+  } catch (error) {
+    console.error("Failed to save language preference:", error);
+  }
+  return false;
+});
 
 function readLanguageStorage(): { cachedLanguage: string | null; languageSource: string | null } {
   if (typeof localStorage === "undefined") {
@@ -57,22 +71,38 @@ function markTrustedLanguageSource(lang: UserLanguage): void {
   }
 }
 
-export function noteExplicitLanguageSelection(lang: UserLanguage): void {
-  explicitSessionLanguage = lang;
-  explicitGeneration += 1;
-  markTrustedLanguageSource(lang);
+export function noteExplicitLanguageSelection(): number {
+  selectionPending = true;
+  return ++explicitGeneration;
+}
+
+export function isCurrentLanguageSelection(generation: number): boolean {
+  return generation === explicitGeneration;
+}
+
+export function finishExplicitLanguageSelection(
+  generation: number,
+  lang: UserLanguage,
+  applied: boolean,
+): boolean {
+  if (!isCurrentLanguageSelection(generation)) return false;
+  selectionPending = false;
+  if (applied) {
+    explicitSessionLanguage = lang;
+    markTrustedLanguageSource(lang);
+  }
+  return true;
 }
 
 export function clearExplicitLanguageSelection(): void {
   explicitSessionLanguage = null;
+  selectionPending = false;
+  explicitGeneration++;
+  languageSaveQueue.reset();
 }
 
 export function getExplicitSessionLanguage(): UserLanguage | null {
   return explicitSessionLanguage;
-}
-
-export function markLanguagePersisted(lang: UserLanguage): void {
-  lastKnownPersistedLanguage = lang;
 }
 
 export { isPublicLocaleAuthoritativePath };
@@ -84,14 +114,16 @@ export { isPublicLocaleAuthoritativePath };
 export async function applyDatabaseLanguagePreference(
   rawLanguage: unknown,
 ): Promise<void> {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || selectionPending) return;
   if (isPublicLocaleAuthoritativePath(window.location.pathname || "/")) return;
 
   const generationAtStart = explicitGeneration;
+  const pathname = window.location.pathname;
+  const canApply = () => generationAtStart === explicitGeneration && window.location.pathname === pathname;
 
   if (explicitSessionLanguage) {
     if (getCurrentLanguage() !== explicitSessionLanguage) {
-      await changeLanguage(explicitSessionLanguage as SupportedLanguage);
+      await changeLanguage(explicitSessionLanguage, canApply);
     }
     return;
   }
@@ -120,62 +152,18 @@ export async function applyDatabaseLanguagePreference(
   }
 
   const fromDb = normalizeUserLanguage(rawLanguage);
-  if (fromDb) {
-    markLanguagePersisted(fromDb);
-  }
+  if (fromDb) languageSaveQueue.confirm(fromDb);
 
-  if (getCurrentLanguage() === locale) {
-    try {
-      localStorage.setItem(LANGUAGE_CACHE_KEY, locale);
-    } catch {
-      /* ignore */
-    }
-    return;
-  }
-
-  await changeLanguage(locale as SupportedLanguage);
-
-  if (generationAtStart !== explicitGeneration && explicitSessionLanguage) {
-    await changeLanguage(explicitSessionLanguage as SupportedLanguage);
-  }
+  if (getCurrentLanguage() !== locale) await changeLanguage(locale, canApply);
 }
 
-/**
- * Persist language for the logged-in account. No-op when logged out or value unchanged.
- * UI must already be updated via changeLanguage + noteExplicitLanguageSelection.
- */
+/** UI selection is applied before queued account persistence. */
 export async function persistAuthenticatedLanguage(
   lang: UserLanguage,
-  isLoggedIn: boolean,
+  accountId?: string,
 ): Promise<{ ok: boolean }> {
-  if (!isLoggedIn) return { ok: true };
-  if (lastKnownPersistedLanguage === lang) return { ok: true };
-  if (persistInFlightFor === lang) return { ok: true };
-
-  persistInFlightFor = lang;
-  const generationAtStart = explicitGeneration;
-
-  try {
-    const response = await fetch("/api/user/language", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ language: lang }),
-    });
-    if (!response.ok) {
-      console.error("Failed to save language preference:", response.status);
-      return { ok: false };
-    }
-    if (generationAtStart === explicitGeneration) {
-      markLanguagePersisted(lang);
-    }
-    return { ok: true };
-  } catch (error) {
-    console.error("Failed to save language preference:", error);
-    return { ok: false };
-  } finally {
-    if (persistInFlightFor === lang) persistInFlightFor = null;
-  }
+  if (!accountId) return { ok: true };
+  return { ok: await languageSaveQueue.enqueue(lang, accountId) };
 }
 
 /** Resolve language to store on signup from current UI / URL context. */
@@ -223,8 +211,5 @@ export function resolveAuthenticatedAppLocale(userLanguage: unknown): UserLangua
 
 /** Test-only reset of module session state. */
 export function __resetUserLanguagePreferenceStateForTests(): void {
-  explicitSessionLanguage = null;
-  explicitGeneration = 0;
-  lastKnownPersistedLanguage = null;
-  persistInFlightFor = null;
+  clearExplicitLanguageSelection();
 }

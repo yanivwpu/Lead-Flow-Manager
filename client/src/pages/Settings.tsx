@@ -1,3 +1,4 @@
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { MarketingSenderSetup } from "@/components/settings/MarketingSenderSetup";
 import React, { useEffect, useRef, useState } from "react";
 import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2, FileText } from "lucide-react";
@@ -380,7 +381,7 @@ class SettingsErrorBoundary extends React.Component<
 
 export function Settings() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
@@ -1136,7 +1137,7 @@ export function Settings() {
                       {subscriptionData?.subscription?.currentPeriodEnd && (
                         <p className="text-xs text-gray-400">
                           Next billing:{" "}
-                          {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
+                          {formatRegionalDate(new Date(subscriptionData.subscription.currentPeriodEnd), i18n.language, { year: "numeric", month: "numeric", day: "numeric" })}
                         </p>
                       )}
                     </>

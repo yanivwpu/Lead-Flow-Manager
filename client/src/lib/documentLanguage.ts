@@ -6,6 +6,7 @@ export function syncDocumentLanguage(doc: Document, pathname: string, language: 
     ? parseLocalizedPath(pathname).locale
     : (language || "en").split("-")[0];
   const isRtl = ["he", "ar", "fa", "ur"].includes(lang);
+  doc.documentElement.toggleAttribute("data-authenticated-layout", pathname === "/app" || pathname.startsWith("/app/"));
   doc.documentElement.lang = lang;
   doc.documentElement.dir = isRtl ? "rtl" : "ltr";
   doc.documentElement.classList.toggle("rtl", isRtl);

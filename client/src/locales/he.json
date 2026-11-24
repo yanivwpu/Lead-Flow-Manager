@@ -75,6 +75,13 @@
     "page": "עמוד"
   },
   "common": {
+    "pageError": "לא ניתן לטעון את הדף. רעננו את הדף או נסו שוב.",
+    "tryAgain": "ניסיון חוזר",
+    "previousPage": "הקודם",
+    "nextPage": "הבא",
+    "pagination": "ניווט בין דפים",
+    "morePages": "דפים נוספים",
+    "toastNotifications": "התראות",
     "save": "שמור",
     "cancel": "ביטול",
     "delete": "מחק",
@@ -121,6 +128,11 @@
     "businessTypePlaceholder": "הזן סוג עסק בשפה שלך, לדוגמה: אינסטלטורים, רופאי שיניים, סוכני נדל״ן"
   },
   "nav": {
+    "mobileNavigation": "ניווט ראשי",
+    "expandSidebar": "הרחבת תפריט הצד",
+    "collapseSidebar": "צמצום תפריט הצד",
+    "expandCommerce": "הרחבת תפריט המסחר האלקטרוני",
+    "collapseCommerce": "צמצום תפריט המסחר האלקטרוני",
     "salesCatalog": "קטלוג מכירות",
     "main": "ראשי",
     "automationAi": "אוטומציה ו-AI",
@@ -128,9 +140,9 @@
     "settingsIntegrations": "הגדרות ואינטגרציות",
     "growthEngines": "מנועי צמיחה",
     "support": "תמיכה",
-    "inbox": "דואר נכנס",
+    "inbox": "תיבת שיחות",
     "dashboard": "לוח בקרה",
-    "chats": "צ׳אטים",
+    "chats": "תיבת שיחות",
     "followUps": "מעקבים",
     "followups": "מעקבים",
     "pipelines": "צינורות מכירה",
@@ -179,7 +191,7 @@
   },
   "chats": {
     "title": "צ׳אטים",
-    "inbox": "דואר נכנס",
+    "inbox": "תיבת שיחות",
     "unread": "לא נקראו",
     "starred": "מסומנים בכוכב",
     "archived": "בארכיון",
@@ -243,6 +255,15 @@
     }
   },
   "contacts": {
+    "contactType": "סוג איש קשר",
+    "identifiedContacts": "אנשי קשר מזוהים",
+    "websiteVisitors": "מבקרים באתר",
+    "allContacts": "כל אנשי הקשר",
+    "emptyVisitors": "אין מבקרים אנונימיים בצ׳אט באתר",
+    "emptyIdentified": "לא נמצאו אנשי קשר מזוהים שמתאימים לסינון",
+    "selectAllFiltered": "בחירת הכול",
+    "colAppointment": "פגישה",
+    "addNewContact": "הוספת איש קשר",
     "title": "אנשי קשר",
     "subtitle": "כל אנשי הקשר שלך במקום אחד",
     "addContact": "הוסף איש קשר",
@@ -263,7 +284,6 @@
     "loading": "טוען אנשי קשר…",
     "emptyState": "אין אנשי קשר עדיין",
     "emptyHint": "אנשי קשר נוצרים אוטומטית כשמישהו שולח לך הודעה",
-    "noResults": "לא נמצאו אנשי קשר התואמים לסינון",
     "fieldName": "שם",
     "fieldPhone": "טלפון",
     "fieldEmail": "אימייל",
@@ -439,98 +459,6 @@
       "availableFor": "זמין למנויי Starter ו-Pro",
       "unlockButton": "שדרגו ל-Pro",
       "getStarterButton": "קבל Starter לגישה ליכולות AI"
-    },
-    "notices": {
-      "messageCosts": {
-        "title": "חשוב: עלויות הודעות WhatsApp",
-        "description": "תמחור שיחות Meta/WhatsApp מחויב בנפרד על ידי Meta לפי מודל התמחור של Meta.",
-        "noCharge": "WhachatCRM לא גובה על כל הודעה.",
-        "planControls": "התוכנית שלך שולטת רק במספר השיחות שאתה מנהל בתוך ה-CRM.",
-        "transparent": "זה שומר על תמחור שקוף וצפוי.",
-        "viewCosts": "צפה בעלויות הודעות:",
-        "twilioLink": "תמחור הודעות WhatsApp",
-        "metaLink": "תמחור Meta WhatsApp Business API"
-      },
-      "activeConversation": {
-        "title": "מהי \"שיחה פעילה\"?",
-        "description": "שיחה פעילה היא:",
-        "point1": "איש קשר WhatsApp ייחודי אחד בתוך חלון מתגלגל של 30 יום",
-        "point2": "הודעות ללא הגבלה יכולות להתרחש בתוך אותה שיחה — הספירה נשארת אותו דבר"
-      },
-      "reachLimit": {
-        "title": "מה קורה כשאני מגיע למגבלה שלי?",
-        "inboundContinue": "הודעות נכנסות ממשיכות כרגיל",
-        "outboundPaused": "תשובות יוצאות מושהות",
-        "upgradePrompt": "תראה הודעת שדרוג ברורה",
-        "instantUpgrade": "שדרג מיידית — ללא השבתה",
-        "inControl": "אתה תמיד בשליטה."
-      }
-    },
-    "faq": {
-      "title": "שאלות נפוצות",
-      "payTwice": {
-        "q": "האם אני משלם פעמיים — פעם לספק ופעם ל-WhachatCRM?",
-        "a1": "לא. אתה משלם על שני דברים שונים:",
-        "provider": "Meta/WhatsApp:",
-        "providerDesc": "משלוח הודעות WhatsApp",
-        "whachat": "WhachatCRM:",
-        "whachatDesc": "ניהול שיחות, צוותים, הערות, משימות ותהליכי עבודה",
-        "analogy": "חשוב על זה כמו אימייל: Gmail שולח אימיילים, CRM מנהל לקוחות."
-      },
-      "noMessageFees": {
-        "q": "למה התוכניות שלכם לא כוללות עמלות הודעות WhatsApp?",
-        "a1": "כי תמחור WhatsApp משתנה לפי:",
-        "country": "מדינה",
-        "type": "סוג הודעה",
-        "volume": "נפח",
-        "a2": "על ידי מתן אפשרות ללקוחות לחבר את הספק שלהם:",
-        "noHidden": "אתה נמנע מעמלות נסתרות",
-        "transparent": "העלויות נשארות שקופות",
-        "control": "אתה שומר על שליטה מלאה",
-        "standard": "זה המודל הסטנדרטי של SaaS."
-      },
-      "channels": {
-        "q": "אילו ערוצים אתם תומכים?",
-        "a1": "WhachatCRM תומך ב-7 ערוצי הודעות בתיבה מאוחדת אחת:",
-        "whatsapp": "דרך Meta Embedded Signup",
-        "sms": "זמין כשמופעל",
-        "telegram": "חבר את הבוט שלך",
-        "instagram": "דרך אינטגרציית Meta",
-        "facebook": "דרך אינטגרציית Meta",
-        "webchat": "ווידג׳ט להטמעה באתר שלך",
-        "tiktok": "קליטת לידים בלבד (לכידת לידים ממודעות TikTok)",
-        "note": "הערה: חלק מהערוצים זמינים רק כאשר הם מופעלים בסביבת העבודה שלך."
-      },
-      "providers": {
-        "q": "באילו ספקי WhatsApp אתם תומכים?",
-        "a1": "WhachatCRM תומך בשני ספקי WhatsApp Business API רשמיים:",
-        "twilio": "אישור מהיר, תשתית אמינה, כולל תמיכה ב-SMS",
-        "meta": "אינטגרציה ישירה, אימות סימן ירוק, WhatsApp בלבד",
-        "a2": "בחר את הספק שמתאים לך ביותר — אנחנו מדריכים אותך צעד אחר צעד במהלך ההגדרה.",
-        "note": "אפליקציית WhatsApp Business לנייד אינה נתמכת."
-      },
-      "twilioVsMeta": {
-        "q": "איך עובד חיבור WhatsApp?",
-        "chooseTwilio": "לפני שמתחילים:",
-        "twilio1": "אתה רוצה את חוויית ההגדרה הקלה ביותר",
-        "twilio2": "ודא שנכסי העסק ו-WhatsApp מוכנים ב-Meta",
-        "twilio3": "אתה מעדיף מתווך שמטפל בתאימות WhatsApp",
-        "chooseMeta": "בחר Meta WhatsApp Business API אם:",
-        "meta1": "כבר יש לך חשבון WhatsApp Business",
-        "meta2": "אתה רוצה את אימות הסימן הירוק הרשמי",
-        "meta3": "אתה צריך עלויות הודעות נמוכות יותר לשימוש בנפח גבוה",
-        "meta4": "אתה רוצה גישה לתכונות WhatsApp מקוריות (קטלוגים, כפתורים אינטראקטיביים)"
-      },
-      "otherProviders": {
-        "q": "האם אתם תומכים בספקי WhatsApp אחרים?",
-        "a1": "חיבור WhatsApp מתבצע דרך Meta Embedded Signup. חיבורי Twilio קיימים עשויים להישאר זמינים כשכבר הופעלו.",
-        "a2": "אנחנו אוספים ביקוש לספקים נוספים כמו:",
-        "contact": "צור קשר כדי לעזור לעצב אינטגרציות עתידיות."
-      },
-      "upgradeDowngrade": {
-        "q": "האם אפשר לשדרג או להוריד דרגה בכל עת?",
-        "a": "כן. התוכניות הן חודשיות, גמישות, ומתעדכנות מיידית."
-      }
     }
   },
   "settings": {
@@ -583,6 +511,8 @@
     "passwordTooShort": "הסיסמה חייבת להכיל לפחות 7 תווים"
   },
   "language": {
+    "loadFailed": "לא ניתן לטעון את השפה שנבחרה. נסו שוב.",
+    "saveFailed": "השפה השתנתה במופע הנוכחי, אך לא ניתן לשמור את העדפת השפה בחשבון.",
     "select": "בחר שפה",
     "english": "English",
     "hebrew": "עברית",
@@ -590,6 +520,10 @@
     "arabic": "العربية"
   },
   "templates": {
+    "campaignSaveFailed": "לא ניתן לשמור את הקמפיין",
+    "useThisTemplate": "שימוש בתבנית הזו",
+    "previewPresetAria": "תצוגה מקדימה של התבנית",
+    "readOnlyPreviewHint": "תצוגה מקדימה לקריאה בלבד עם ערכים לדוגמה. ״אלכס״ הוא שם איש הקשר לדוגמה.",
     "title": "תבניות אוטומציה",
     "subtitle": "רצפי הודעות מובנים לתעשייה שלך",
     "category": "קטגוריה",
@@ -1237,7 +1171,8 @@
       "bannerHeadline": "🎉 אתה משתמש כעת ב-WhachatCRM Pro עם AI Brain בחינם למשך 14 יום.",
       "bannerBodyShopify": "חבר את הערוצים שלך, גלה את כל התכונות ובחר תוכנית Shopify בכל עת לפני סיום הניסיון.",
       "bannerBodyWeb": "חבר את הערוצים שלך, גלה את כל התכונות ובחר תוכנית בתשלום בכל עת לפני סיום הניסיון.",
-      "daysRemaining_one": "נותר יום {{count}} בניסיון WhachatCRM שלך.",
+      "daysRemaining_one": "נותר יום אחד בתקופת הניסיון של WhachatCRM.",
+      "daysRemaining_two": "נותרו {{count}} ימים בתקופת הניסיון של WhachatCRM.",
       "daysRemaining_other": "נותרו {{count}} ימים בניסיון WhachatCRM שלך.",
       "bannerShopify": "אתה כרגע בניסיון של 14 יום ל-Pro עם AI Brain. בחר תוכנית Shopify בכל עת כדי להמשיך אחרי הניסיון.",
       "bannerWeb": "אתה כרגע בניסיון של 14 יום ל-Pro עם AI Brain. בחר תוכנית בתשלום בכל עת כדי להמשיך אחרי הניסיון.",
@@ -1437,7 +1372,8 @@
     "modal": {
       "title": "אתה ב-Pro + AI Trial 🚀",
       "subtitle": "14 ימים לחוות את כוח האוטומציה המלא",
-      "daysLeft_one": "נותר יום אחד בניסיון שלך.",
+      "daysLeft_one": "נותר יום אחד בתקופת הניסיון.",
+      "daysLeft_two": "נותרו {{count}} ימים בתקופת הניסיון.",
       "daysLeft_other": "נותרו {{count}} ימים בניסיון שלך.",
       "bullet1": "הצעות תגובה עם AI ותיבת דואר נכנס ידידותית לאוטומציה",
       "bullet2": "הסמכת לידים, ניקוד וזרימות מוכנות ל-Growth Engine",
@@ -1451,7 +1387,8 @@
       "badge": "Pro + AI Trial",
       "daysLeftCompact": "נותרו {{days}} ימים",
       "tooltipActive": "Pro + AI Trial פעיל",
-      "daysLeftTooltip_one": "נותר יום {{count}}",
+      "daysLeftTooltip_one": "נותר יום אחד",
+      "daysLeftTooltip_two": "נותרו {{count}} ימים",
       "daysLeftTooltip_other": "נותרו {{count}} ימים"
     }
   },
@@ -1980,5 +1917,13 @@
     "busy": "תשובה אחרת נשלחת כעת. הטיוטה נשמרה. יש להמתין לתוצאה ולבדוק את השיחה.",
     "unknown": "לא ניתן לאשר את המסירה. הטיוטה נשמרה. אין לשלוח שוב את אותה תשובה עד לבדיקת המסירה. יש לבדוק את השיחה לפני שליחת תשובה אחרת.",
     "reviewed": "הפעילות האחרונה נבדקה. אפשר לשלוח במכוון כשמוכנים; תשובה חדשה יותר עדיין תעצור את השליחה."
+  },
+  "calendar": {
+    "today": "היום, {{date}}",
+    "selected": "{{date}}, נבחר",
+    "previousMonth": "החודש הקודם",
+    "nextMonth": "החודש הבא",
+    "chooseMonth": "בחירת חודש",
+    "chooseYear": "בחירת שנה"
   }
 }

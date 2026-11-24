@@ -1,0 +1,10 @@
+{
+  "intentionalText": ["AI", "AI Brain", "AI Copilot", "Chatbot Builder", "CRM", "CSV", "Email", "Facebook", "Gmail", "GoHighLevel", "HubSpot", "Instagram", "Meta", "Messenger", "MLS", "PayPal", "Pro", "Prospect AI", "QR", "Realtor® Growth Engine", "Salesforce", "Shopify", "SMS", "Stripe", "Telegram", "TikTok", "Twilio", "URL", "WhatsApp", "WhachatCRM"],
+  "legacyDictionaryKeys": ["nav.followUps", "nav.automation", "rge.footer.gettingStarted", "rge.footer.helpCenter", "pricingPage.compare.aiAssistBasicIncluded", "pricingPage.compare.aiAssistEnhancedIncluded", "pricingPage.compare.integrationsWebhooks"],
+  "dynamicKeys": {
+    "client/src/components/InboxWorkspaceSelector.tsx": {
+      "`teamInvite.${w.role}`": ["teamInvite.owner", "teamInvite.admin", "teamInvite.member"]
+    }
+  },
+  "spelledOutCount": ["he:pricingPage.trialState.daysRemaining_one", "he:trial.modal.daysLeft_one", "he:trial.pill.daysLeftTooltip_one"]
+}

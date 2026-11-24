@@ -1,3 +1,4 @@
+import { formatRegionalDate, formatRegionalNumber } from "@/lib/regionalFormatting";
 import { CommerceGuide, CommerceGuideLink } from "@/components/ecommerce/CommerceGuide";
 import { EcommerceWorkspaceBoundary, useEcommercePilot } from "@/lib/ecommercePilot";
 import { useTranslation } from "react-i18next";
@@ -107,15 +108,15 @@ export function EcommerceGrowthEngineDashboardContent() {
          {activation.data.recoveryObservations.total === 0
            ? <p>{t.noneObserved}</p>
            : <>
-             <p>{t.observedLabel}: {activation.data.recoveryObservations.total}
+             <p>{t.observedLabel}: {formatRegionalNumber(activation.data.recoveryObservations.total, locale)}
                <span className="mx-2" aria-hidden="true">·</span>
-               {t.openLabel}: {activation.data.recoveryObservations.open}
+               {t.openLabel}: {formatRegionalNumber(activation.data.recoveryObservations.open, locale)}
                <span className="mx-2" aria-hidden="true">·</span>
-               {t.dueLabel}: {activation.data.recoveryObservations.dueForReview}
+               {t.dueLabel}: {formatRegionalNumber(activation.data.recoveryObservations.dueForReview, locale)}
              </p>
              {activation.data.recoveryObservations.latestAt && <p className="text-xs text-slate-500">
                {t.latestLabel}: <time dateTime={activation.data.recoveryObservations.latestAt}>
-                 {new Date(activation.data.recoveryObservations.latestAt).toLocaleString(locale==="he"?"he-IL":locale==="es"?"es-ES":"en-US")}
+                 {formatRegionalDate(new Date(activation.data.recoveryObservations.latestAt), locale, { dateStyle: "short", timeStyle: "short" })}
                </time>
              </p>}
            </>}

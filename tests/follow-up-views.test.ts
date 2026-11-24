@@ -8,6 +8,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Router } from 'wouter';
 import { parseHTML } from 'linkedom';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import en from '../client/src/locales/en.json';
+
+const i18n = createInstance();
+await i18n.init({ lng: 'en', resources: { en: { translation: en } } });
 
 mkdirSync('work', { recursive: true });
 const scratch = mkdtempSync(resolve('work/follow-up-render-'));
@@ -27,7 +33,6 @@ const stubs: Record<string, string> = {
   'use-mobile': `export const useIsMobile=()=>false;`,
   'use-toast': `export const useToast=()=>({toast:()=>{}});`,
   'ecommercePilot': `export const useEcommercePilot=()=>({available:false});`,
-  'react-i18next': `export const useTranslation=()=>({i18n:{resolvedLanguage:'en'}});`,
   '@tanstack/react-query': `export const useQueryClient=()=>({invalidateQueries:async()=>{}});
     export const useMutation=()=>({isPending:false,mutate:()=>{globalThis.__followUpRender.writes++},mutateAsync:async()=>{globalThis.__followUpRender.writes++}});
     export const useQuery=(options)=>({data:options.queryKey.includes('/api/inbox') ? globalThis.__followUpRender.rows :
@@ -52,7 +57,8 @@ const fixture = (id: string, text = 'Thanks!', contact: object = {}) => ({
 });
 function render(view: string, filter: string | null = null) {
   Object.assign(state, { view, filter, nullState: 0 });
-  return parseHTML(renderToStaticMarkup(React.createElement(Router, { ssrPath: '/app/followups' }, React.createElement(FollowUps)))).document;
+  const page = React.createElement(Router, { ssrPath: '/app/followups' }, React.createElement(FollowUps));
+  return parseHTML(renderToStaticMarkup(React.createElement(I18nextProvider, { i18n }, page))).document;
 }
 function reset() {
   state.rows = [

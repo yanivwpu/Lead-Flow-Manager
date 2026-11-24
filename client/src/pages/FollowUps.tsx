@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users } from "lucide-react";
@@ -366,6 +368,7 @@ function TaskCalendarView({
   onReschedule: (chatId: string, newDate: Date) => void;
   isMobile: boolean;
 }) {
+  const { t, i18n } = useTranslation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [draggedTask, setDraggedTask] = useState<Chat | null>(null);
   
@@ -415,10 +418,10 @@ function TaskCalendarView({
     setDraggedTask(null);
   };
 
-  const dayNames = isMobile 
-    ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] 
-    : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  
+  const dayNames = days.slice(0, 7).map((day) =>
+    formatRegionalDate(day, i18n.language, { weekday: isMobile ? "narrow" : "short" }),
+  );
+
   const maxTasksToShow = isMobile ? 2 : 3;
   
   return (
@@ -427,19 +430,21 @@ function TaskCalendarView({
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
           className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          aria-label={t("calendar.previousMonth")}
           data-testid="button-prev-month"
         >
-          <ChevronLeft className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
+          <ChevronLeft className="h-4 w-4 md:h-5 md:w-5 text-gray-600 rtl:rotate-180" />
         </button>
         <h3 className="text-base md:text-lg font-semibold text-gray-900" data-testid="text-current-month">
-          {format(currentMonth, isMobile ? 'MMM yyyy' : 'MMMM yyyy')}
+          {formatRegionalDate(currentMonth, i18n.language, { month: isMobile ? "short" : "long", year: "numeric" })}
         </h3>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
           className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          aria-label={t("calendar.nextMonth")}
           data-testid="button-next-month"
         >
-          <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
+          <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-600 rtl:rotate-180" />
         </button>
       </div>
       

@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
+import { datePickerLocale, formatRegionalDate } from "@/lib/regionalFormatting"
 import React, {
   useEffect,
   useRef,
@@ -22,15 +24,36 @@ function Calendar({
   captionLayout = "label",
   buttonVariant = "ghost",
   formatters,
+  labels,
+  locale,
+  dir,
   components,
   ...props
 }: ComponentProps<typeof DayPicker> & {
   buttonVariant?: ComponentProps<typeof Button>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
+  const { t, i18n } = useTranslation()
 
   return (
     <DayPicker
+      dir={dir ?? i18n.dir()}
+      locale={locale ?? datePickerLocale(i18n.language)}
+      labels={{
+        labelPrevious: () => t("calendar.previousMonth"),
+        labelNext: () => t("calendar.nextMonth"),
+        labelMonthDropdown: () => t("calendar.chooseMonth"),
+        labelYearDropdown: () => t("calendar.chooseYear"),
+        labelDayButton: (day, modifiers, _options, dateLib) => {
+          let date = dateLib?.format(day, "PPPP") ?? formatRegionalDate(day, i18n.language, {
+            dateStyle: "full",
+            timeZone: props.timeZone,
+          })
+          if (modifiers.today) date = t("calendar.today", { date })
+          return modifiers.selected ? t("calendar.selected", { date }) : date
+        },
+        ...labels,
+      }}
       showOutsideDays={showOutsideDays}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
@@ -41,7 +64,7 @@ function Calendar({
       captionLayout={captionLayout}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString("default", { month: "short" }),
+          formatRegionalDate(date, locale?.code ?? i18n.language, { month: "short" }),
         ...formatters,
       }}
       classNames={{
@@ -104,15 +127,15 @@ function Calendar({
           defaultClassNames.week_number
         ),
         day: cn(
-          "group/day relative aspect-square h-full w-full select-none p-0 text-center [&:first-child[data-selected=true]_button]:rounded-l-md [&:last-child[data-selected=true]_button]:rounded-r-md",
+          "group/day relative aspect-square h-full w-full select-none p-0 text-center [&:first-child[data-selected=true]_button]:rounded-s-md [&:last-child[data-selected=true]_button]:rounded-e-md",
           defaultClassNames.day
         ),
         range_start: cn(
-          "bg-accent rounded-l-md",
+          "bg-accent rounded-s-md",
           defaultClassNames.range_start
         ),
         range_middle: cn("rounded-none", defaultClassNames.range_middle),
-        range_end: cn("bg-accent rounded-r-md", defaultClassNames.range_end),
+        range_end: cn("bg-accent rounded-e-md", defaultClassNames.range_end),
         today: cn(
           "bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none",
           defaultClassNames.today

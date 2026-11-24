@@ -1,3 +1,4 @@
+import { DirectionProvider } from "@radix-ui/react-direction";
 import { rememberCommerceWelcome } from "@/lib/commerceWelcome";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
@@ -164,11 +165,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   }
 
   if (isLoading || (user && !sessionAligned)) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!user) {
@@ -538,15 +535,20 @@ function Router() {
   return <MarketingRoutes />;
 }
 
-const PageLoader = () => (
-  <div className="flex h-screen items-center justify-center bg-gray-50">
-    <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
-  </div>
-);
+function PageLoader() {
+  const { t } = useTranslation();
+  return (
+    <div role="status" aria-label={t("common.loading")} className="flex h-screen items-center justify-center bg-gray-50">
+      <Loader2 aria-hidden="true" className="h-8 w-8 text-brand-green animate-spin" />
+    </div>
+  );
+}
 
 function App() {
   const { i18n } = useTranslation();
   const [location] = useLocation();
+  const locale = parseLocalizedPath(location);
+  const direction = (locale.isSupported && locale.isLocalePrefixed ? locale.locale : i18n.language) === "he" ? "rtl" : "ltr";
 
   useEffect(() => {
     document.documentElement.classList.remove("wcs-marketing-navigating");
@@ -560,19 +562,21 @@ function App() {
   }, [i18n.language, location]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <CookieConsentRoot>
-          <GoogleAnalyticsRouteTracker />
-          <MarketingWebsiteChatWidget />
-          <ReferralCapture />
-          <Toaster />
-          <Suspense fallback={<PageLoader />}>
-            <Router />
-          </Suspense>
-        </CookieConsentRoot>
-      </AuthProvider>
-    </QueryClientProvider>
+    <DirectionProvider dir={direction}>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <CookieConsentRoot>
+            <GoogleAnalyticsRouteTracker />
+            <MarketingWebsiteChatWidget />
+            <ReferralCapture />
+            <Toaster />
+            <Suspense fallback={<PageLoader />}>
+              <Router />
+            </Suspense>
+          </CookieConsentRoot>
+        </AuthProvider>
+      </QueryClientProvider>
+    </DirectionProvider>
   );
 }
 

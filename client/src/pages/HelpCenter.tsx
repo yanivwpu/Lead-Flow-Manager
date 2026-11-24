@@ -4,7 +4,8 @@ import { Search, ChevronRight, HelpCircle, Heart, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { getCurrentLanguage } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
+import { normalizeUserLanguage } from "@shared/userLanguage";
 import { 
   getHelpArticles, 
   getHelpCategories, 
@@ -136,7 +137,8 @@ export function HelpCenter() {
   const contentRef = useRef<HTMLDivElement>(null);
   
   // Get current language for translations
-  const currentLang = (getCurrentLanguage() || "en") as HelpLanguage;
+  const { i18n } = useTranslation();
+  const currentLang: HelpLanguage = normalizeUserLanguage(i18n.language) || "en";
   const isRTL = currentLang === "he";
   
   // Get translated content
