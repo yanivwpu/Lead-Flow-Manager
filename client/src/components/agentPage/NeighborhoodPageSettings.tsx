@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Copy, Eye, ImagePlus, Pencil, Trash2 } from "lucide-react";
 import {
-  neighborhoodTitle, neighborhoodContentComplete, neighborhoodPhotoMarker, NEIGHBORHOOD_GUIDE_MAX_PHOTOS, NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES,
+  neighborhoodTitle, neighborhoodContentComplete, NEIGHBORHOOD_GUIDE_MAX_PHOTOS, NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES,
   type NeighborhoodContent, type NeighborhoodPhoto, type NeighborhoodPageSettings,
 } from "@shared/agent/neighborhoodPages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NeighborhoodGuideVisualEditor } from "./NeighborhoodGuideVisualEditor";
+import { removeNeighborhoodPhotoFromArticle } from "@shared/agent/neighborhoodGuideBlocks";
 
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
@@ -98,11 +99,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       const removed = (previousValues.photos ?? []).filter((oldPhoto) =>
         !photos.some((nextPhoto) => nextPhoto.url === oldPhoto.url));
       let content = previousValues.content;
-      for (const oldPhoto of removed) {
-        const marker = neighborhoodPhotoMarker(oldPhoto.url);
-        if (marker) content = content.split(marker).join("");
-      }
-      if (removed.length) content = content.replace(/\n{3,}/g, "\n\n");
+      for (const oldPhoto of removed) content = removeNeighborhoodPhotoFromArticle(content, oldPhoto.url);
       const next = { ...previousValues, content, photos };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];

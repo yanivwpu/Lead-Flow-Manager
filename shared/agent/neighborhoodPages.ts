@@ -33,7 +33,7 @@ export function buildNeighborhoodUrl(agentSlug: string, neighborhoodSlug: string
 export function neighborhoodContentComplete(content: string): boolean {
   const sections = content.trim().split(/\n\s*\n/).map((part) => part.trim());
   const paragraphs = [...new Set(sections
-    .filter((part) => !part.startsWith("## ") && !/^\[\[photo:[a-f0-9-]{36}\]\]$/i.test(part))
+    .filter((part) => !part.startsWith("## ") && !/^\[\[photo:[a-f0-9-]{36}(?:\|\d{2,3})?\]\]$/i.test(part))
     .map((part) => part.replace(/\*+/g, "").replace(/\s+/g, " ").toLowerCase())
     .filter((part) => part.length >= 60))];
   const proseLength = paragraphs.join(" ").length;
