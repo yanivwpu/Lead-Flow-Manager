@@ -65,7 +65,8 @@ export function NeighborhoodBoundaryEditor({
     const element = mapRef.current;
     if (!element || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
-      if (entry.contentRect.width > 0) setSize({ width: entry.contentRect.width, height: MAP_HEIGHT });
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0)
+        setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
     observer.observe(element);
     return () => observer.disconnect();
