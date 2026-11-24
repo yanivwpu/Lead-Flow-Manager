@@ -341,6 +341,8 @@ export function NeighborhoodBoundaryEditor({
             onClick={() => void locate()}>{locating ? t("rgeMap.locating") : t("rgeMap.find")}</Button>
           <p className="text-xs text-slate-500">{t("rgeMap.gestureHelp")}</p>
         </div>
+        {status && <p role="status" aria-live="polite"
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{status}</p>}
         {expanded && <div className="fixed inset-0 z-[79] bg-slate-950/65" aria-hidden="true" />}
         <div ref={mapRef}
           className={expanded
@@ -426,7 +428,6 @@ export function NeighborhoodBoundaryEditor({
         {shape && !safeShape && <p role="alert" className="text-xs text-amber-700">
           {t("rgeMap.invalid")}
         </p>}
-        {status && <p role="status" className="text-xs text-slate-700">{status}</p>}
       </div>}
     </section>
   );
