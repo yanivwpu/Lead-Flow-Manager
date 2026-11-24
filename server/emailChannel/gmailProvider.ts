@@ -214,10 +214,9 @@ function encodeRawMessage(rfc2822: string): string {
     .replace(/=+$/, "");
 }
 
-export function normalizeGmailApiMessage(
-  raw: any,
-  mailboxEmail: string,
-): NormalizedEmailMessage | null {
+export function normalizeGmailApiMessage(raw: any): NormalizedEmailMessage | null {
+  const labels = Array.isArray(raw?.labelIds) ? raw.labelIds : [];
+  if (labels.includes("DRAFT")) return null;
   const id = String(raw?.id || "").trim();
   const threadId = String(raw?.threadId || "").trim();
   if (!id || !threadId) return null;
@@ -237,9 +236,7 @@ export function normalizeGmailApiMessage(
 
   const bodies = extractBodies(raw.payload);
   const attachments = extractAttachments(raw.payload);
-  const mailbox = mailboxEmail.trim().toLowerCase();
-  const fromEmail = from.email.toLowerCase();
-  const direction: "inbound" | "outbound" = fromEmail === mailbox ? "outbound" : "inbound";
+  const direction = labels.includes("SENT") ? "outbound" : "inbound";
 
   const textBody =
     bodies.text?.trim() ||
@@ -579,15 +576,10 @@ export class GmailEmailProvider implements EmailProvider {
       `${GMAIL_API}/users/me/messages/${encodeURIComponent(providerMessageId)}?format=full`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
-    if (!res.ok) return null;
-    const raw = await res.json();
-    const profileRes = await fetch(`${GMAIL_API}/users/me/profile`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const profile = profileRes.ok
-      ? ((await profileRes.json()) as { emailAddress?: string })
-      : { emailAddress: "" };
-    return normalizeGmailApiMessage(raw, String(profile.emailAddress || ""));
+    // Gmail replaces the underlying message ID on draft edits and on send.
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Gmail messages.get failed (${res.status})`);
+    return normalizeGmailApiMessage(await res.json());
   }
 
   async getAttachment(params: {
@@ -615,39 +607,44 @@ export class GmailEmailProvider implements EmailProvider {
     accessToken: string;
     startHistoryId: string;
   }): Promise<EmailHistoryResult> {
-    const qs = new URLSearchParams({
-      startHistoryId: params.startHistoryId,
-      historyTypes: "messageAdded",
-    });
-    const res = await fetch(`${GMAIL_API}/users/me/history?${qs}`, {
-      headers: { Authorization: `Bearer ${params.accessToken}` },
-    });
-    if (res.status === 404) {
-      return { messageIds: [], historyId: null, needsBoundedResync: true };
-    }
-    const json = (await res.json().catch(() => ({}))) as {
-      history?: Array<{ messagesAdded?: Array<{ message?: { id?: string } }> }>;
-      historyId?: string;
-      error?: { code?: number };
-    };
-    if (!res.ok) {
-      if (json.error?.code === 404) {
+    const qs = new URLSearchParams({ startHistoryId: params.startHistoryId });
+    qs.append("historyTypes", "messageAdded");
+    qs.append("historyTypes", "labelAdded");
+
+    const ids = new Set<string>();
+    let historyId: string | null = null;
+    let pageToken: string | undefined;
+    do {
+      if (pageToken) qs.set("pageToken", pageToken);
+      const res = await fetch(`${GMAIL_API}/users/me/history?${qs}`, {
+        headers: { Authorization: `Bearer ${params.accessToken}` },
+      });
+      if (res.status === 404) {
         return { messageIds: [], historyId: null, needsBoundedResync: true };
       }
-      throw new Error("Gmail history.list failed");
-    }
-    const ids = new Set<string>();
-    for (const h of json.history || []) {
-      for (const added of h.messagesAdded || []) {
-        const id = added.message?.id;
-        if (id) ids.add(id);
+      if (!res.ok) throw new Error("Gmail history.list failed");
+
+      const json = (await res.json()) as {
+        history?: Array<{
+          messagesAdded?: Array<{ message?: { id?: string } }>;
+          labelsAdded?: Array<{ message?: { id?: string }; labelIds?: string[] }>;
+        }>;
+        historyId?: string;
+        nextPageToken?: string;
+      };
+      for (const record of json.history || []) {
+        for (const added of record.messagesAdded || []) {
+          if (added.message?.id) ids.add(added.message.id);
+        }
+        for (const added of record.labelsAdded || []) {
+          if (added.labelIds?.includes("SENT") && added.message?.id) ids.add(added.message.id);
+        }
       }
-    }
-    return {
-      messageIds: Array.from(ids),
-      historyId: json.historyId ? String(json.historyId) : null,
-      needsBoundedResync: false,
-    };
+      historyId = json.historyId ? String(json.historyId) : null;
+      pageToken = json.nextPageToken;
+    } while (pageToken);
+
+    return { messageIds: Array.from(ids), historyId, needsBoundedResync: false };
   }
 
   async watchMailbox(params: {
