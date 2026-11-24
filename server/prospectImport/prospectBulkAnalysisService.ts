@@ -5,6 +5,7 @@
  */
 
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { isShopifyCustomerContact } from "@shared/shopifyProspectCustomerGuard";
 import {
   contacts,
   prospectBulkAnalysisJobs,
@@ -90,6 +91,20 @@ export async function createBulkAnalysisJob(params: {
 
   const workspaceUserId =
     params.workspaceUserId || (await resolveProspectImportDestinationUserId());
+
+  // Fail closed before queue creation. These are real merchant shoppers, not B2B prospects.
+  // Shopify customer reviews are internal-only until purpose-specific authorization exists.
+  const selectedCustomers = await db.select({
+    source: contacts.source,
+    sourceDetails: contacts.sourceDetails,
+    customFields: contacts.customFields,
+  }).from(contacts).where(and(
+    eq(contacts.userId, workspaceUserId),
+    inArray(contacts.id, requested)
+  ));
+  if (selectedCustomers.some(isShopifyCustomerContact)) {
+    throw new Error("Shopify customers are review-only. AI qualification is not enabled for imported shoppers.");
+  }
 
   // One active AI Review job per contact: skip IDs already on pending/running jobs
   // (except the pending job we will merge into).
