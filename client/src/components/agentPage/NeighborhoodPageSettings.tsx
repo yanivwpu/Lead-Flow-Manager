@@ -19,8 +19,9 @@ import { toast } from "@/hooks/use-toast";
 import { parseAgentPageApiError } from "@/lib/agentPageApi";
 import {
   EMPTY_NEIGHBORHOOD, NEW_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts,
-  sameNeighborhoodContent, writeNeighborhoodDrafts, type NeighborhoodDrafts,
+  mergeNeighborhoodDraftsPreservingActive, sameNeighborhoodContent, writeNeighborhoodDrafts, type NeighborhoodDrafts,
 } from "@/lib/neighborhoodDrafts";
+import { neighborhoodMapSessionKey } from "@/lib/neighborhoodMapSession";
 
 const defaultCountryCode = "US";
 const endpoint = "/api/agent-page/neighborhoods";
@@ -49,7 +50,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   function updateDrafts(update: (state: NeighborhoodDrafts) => NeighborhoodDrafts) {
     const storage = browserDraftStorage();
     const latest = storage && storageAvailable.current ? readNeighborhoodDrafts(storage, storageKey) : draftRef.current;
-    const next = update({ ...latest, active: draftRef.current.active });
+    const next = update(mergeNeighborhoodDraftsPreservingActive(latest, draftRef.current));
     storageAvailable.current = Boolean(storage && writeNeighborhoodDrafts(storage, storageKey, next));
     draftRef.current = next;
     setDrafts(next);
@@ -58,7 +59,8 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     function syncDrafts(event: StorageEvent) {
       const storage = browserDraftStorage();
       if (!storage || !storageAvailable.current || (event.key !== storageKey && event.key !== null)) return;
-      const next = { ...readNeighborhoodDrafts(storage, storageKey), active: draftRef.current.active };
+      const next = mergeNeighborhoodDraftsPreservingActive(
+        readNeighborhoodDrafts(storage, storageKey), draftRef.current);
       draftRef.current = next;
       setDrafts(next);
     }
@@ -288,6 +290,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
           </div>
           <NeighborhoodBoundaryEditor key={active} boundary={values.customBoundary}
             name={values.name} city={values.city} state={values.state} country={values.country ?? "US"}
+            sessionKey={neighborhoodMapSessionKey(userId, active)}
             disabled={stale || save.isPending} onChange={editBoundary} />
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
             disabled={stale || save.isPending || photoUploading} uploading={photoUploading}
