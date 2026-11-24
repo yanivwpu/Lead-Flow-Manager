@@ -81,6 +81,7 @@ test("real article editor visibly inserts an image at the chosen heading and per
   assert.equal(await editor.locator("h3").count(), 1, "focus also recovers an unexpectedly blank editor");
 
   await page.evaluate(() => (window as any).__switchArticleTab());
+  await page.locator("#alternative-page").waitFor();
   assert.equal(await page.locator("#alternative-page").count(), 1, "editor unmounts on dashboard tab change");
   await page.evaluate(() => (window as any).__switchArticleTab());
   await editor.locator("h3").waitFor();
