@@ -66,7 +66,8 @@ export function parseProspectCsv(text: string): ProspectImportMatchedSnapshot[] 
     if (email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ProspectCsvError(`Invalid email on row ${n+2}.`);
     if (phone&&phone.replace(/\D/g,"").length<7) throw new ProspectCsvError(`Invalid phone on row ${n+2}.`);
     const name=at(cols,ix.name)||[at(cols,ix.first),at(cols,ix.last)].filter(Boolean).join(" ")||email||phone;
-    if (!name) continue;
+    // Contact imports need a durable identity for deduplication and safe re-imports.
+    if (!name || (!email && !phone)) continue;
     const company=at(cols,ix.company);
     const tags=at(cols,ix.tags,).split(/[;|]/).map(v=>safeField(v,50)).filter(Boolean).slice(0,10);
     out.push({
