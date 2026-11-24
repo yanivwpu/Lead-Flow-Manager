@@ -85,9 +85,9 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const current = prior?.values ?? values;
-      const locationChanged = field !== "content" && current[field] !== value;
-      const next = { ...current, country: current.country ?? "US", photos: current.photos ?? [],
+      const previousValues = prior?.values ?? values;
+      const locationChanged = field !== "content" && previousValues[field] !== value;
+      const next = { ...previousValues, country: previousValues.country ?? "US", photos: previousValues.photos ?? [],
         [field]: value, ...(locationChanged ? { customBoundary: null } : {}) };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
