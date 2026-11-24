@@ -119,3 +119,67 @@ test("unsupported boundary never exposes interactive neighborhood filters", () =
   assert.doesNotMatch(source, /<form id="neighborhood-filters"/);
   assert.match(source, /verified local boundary/);
 });
+
+
+test("real neighborhood browser filters, resets and appends homes without replacing cards", { timeout: 90_000 }, async (t) => {
+  if (process.env.AGENT_PAGE_BROWSER_TEST !== "1") { t.skip("Chromium runs in RGE CI"); return; }
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 820 } });
+  t.after(() => page.close());
+  const html = buildPublicAgentPageHtml({
+    userId: "agent-1", displayName: "Example Agent", bio: "Local expertise.",
+    marketArea: "Fort Lauderdale", brokerageName: "Example Realty", avatarUrl: null, companyLogo: null,
+    socialLinks: { websiteUrl: "", facebookUrl: "", instagramUrl: "", linkedinUrl: "", youtubeUrl: "" },
+    publicPhone: "9545550100", schedulingUrl: "", widgetEnabled: false,
+    preferredLeadCapture: "email", showHomeValueCta: true, agentPageSlug: "example",
+    agentPageUrl: "https://app.whachatcrm.com/agents/example",
+    canonicalUrl: "https://app.whachatcrm.com/agents/example/victoria-park",
+    listings: [], browseTotal: 0, browseHasMore: false, browsePageSize: 24,
+    neighborhood: { name: "Victoria Park", city: "Fort Lauderdale", state: "Florida",
+      slug: "victoria-park", parentUrl: "https://app.whachatcrm.com/agents/example",
+      content: "A helpful neighborhood guide.", photos: [] },
+    neighborhoodListings: {
+      boundaryStatus: "verified", boundarySource: "City GIS", mode: "public",
+      sale: [card("initial", "FOR SALE")], rent: [card("rental", "FOR RENT")],
+      totalSale: 3, totalRent: 1, hasMoreSale: true, hasMoreRent: false,
+      hasOlderMatchingInventory: false,
+    },
+  });
+  const siteUrl = "https://agent.example.test/agents/example/victoria-park";
+  const requests: Array<{ kind: string; offset: string; minBeds: string }> = [];
+  await page.route(siteUrl, (route) => route.fulfill({ status: 200, contentType: "text/html", body: html }));
+  await page.route("https://agent.example.test/api/public/agents/example/neighborhoods/victoria-park/listings?**", (route) => {
+    const u = new URL(route.request().url());
+    const kind = u.searchParams.get("listingType") || "";
+    const offset = u.searchParams.get("offset") || "0";
+    const minBeds = u.searchParams.get("minBeds") || "";
+    requests.push({ kind, offset, minBeds });
+    const filtered = minBeds === "3";
+    const total = kind === "sale" ? filtered ? 1 : 3 : filtered ? 0 : 1;
+    const count = kind === "sale" && !filtered && offset === "1" ? 2 : total ? 1 : 0;
+    const listings = Array.from({ length: count }, (_, i) => ({ id: kind + "-" + offset + "-" + i }));
+    const cards = listings.map((listing) => '<article class="listing-card" data-id="' + listing.id + '">Result</article>').join("");
+    return route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ listings, html: cards, total, offset: Number(offset), limit: 9,
+        hasMore: Number(offset) + count < total, boundaryStatus: "verified",
+        hasOlderMatchingInventory: false, candidateLimitReached: false }) });
+  });
+  await page.goto(siteUrl, { waitUntil: "domcontentloaded" });
+  assert.equal(await page.locator("#neighborhood-sale-grid .listing-card").count(), 1);
+  await page.getByRole("button", { name: "Load more homes for sale" }).click();
+  await page.waitForFunction(() => document.querySelector("#homes-sale")?.getAttribute("data-loaded") === "3");
+  assert.equal(await page.locator("#neighborhood-sale-grid .listing-card").count(), 3, "new cards append below existing card");
+  assert.ok(requests.some((req) => req.kind === "sale" && req.offset === "1"));
+  await page.getByLabel("Bedrooms").selectOption("3");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await page.waitForFunction(() => document.querySelector("#homes-rent")?.getAttribute("data-loaded") === "0");
+  assert.equal(await page.locator("#neighborhood-sale-grid .listing-card").count(), 1);
+  assert.match(await page.locator("#neighborhood-rent-grid").innerText(), /No verified rental homes match/);
+  assert.ok(requests.some((req) => req.kind === "rent" && req.minBeds === "3"));
+  await page.getByRole("button", { name: "Reset" }).click();
+  await page.waitForFunction(() => document.querySelector("#homes-rent")?.getAttribute("data-loaded") === "1");
+  assert.equal(await page.getByLabel("Bedrooms").inputValue(), "");
+  assert.equal(await page.locator("#neighborhood-sale-grid .listing-card").count(), 1);
+});
