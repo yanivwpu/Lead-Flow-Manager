@@ -1,7 +1,7 @@
 import { runTrackedWork } from './runtimeDrain';
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
-import { and, eq, isNull, isNotNull } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { fetchShopifyShopOwnerEmailResult } from "./shopify";
 import { captureCurrentShopifyOwnerEmail, withShopifyMailPrivacyFence } from "./shopifyContactService";
@@ -9,6 +9,7 @@ import {
   sendShopifyWelcomeEmail,
   sendShopifyActivationEmailDay5,
   sendShopifyActivationEmailDay10,
+  sendShopifyGrowthEngineSetupEmail,
 } from "./email";
 import { getUserMessagingChannelStatusForEmails } from "./activationEmailService";
 import { fullCalendarDaysSince } from "@shared/activationEmailEligibility";
@@ -54,6 +55,39 @@ type ShopifyOnboardingRow = {
   shopifyActivationEmailDay10SentAt: Date | null;
   deletionRequestedAt: Date | null;
 };
+
+/**
+ * Read only the current, owner-bound active Shopify connection. Never treat an
+ * unavailable database read as proof that a merchant needs a reminder.
+ */
+async function merchantSetupStatus(userId: string, shop: string):
+  Promise<{ engineActivated: boolean; catalogSynced: boolean } | null> {
+  try {
+    const result = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM ecommerce_shopify_workspace_activations a
+        JOIN integrations i ON i.id=a.installation_id
+          AND i.user_id=a.account_id AND i.type='shopify' AND i.is_active IS TRUE
+        WHERE a.account_id=${userId} AND a.shop=${shop}
+      ) AS engine_activated,
+      EXISTS (
+        SELECT 1 FROM catalog_sources c
+        JOIN integrations i ON i.id=c.integration_id
+          AND i.user_id=c.user_id AND i.type='shopify' AND i.is_active IS TRUE
+        WHERE c.user_id=${userId} AND c.shop=${shop}
+          AND c.provider='shopify' AND c.initial_sync_completed_at IS NOT NULL
+      ) AS catalog_synced
+    `);
+    if (result.rows.length !== 1) return null;
+    return {
+      engineActivated: result.rows[0].engine_activated === true,
+      catalogSynced: result.rows[0].catalog_synced === true,
+    };
+  } catch {
+    console.warn("[ShopifyOnboarding] setup_progress_unavailable");
+    return null;
+  }
+}
 
 async function markShopifyRemindersComplete(userId: string, shop: string): Promise<boolean> {
   return withShopifyMailPrivacyFence(userId, shop, async current => {
@@ -156,6 +190,14 @@ export async function runShopifyOnboardingEmails(): Promise<{
       const start = shopifyOnboardingStartAt(user);
       const days = start ? fullCalendarDaysSince(start, now) : 0;
       const channels = await getUserMessagingChannelStatusForEmails(user.id);
+      // Previously, any channel finished the Shopify sequence even when the
+      // Growth Engine was inactive or the merchant never synced products.
+      const setup = channels.hasAnyMessagingChannel && user.shopifyShop
+        ? await merchantSetupStatus(user.id, user.shopifyShop)
+        : null;
+      // Fail closed: do not send or mark a new reminder if the progress read
+      // required for a connected-channel merchant is unavailable.
+      if (channels.hasAnyMessagingChannel && !setup) continue;
       const choice = chooseShopifyOnboardingSequenceAction({
         welcomeSent: !!user.shopifyWelcomeEmailSentAt,
         day5Sent: !!user.shopifyActivationEmailDay5SentAt,
@@ -163,6 +205,7 @@ export async function runShopifyOnboardingEmails(): Promise<{
         daysSinceInstall: days,
         hasQualifyingChannel: channels.hasAnyMessagingChannel,
         hasUsableOwnerEmail,
+        ...(setup || {}),
       });
 
       if (choice.action === "none") continue;
@@ -196,7 +239,9 @@ export async function runShopifyOnboardingEmails(): Promise<{
             if (current.shopifyActivationEmailDay5SentAt) return true;
             const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
             if (!recipient) return false;
-            const sent = await sendShopifyActivationEmailDay5(firstName(current.name), recipient);
+            const sent = choice.setupStep
+              ? await sendShopifyGrowthEngineSetupEmail(firstName(current.name), recipient, 5, choice.setupStep)
+              : await sendShopifyActivationEmailDay5(firstName(current.name), recipient);
             if (sent) await db.update(users).set({ shopifyActivationEmailDay5SentAt: now }).where(eq(users.id, current.id));
             return sent;
           });
@@ -214,7 +259,9 @@ export async function runShopifyOnboardingEmails(): Promise<{
             if (current.shopifyActivationEmailDay10SentAt) return true;
             const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
             if (!recipient) return false;
-            const sent = await sendShopifyActivationEmailDay10(firstName(current.name), recipient);
+            const sent = choice.setupStep
+              ? await sendShopifyGrowthEngineSetupEmail(firstName(current.name), recipient, 10, choice.setupStep)
+              : await sendShopifyActivationEmailDay10(firstName(current.name), recipient);
             if (sent) await db.update(users).set({
               shopifyActivationEmailDay10SentAt: now,
               ...(choice.alsoCompleteDay5 ? { shopifyActivationEmailDay5SentAt: now } : {}),
