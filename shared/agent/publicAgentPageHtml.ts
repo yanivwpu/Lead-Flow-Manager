@@ -787,6 +787,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-filters select:focus-visible, .neighborhood-filters input:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
     .neighborhood-filter-actions { display: flex; align-items: end; gap: 9px; flex-wrap: wrap; grid-column: 1/-1; }
     .neighborhood-load-more { margin: 16px 0 6px; }
+    .neighborhood-load-more[hidden] { display: none; }
     .neighborhood-property-cap-note { color: #92400e; font-size: .82rem; }
     @media (max-width: 700px) { .neighborhood-filters { grid-template-columns: repeat(2, minmax(0,1fr)); padding: 12px; gap: 10px; }
       .neighborhood-filter-actions .btn { flex: 1 1 120px; } }
@@ -1112,6 +1113,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           }
           var seq = ++sequence;
           var categories = appendKind ? [appendKind] : ["sale", "rent"];
+          // A newer filter request invalidates the older one. Clear both old busy states first.
+          ["sale", "rent"].forEach(function (kind) { setBusy(kind, false); });
           categories.forEach(function (kind) { setBusy(kind, true); });
           Promise.all(categories.map(function (kind) { return request(kind, Boolean(appendKind)); }))
             .then(function (results) {
