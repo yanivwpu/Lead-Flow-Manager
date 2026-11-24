@@ -7,6 +7,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { getCrmContactsActivityPage, parseCrmActivityCursor } from "../server/crmContactsActivity";
 import { contacts } from "../shared/schema";
 import { contactMatchesCrmSearch } from "../shared/webchatContactIdentity";
+import en from "../client/src/locales/en.json";
 
 test("Contacts seeks across workspace pages by incoming activity, preserves history and keeps CRM visibility", async (t) => {
   const database = new PGlite();
@@ -74,6 +75,10 @@ test("Contacts keeps URL-selected filters and alternate sorting while defaulting
   const React = await import("react");
   const { renderToStaticMarkup } = await import("react-dom/server");
   const { parseHTML } = await import("linkedom");
+  const { createInstance } = await import("i18next");
+  const { I18nextProvider } = await import("react-i18next");
+  const i18n = createInstance();
+  await i18n.init({ lng: "en", resources: { en: { translation: en } } });
   mkdirSync("work", { recursive: true });
   const scratch = mkdtempSync(resolve("work/crm-activity-render-"));
   const outfile = join(scratch, "page.mjs");
@@ -99,7 +104,6 @@ test("Contacts keeps URL-selected filters and alternate sorting while defaulting
     "@tanstack/react-query": `export const useQuery = ({queryKey}) => ({ data: queryKey[0] === '/api/contacts' ?
       globalThis.crmActivityFixture.contacts : undefined }); export const useMutation = () => ({});
       export const useQueryClient = () => ({});`,
-    "react-i18next": `export const useTranslation = () => ({ t: (_key, fallback) => fallback });`,
     "@/lib/auth-context": `export const useAuth = () => ({ user: { id: 'owner' } });`,
     "@/hooks/use-toast": `export const useToast = () => ({ toast: () => {} });`,
   };
@@ -111,7 +115,8 @@ test("Contacts keeps URL-selected filters and alternate sorting while defaulting
   const { Contacts } = await import(pathToFileURL(outfile).href);
   const render = (search = "") => {
     state.search = search;
-    return parseHTML(renderToStaticMarkup(React.createElement(Contacts))).document;
+    const page = React.createElement(I18nextProvider, { i18n }, React.createElement(Contacts));
+    return parseHTML(renderToStaticMarkup(page)).document;
   };
   const order = (document: ReturnType<typeof render>) => [...new Set(
     [...document.querySelectorAll('[data-testid^="row-contact-"]')].map(row => row.getAttribute("data-testid")?.replace("row-contact-", "")),

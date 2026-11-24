@@ -22,7 +22,11 @@ export function resolveInboxReplyLanguage({
   for (let index = history.length - 1; index >= 0; index--) {
     const turn = history[index];
     if (turn.role !== "user" || typeof turn.content !== "string") continue;
-    const text = turn.content.replace(/https?:\/\/\S+|\S+@\S+/giu, " ").trim();
+    // Split once, then inspect complete tokens. Searching for an embedded @ with
+    // overlapping regex matches can rescan the same customer text quadratically.
+    const text = turn.content.split(/\s+/u)
+      .filter((token) => !token.includes("@") && !/^https?:\/\//i.test(token))
+      .join(" ");
     const words = text.match(/\p{L}+/gu) || [];
     if (!words.length || ambiguous.test(words.join(" "))) continue;
     const detected = detectConversationLanguage(text);
