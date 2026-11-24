@@ -58,11 +58,14 @@ const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contact
 const SalesCatalog = lazy(() => import("./SalesCatalog").then(m => ({ default: m.SalesCatalog })));
 const Campaigns = lazy(() => import("./Campaigns").then(m => ({ default: m.Campaigns })));
 
-const PageLoader = () => (
-  <div className="flex h-full items-center justify-center">
-    <Loader2 className="h-6 w-6 text-gray-500 animate-spin" />
-  </div>
-);
+function PageLoader() {
+  const { t } = useTranslation();
+  return (
+    <div role="status" aria-label={t("common.loading")} className="flex h-full items-center justify-center">
+      <Loader2 aria-hidden="true" className="h-6 w-6 text-gray-500 animate-spin" />
+    </div>
+  );
+}
 
 function AppContent() {
   const [location, setLocation] = useLocation();

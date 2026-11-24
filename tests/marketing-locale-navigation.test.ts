@@ -109,7 +109,8 @@ test("bootstrap forces i18n English on unprefixed Phase 2 (no stale es/he first 
 test("sync effect forces URL→i18n and never rewrites URL from storage", () => {
   const routing = read("client/src/lib/marketingLocaleRouting.ts");
   assert.match(routing, /useSyncLanguageFromMarketingUrl/);
-  assert.match(routing, /changeLanguage\("en"\)/);
+  assert.match(routing, /changeLanguage\("en",/);
+  assert.doesNotMatch(routing, /localStorage\.setItem/);
   assert.doesNotMatch(routing, /setLocation|navigate\(/);
   // Language selector still navigates only on explicit user change
   const sel = read("client/src/components/LanguageSelector.tsx");

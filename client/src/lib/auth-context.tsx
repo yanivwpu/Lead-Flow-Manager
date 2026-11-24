@@ -91,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const prevId = userRef.current?.id ?? null;
     const nextId = next?.id ?? null;
     if (prevId !== nextId) {
+      clearExplicitLanguageSelection();
       resetAccountQueryCache(queryClient);
       clearAccountLocalHints();
     }

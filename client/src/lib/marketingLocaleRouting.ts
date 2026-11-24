@@ -23,7 +23,7 @@ export function useMarketingUrlLocale(): MarketingLocale {
   return useParsedMarketingPath().locale;
 }
 
-/** Keep i18n + localStorage aligned with explicit URL locale on scoped pages. */
+/** Apply the URL locale without changing the authenticated preference cache. */
 export function useSyncLanguageFromMarketingUrl() {
   const [location] = useLocation();
 
@@ -31,14 +31,14 @@ export function useSyncLanguageFromMarketingUrl() {
     const parsed = parseLocalizedPath(location);
     if (parsed.isLocalePrefixed && parsed.isSupported) {
       if (getCurrentLanguage() !== parsed.locale) {
-        void changeLanguage(parsed.locale as SupportedLanguage);
+        void changeLanguage(parsed.locale as SupportedLanguage, () => window.location.pathname === location);
       }
       return;
     }
     // Unprefixed Phase 2 marketing URL → English is authoritative (ignore stale localStorage).
     if (!parsed.isLocalePrefixed && hasLocalizedVersion(parsed.englishPath)) {
       if (getCurrentLanguage() !== "en") {
-        void changeLanguage("en");
+        void changeLanguage("en", () => window.location.pathname === location);
       }
     }
   }, [location]);

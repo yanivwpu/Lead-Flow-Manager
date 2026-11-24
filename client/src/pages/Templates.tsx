@@ -78,7 +78,7 @@ import { resolveRgeGalleryState } from "@/lib/growthEngineGalleryState";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
-import { formatDistanceToNow } from "date-fns";
+import { formatRegionalRelativeTime } from "@/lib/regionalFormatting";
 import { automationSendGuardBlockUserMessage } from "@shared/automationSendGuardMessages";
 import {
   isWhatsAppSetupIncompleteError,
@@ -732,7 +732,7 @@ function GrowthEnginesTab() {
 }
 
 export function Templates() {
-  const { t }=useTranslation();
+  const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
@@ -1672,7 +1672,7 @@ export function Templates() {
                       const BadgeIcon = badge.icon;
                       const isWhatsApp = ch === "whatsapp";
                       const lastAtLabel = chat.lastMessageAt
-                        ? formatDistanceToNow(new Date(chat.lastMessageAt), { addSuffix: true })
+                        ? formatRegionalRelativeTime(new Date(chat.lastMessageAt), i18n.language)
                         : null;
 
                       const awaitingReply =
@@ -1741,9 +1741,7 @@ export function Templates() {
                                     {chat.lastTemplateSentAt ? (
                                       <p className="text-gray-500">
                                         Sent{" "}
-                                        {formatDistanceToNow(new Date(chat.lastTemplateSentAt), {
-                                          addSuffix: true,
-                                        })}
+                                        {formatRegionalRelativeTime(new Date(chat.lastTemplateSentAt), i18n.language)}
                                       </p>
                                     ) : null}
                                   </div>

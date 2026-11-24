@@ -1,4 +1,22 @@
+import { useTranslation } from "react-i18next";
 import { Component, type ReactNode } from "react";
+
+function PageError({ retry }: { retry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="p-6" data-testid="authenticated-page-error">
+      <p className="text-sm text-gray-800" role="alert">{t("common.pageError")}</p>
+      <button
+        type="button"
+        className="mt-3 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm"
+        data-testid="button-authenticated-page-retry"
+        onClick={retry}
+      >
+        {t("common.tryAgain")}
+      </button>
+    </div>
+  );
+}
 
 type BoundaryState = { hasError: boolean };
 
@@ -22,21 +40,7 @@ export class AuthenticatedAppErrorBoundary extends Component<{ children: ReactNo
 
   render() {
     if (this.state.hasError) {
-      return (
-        <div className="p-6" data-testid="authenticated-page-error">
-          <p className="text-sm text-gray-800" role="alert">
-            This page hit an error. Refresh to continue, or try again.
-          </p>
-          <button
-            type="button"
-            className="mt-3 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm"
-            data-testid="button-authenticated-page-retry"
-            onClick={() => this.setState({ hasError: false })}
-          >
-            Try again
-          </button>
-        </div>
-      );
+      return <PageError retry={() => this.setState({ hasError: false })} />;
     }
     return this.props.children;
   }

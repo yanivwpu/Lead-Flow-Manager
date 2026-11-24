@@ -911,21 +911,21 @@ ul, ol {
 .float-end { float: inline-end; }
 
 /* RTL text alignment fixes */
-[dir="rtl"] body,
-[dir="rtl"] p,
-[dir="rtl"] li,
-[dir="rtl"] div,
-[dir="rtl"] span,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) body:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) p:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) li:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) div:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) span:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .feature-description,
 [dir="rtl"] .pricing-feature,
 [dir="rtl"] .card-text {
   text-align: start !important;
 }
 
-[dir="rtl"] h1,
-[dir="rtl"] h2,
-[dir="rtl"] h3,
-[dir="rtl"] h4,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h1:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h2:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h3:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h4:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .text-center,
 [dir="rtl"] .pricing-header {
   text-align: center !important;
@@ -975,11 +975,11 @@ ul, ol {
 }
 
 /* Final RTL Homepage Fixes */
-[dir="rtl"] body {
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) body:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)) {
   text-align: start;
 }
 
-[dir="rtl"] p,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) p:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .hero-subtext,
 [dir="rtl"] .section-text,
 [dir="rtl"] .feature-desc,
@@ -988,10 +988,10 @@ ul, ol {
 }
 
 [dir="rtl"] .hero-headline,
-[dir="rtl"] h1,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h1:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .main-title,
-[dir="rtl"] h2,
-[dir="rtl"] h3,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h2:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h3:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .section-title,
 [dir="rtl"] .comparison-title,
 [dir="rtl"] .steps-title {
@@ -1127,8 +1127,8 @@ section h2 + p {
 [dir="rtl"] .auth-title,
 [dir="rtl"] .login-title,
 [dir="rtl"] .signup-title,
-[dir="rtl"] h1,
-[dir="rtl"] h2,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h1:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h2:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .hero-title {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1138,14 +1138,14 @@ section h2 + p {
 
 /* Prevent orphan words on their own line and handle bidi text wrapping */
 [dir="rtl"] .auth-title span,
-[dir="rtl"] h1 span,
-[dir="rtl"] h2 span {
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h1 span:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h2 span:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)) {
   white-space: normal; /* Changed from nowrap to allow folding */
 }
 
 [dir="rtl"] .auth-title,
-[dir="rtl"] h1,
-[dir="rtl"] h2 {
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h1:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h2:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)) {
   overflow-wrap: break-word;
   word-wrap: break-word;
   hyphens: none;
@@ -1168,7 +1168,7 @@ section h2 + p {
 
 [dir="rtl"] .hero-subtext,
 [dir="rtl"] .hero-description,
-[dir="rtl"] p {
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) p:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)) {
   text-align: start !important;
   margin-inline: auto;
   max-width: 800px;
@@ -1180,9 +1180,9 @@ section h2 + p {
 }
 
 /* Final Fix for Big Headings / Large Text in RTL (Hebrew) */
-[dir="rtl"] h1,
-[dir="rtl"] h2,
-[dir="rtl"] h3,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h1:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h2:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) h3:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .hero-headline,
 [dir="rtl"] .section-title,
 [dir="rtl"] .large-heading,
@@ -1195,7 +1195,7 @@ section h2 + p {
 /* Subtext / paragraphs under big headings - always flush right */
 [dir="rtl"] .hero-subtext,
 [dir="rtl"] .section-subtext,
-[dir="rtl"] p,
+[dir="rtl"]:not(:where(html[data-authenticated-layout], html[data-authenticated-layout] *)) p:not(:where([dir="ltr"], [dir="ltr"] *, .text-center, .text-center *)),
 [dir="rtl"] .description {
   text-align: right !important;
 }

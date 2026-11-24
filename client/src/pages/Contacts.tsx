@@ -1,3 +1,4 @@
+import { formatRegionalDate, formatRegionalRelativeTime } from "@/lib/regionalFormatting";
 import { useState, useMemo, useEffect } from "react";
 import { agentInquiryLabel } from "@shared/agent/agentPageInquiry";
 import { useLocation, useSearch } from "wouter";
@@ -36,7 +37,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
@@ -242,15 +243,15 @@ function WebchatIdentityBadge({ contact }: { contact: Contact }) {
 }
 
 function LastIncomingActivity({ at }: { at?: string | null }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   if (!at) return null;
   const date = new Date(at);
   if (!Number.isFinite(date.getTime())) return null;
   return (
     <p className="mt-0.5 truncate text-xs text-gray-500">
       {t("contacts.lastActivity", "Last activity")}{" "}
-      <time dateTime={at} title={date.toLocaleString(undefined, { timeZoneName: "short" })}>
-        {formatDistanceToNow(date, { addSuffix: true })}
+      <time dateTime={at} title={formatRegionalDate(date, i18n.language, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", timeZoneName: "short" })}>
+        {formatRegionalRelativeTime(date, i18n.language)}
       </time>
     </p>
   );
@@ -261,7 +262,7 @@ function contactRowPhone(contact: Contact): string | null {
 }
 
 export function Contacts() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -687,16 +688,16 @@ export function Contacts() {
           {/* Search + Filters */}
           <div className="flex flex-wrap items-center gap-2" data-testid="contacts-filter-row">
             <div className="relative min-w-[180px] flex-1 basis-full sm:basis-auto">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <Input
                 placeholder={t("contacts.searchPlaceholder", "Search by name, phone or email…")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9 bg-white"
+                className="ps-9 h-9 bg-white"
                 data-testid="input-contacts-search"
               />
               {search && (
-                <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button onClick={() => setSearch("")} className="absolute end-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -865,7 +866,7 @@ export function Contacts() {
                   <Checkbox
                     checked={headerCheckboxState}
                     onCheckedChange={() => toggleSelectAllFiltered()}
-                    aria-label="Select all filtered contacts"
+                    aria-label={t("contacts.selectAllFiltered")}
                     data-testid="checkbox-select-all-contacts-mobile"
                   />
                   <span className="text-xs font-medium text-gray-500">
@@ -956,12 +957,12 @@ export function Contacts() {
                         {publicPhone ? (
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                             <Phone className="w-3 h-3 flex-shrink-0" />
-                            {publicPhone}
+                            <bdi dir="ltr">{publicPhone}</bdi>
                           </p>
                         ) : contact.email ? (
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                             <Mail className="w-3 h-3 flex-shrink-0" />
-                            {contact.email}
+                            <bdi dir="ltr">{contact.email}</bdi>
                           </p>
                         ) : classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS ? (
                           <p className="text-xs text-gray-400 mt-0.5">
@@ -985,7 +986,7 @@ export function Contacts() {
                           ) : null}
                           <span className="text-[10px] text-gray-400" data-testid={`text-created-${contact.id}`}>
                             {contact.createdAt
-                              ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
+                              ? formatRegionalRelativeTime(new Date(contact.createdAt), i18n.language)
                               : "—"}
                           </span>
                         </div>
@@ -1009,7 +1010,7 @@ export function Contacts() {
                 <Checkbox
                   checked={headerCheckboxState}
                   onCheckedChange={() => toggleSelectAllFiltered()}
-                  aria-label="Select all filtered contacts"
+                  aria-label={t("contacts.selectAllFiltered")}
                   data-testid="checkbox-select-all-contacts"
                 />
               </div>
@@ -1116,13 +1117,13 @@ export function Contacts() {
                           {publicPhone && (
                             <p className="text-xs text-gray-400 truncate flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 flex-shrink-0" />
-                              {publicPhone}
+                              <bdi dir="ltr">{publicPhone}</bdi>
                             </p>
                           )}
                           {!publicPhone && contact.email && (
                             <p className="text-xs text-gray-400 truncate flex items-center gap-1 mt-0.5">
                               <Mail className="w-3 h-3 flex-shrink-0" />
-                              {contact.email}
+                              <bdi dir="ltr">{contact.email}</bdi>
                             </p>
                           )}
                           {!publicPhone && !contact.email && classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS && (
@@ -1181,7 +1182,7 @@ export function Contacts() {
                       <div>
                         <span className="text-xs text-gray-400" data-testid={`text-created-${contact.id}`}>
                           {contact.createdAt
-                            ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
+                            ? formatRegionalRelativeTime(new Date(contact.createdAt), i18n.language)
                             : "—"}
                         </span>
                       </div>
@@ -1221,6 +1222,7 @@ export function Contacts() {
             <div>
               <Label>{t("contacts.fieldPhone", "Phone")}</Label>
               <Input
+                dir="ltr"
                 value={newContact.phone}
                 onChange={(e) => setNewContact((p) => ({ ...p, phone: e.target.value }))}
                 placeholder="+1234567890"
@@ -1231,6 +1233,7 @@ export function Contacts() {
               <Label>{t("contacts.fieldEmail", "Email")}</Label>
               <Input
                 type="email"
+                dir="ltr"
                 value={newContact.email}
                 onChange={(e) => setNewContact((p) => ({ ...p, email: e.target.value }))}
                 placeholder="email@example.com"
@@ -1278,7 +1281,7 @@ export function Contacts() {
                 <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
                   <span className="font-semibold text-amber-600">{note.createdByName || "Team member"}</span>
                   {note.createdAt && (
-                    <span>· {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}</span>
+                    <span>· {formatRegionalRelativeTime(new Date(note.createdAt), i18n.language)}</span>
                   )}
                 </p>
               </div>

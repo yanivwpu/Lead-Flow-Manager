@@ -75,6 +75,13 @@
     "page": "Página"
   },
   "common": {
+    "pageError": "No se pudo cargar esta página. Actualiza la página o vuelve a intentarlo.",
+    "tryAgain": "Volver a intentar",
+    "previousPage": "Anterior",
+    "nextPage": "Siguiente",
+    "pagination": "Navegación entre páginas",
+    "morePages": "Más páginas",
+    "toastNotifications": "Notificaciones",
     "save": "Guardar",
     "cancel": "Cancelar",
     "delete": "Eliminar",
@@ -121,6 +128,11 @@
     "businessTypePlaceholder": "Ingresa un tipo de negocio en tu idioma, por ejemplo: plomeros, dentistas, agentes inmobiliarios"
   },
   "nav": {
+    "mobileNavigation": "Navegación principal",
+    "expandSidebar": "Expandir el menú lateral",
+    "collapseSidebar": "Contraer el menú lateral",
+    "expandCommerce": "Expandir los módulos de comercio electrónico",
+    "collapseCommerce": "Contraer los módulos de comercio electrónico",
     "salesCatalog": "Catálogo de ventas",
     "main": "Principal",
     "automationAi": "Automatización e IA",
@@ -243,6 +255,15 @@
     }
   },
   "contacts": {
+    "contactType": "Tipo de contacto",
+    "identifiedContacts": "Contactos identificados",
+    "websiteVisitors": "Visitantes del sitio web",
+    "allContacts": "Todos los contactos",
+    "emptyVisitors": "No hay visitantes anónimos en el chat del sitio web",
+    "emptyIdentified": "Ningún contacto identificado coincide con los filtros",
+    "selectAllFiltered": "Seleccionar todo",
+    "colAppointment": "Cita",
+    "addNewContact": "Agregar contacto",
     "title": "Contactos",
     "subtitle": "Todos tus contactos en un solo lugar",
     "addContact": "Agregar Contacto",
@@ -263,7 +284,6 @@
     "loading": "Cargando contactos…",
     "emptyState": "Aún no hay contactos",
     "emptyHint": "Los contactos se crean automáticamente cuando alguien te escribe",
-    "noResults": "Ningún contacto coincide con los filtros",
     "fieldName": "Nombre",
     "fieldPhone": "Teléfono",
     "fieldEmail": "Email",
@@ -439,21 +459,6 @@
       "availableFor": "Disponible para suscriptores Starter y Pro",
       "unlockButton": "Mejorar a Pro",
       "getStarterButton": "Obtener Starter para acceder a las funciones de IA"
-    },
-    "faq": {
-      "title": "Preguntas Frecuentes",
-      "q1": "¿Qué es una 'conversación activa'?",
-      "a1": "Una conversación activa es cualquier chat que tuvo al menos un mensaje (entrante o saliente) en los últimos 30 días. Las conversaciones archivadas o cerradas no cuentan.",
-      "q2": "¿Cobran por cada mensaje de WhatsApp?",
-      "a2": "No. Nunca agregamos recargo sobre los precios de la API de WhatsApp de Meta. Pagas directamente las tarifas de Meta. Nuestra suscripción solo cubre las funciones del CRM.",
-      "q3": "¿Puedo actualizar o degradar después?",
-      "a3": "¡Sí! Actualiza en cualquier momento, prorrateado. Degrada al final de tu ciclo de facturación. Sin penalizaciones ni cargos ocultos.",
-      "q4": "¿Hay prueba gratuita para planes de pago?",
-      "a4": "Sí. Cada plan de pago viene con 14 días de prueba gratis. No se requiere tarjeta de crédito para comenzar.",
-      "q5": "¿Cómo funciona AI Assist?",
-      "a5": "AI Assist usa GPT-4 para analizar mensajes entrantes y sugerir respuestas contextuales. En Gratis, obtienes vistas previas de solo lectura. En Starter+, obtienes sugerencias reales hasta el límite de tu plan.",
-      "q6": "¿Cuál es la diferencia entre AI Assist y AI Brain?",
-      "a6": "AI Assist está incluido en planes de pago con límites de uso. AI Brain es un complemento que elimina límites y agrega funciones avanzadas como puntuación de leads y construcción de automatización."
     }
   },
   "settings": {
@@ -506,6 +511,8 @@
     "passwordTooShort": "La contraseña debe tener al menos 7 caracteres"
   },
   "language": {
+    "loadFailed": "No se pudo cargar el idioma seleccionado. Vuelve a intentarlo.",
+    "saveFailed": "El idioma cambió para esta sesión. No se pudo guardar la preferencia de tu cuenta.",
     "select": "Seleccionar Idioma",
     "english": "English",
     "hebrew": "עברית",
@@ -513,6 +520,10 @@
     "arabic": "العربية"
   },
   "templates": {
+    "campaignSaveFailed": "No se pudo guardar la campaña",
+    "useThisTemplate": "Usar esta plantilla",
+    "previewPresetAria": "Vista previa de la plantilla",
+    "readOnlyPreviewHint": "Vista previa de solo lectura con valores de ejemplo. «Alex» es el nombre de contacto de ejemplo.",
     "title": "Plantillas de Automatización",
     "subtitle": "Secuencias de mensajes prediseñadas para tu industria",
     "category": "Categoría",
@@ -1161,6 +1172,7 @@
       "bannerBodyShopify": "Conecta tus canales, explora todas las funciones y elige un plan de Shopify cuando quieras antes de que termine tu prueba.",
       "bannerBodyWeb": "Conecta tus canales, explora todas las funciones y elige un plan de pago cuando quieras antes de que termine tu prueba.",
       "daysRemaining_one": "{{count}} día restante en tu prueba de WhachatCRM.",
+      "daysRemaining_many": "{{count}} días restantes en tu prueba de WhachatCRM.",
       "daysRemaining_other": "{{count}} días restantes en tu prueba de WhachatCRM.",
       "bannerShopify": "Actualmente tienes una prueba de 14 días de Pro con AI Brain. Elige un plan de Shopify cuando quieras para continuar después de la prueba.",
       "bannerWeb": "Actualmente tienes una prueba de 14 días de Pro con AI Brain. Elige un plan de pago cuando quieras para continuar después de la prueba.",
@@ -1361,6 +1373,7 @@
       "title": "Estás en Pro + AI Trial 🚀",
       "subtitle": "14 días para experimentar el poder completo de la automatización",
       "daysLeft_one": "Te queda {{count}} día de prueba.",
+      "daysLeft_many": "Te quedan {{count}} días de prueba.",
       "daysLeft_other": "Te quedan {{count}} días de prueba.",
       "bullet1": "Sugerencias de respuesta con IA y bandeja preparada para automatización",
       "bullet2": "Calificación de leads, puntuación y flujos listos para Growth Engine",
@@ -1375,6 +1388,7 @@
       "daysLeftCompact": "{{days}}d restantes",
       "tooltipActive": "Pro + AI Trial activo",
       "daysLeftTooltip_one": "Queda {{count}} día",
+      "daysLeftTooltip_many": "Quedan {{count}} días",
       "daysLeftTooltip_other": "Quedan {{count}} días"
     }
   },
@@ -1903,5 +1917,13 @@
     "busy": "Se está enviando otra respuesta. Tu borrador está guardado. Espera el resultado y revisa la conversación.",
     "unknown": "No se puede confirmar la entrega. Tu borrador está guardado. No reenvíes esta respuesta hasta verificar la entrega. Revisa la conversación antes de enviar otra respuesta distinta.",
     "reviewed": "Actividad reciente revisada. Puedes enviar cuando estés listo; una respuesta más reciente detendrá el envío."
+  },
+  "calendar": {
+    "today": "Hoy, {{date}}",
+    "selected": "{{date}}, seleccionado",
+    "previousMonth": "Mes anterior",
+    "nextMonth": "Mes siguiente",
+    "chooseMonth": "Elegir mes",
+    "chooseYear": "Elegir año"
   }
 }
