@@ -26,6 +26,7 @@ const fields = z.object({
   name: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   city: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   state: z.string().trim().min(1).max(60).regex(/[\p{L}\p{N}]/u),
+  country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).default("US"),
   content: z.string().trim().max(5000),
   photos: z.array(z.object({
     url: z.string().url().max(600),
@@ -34,8 +35,8 @@ const fields = z.object({
 });
 
 function settings(page: NeighborhoodPage, agentSlug: string | null) {
-  const { id, name, city, state, content, photos, slug, published, updatedAt } = page;
-  return { id, name, city, state, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
+  const { id, name, city, state, country, content, photos, slug, published, updatedAt } = page;
+  return { id, name, city, state, country, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
     ? buildNeighborhoodUrl(agentSlug, slug, getAppOrigin()) : null };
 }
 
