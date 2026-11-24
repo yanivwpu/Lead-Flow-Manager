@@ -2455,6 +2455,7 @@
     "locationUnavailable": "Location unavailable",
     "locationFailed": "Map location failed",
     "located": "Location found. Drag to inspect the streets, then click or tap to outline the neighborhood.",
+    "locatedApproximate": "Found the city center, but not the exact neighborhood. Drag the map to the correct streets before drawing your area.",
     "zoomRequired": "Zoom in before outlining a neighborhood.",
     "editUnavailable": "Editing unavailable.",
     "tooMany": "The map area has too many corners.",

@@ -60,3 +60,21 @@ export function writeNeighborhoodDrafts(storage: Pick<Storage, "setItem" | "remo
     return false;
   }
 }
+
+/**
+ * An unrelated browser tab can write an older snapshot to localStorage.
+ * Keep this tab's actively edited draft until its owner saves/discards it.
+ * Other neighborhood drafts still synchronize normally.
+ */
+export function mergeNeighborhoodDraftsPreservingActive(
+  incoming: NeighborhoodDrafts, local: NeighborhoodDrafts,
+): NeighborhoodDrafts {
+  const active = local.active;
+  const localDraft = active ? local.entries[active] : undefined;
+  return {
+    active,
+    entries: localDraft && active
+      ? { ...incoming.entries, [active]: localDraft }
+      : { ...incoming.entries },
+  };
+}

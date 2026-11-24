@@ -120,9 +120,14 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
     'const original = ' + JSON.stringify(square) + ';',
     'function Harness() {',
     ' const [saved, setSaved] = React.useState(original);',
+    ' const [show, setShow] = React.useState(true);',
+    ' const [revision, setRevision] = React.useState(0);',
     ' window.__replaceBoundary = (boundary) => setSaved(boundary);',
-    ' return <NeighborhoodBoundaryEditor boundary={saved} name="Victoria Park" city="Fort Lauderdale"',
-    '  state="FL" country="US" disabled={false} onChange={setSaved} />;',
+    ' window.__switchDashboardTab = () => setShow((old) => !old);',
+    ' window.__discardNewMap = () => { sessionStorage.removeItem("rge-test-map-view"); setSaved(null); setRevision((v) => v + 1); };',
+    ' return show ? <NeighborhoodBoundaryEditor key={revision} boundary={saved} name="Victoria Park" city="Fort Lauderdale"',
+    '  state="FL" country="US" sessionKey="rge-test-map-view" disabled={false} onChange={setSaved} />',
+    ' : <p id="other-dashboard-tab">Other page</p>;',
     '}',
     'createRoot(document.getElementById("root")).render(<Harness />);',
   ].join("\n");
@@ -147,8 +152,12 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
     "div[role='group'][aria-label='rgeMap.mapControls'] { position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; gap: 4px; }",
     "div[aria-label='rgeMap.map'][class*='fixed'] { position: fixed; inset: 16px; width: auto; z-index: 80; }",
   ].join("\n");
-  await page.setContent('<!doctype html><html><head><style>' + mapCss +
-    '</style></head><body><div id="root"></div></body></html>');
+  await page.route("https://rge-editor.test/**", (route) => route.fulfill({
+    status: 200, contentType: "text/html",
+    body: '<!doctype html><html><head><style>' + mapCss +
+      '</style></head><body><div id="root"></div></body></html>',
+  }));
+  await page.goto("https://rge-editor.test/");
   await page.addScriptTag({ content: js.text });
   const disclosure = page.locator('[data-rge-map-toggle="true"]');
   assert.equal(await disclosure.count(), 1, "one map disclosure before opening");
@@ -238,6 +247,30 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
     assert.equal(await disclosure.count(), 1);
     assert.equal(await page.locator('[data-rge-custom-map="true"]').count(), 1);
   }
+
+  const beforeSwitch = await page.locator("input").first().inputValue();
+  await page.waitForFunction(() => {
+    const view = sessionStorage.getItem("rge-test-map-view");
+    return Boolean(view && JSON.parse(view).open && JSON.parse(view).zoom >= 14);
+  });
+  await page.evaluate(() => (window as any).__switchDashboardTab());
+  await page.locator("#other-dashboard-tab").waitFor();
+  assert.equal(await page.locator("#other-dashboard-tab").count(), 1);
+  await page.evaluate(() => (window as any).__switchDashboardTab());
+  await page.locator('[data-rge-map-toggle="true"]').waitFor();
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "true",
+    "the map stays open on returning to its dashboard page");
+  assert.equal(await circles.count(), 4, "unapplied map work remains in the same browser tab");
+  assert.equal(await page.locator("input").first().inputValue(), beforeSwitch,
+    "the map center survives dashboard tab switching");
+
+  await page.evaluate(() => (window as any).__discardNewMap());
+  await disclosure.waitFor();
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "false",
+    "a discarded new neighborhood does not retain the previous expanded map");
+  await disclosure.click();
+  assert.equal(await circles.count(), 0,
+    "starting a different new neighborhood never restores discarded map corners");
 });
 test("Neighborhood Page declares one map and guards against stale sibling DOM duplication", () => {
   const owner = readFileSync("client/src/components/agentPage/NeighborhoodPageSettings.tsx", "utf8");

@@ -70,6 +70,7 @@ jobs:
           tests/rge-neighborhood-municipal-providers.test.ts
           tests/rge-neighborhood-browse.test.ts
           tests/rge-neighborhood-custom-boundary.test.ts
+          tests/rge-neighborhood-map-location.test.ts
           tests/public-agent-page-publication.test.ts
           tests/public-listings-sitemap.test.ts
           tests/public-listing-publication.test.ts
