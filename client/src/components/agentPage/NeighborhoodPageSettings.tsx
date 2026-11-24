@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Copy, Eye, ImagePlus, Pencil, Trash2 } from "lucide-react";
 import {
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NeighborhoodGuideVisualEditor } from "./NeighborhoodGuideVisualEditor";
+import { NeighborhoodBoundaryEditor } from "./NeighborhoodBoundaryEditor";
+import type { PolygonBoundary } from "@shared/agent/neighborhoodListingGeo";
 import { removeNeighborhoodPhotoFromArticle } from "@shared/agent/neighborhoodGuideBlocks";
 
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +35,7 @@ export function NeighborhoodPageSettings({ publicPageUrl }: { publicPageUrl: str
 
 function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; publicPageUrl: string | null }) {
   const client = useQueryClient();
+  const { t } = useTranslation();
   const storageKey = neighborhoodDraftKey(userId);
   const photoInput = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -82,11 +86,24 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const { name, city, state, country, content, photos } = prior?.values ?? values;
-      const next = { name, city, state, country: country ?? "US", content, photos: photos ?? [], [field]: value };
+      const { name, city, state, country, customBoundary, content, photos } = prior?.values ?? values;
+      const next = { name, city, state, country: country ?? "US", customBoundary: customBoundary ?? null,
+        content, photos: photos ?? [], [field]: value };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
       else entries[active] = { values: next, baseVersion: prior?.baseVersion ?? page?.updatedAt ?? null };
+      return { active, entries };
+    });
+  }
+
+  function editBoundary(customBoundary: PolygonBoundary | null) {
+    if (!active) return;
+    updateDrafts((current) => {
+      const previous = current.entries[active];
+      const next = { ...(previous?.values ?? values), customBoundary };
+      const entries = { ...current.entries };
+      if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
+      else entries[active] = { values: next, baseVersion: previous?.baseVersion ?? page?.updatedAt ?? null };
       return { active, entries };
     });
   }
@@ -262,12 +279,15 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             ))}
           </div>
           <div className="max-w-xs">
-            <Label htmlFor="neighborhood-country">Country (2-letter code)</Label>
+            <Label htmlFor="neighborhood-country">{t("rgeMap.country")}</Label>
             <Input id="neighborhood-country" value={values.country ?? "US"} maxLength={2}
-              disabled={save.isPending} readOnly={stale} placeholder="US"
+              disabled={save.isPending} readOnly={stale} placeholder={t("rgeMap.countryPlaceholder")}
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
-            <p className="mt-1 text-xs text-slate-500">Examples: US, CA, GB, IL. Existing U.S. guides stay unchanged.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("rgeMap.countryHelp")}</p>
           </div>
+          <NeighborhoodBoundaryEditor key={active} boundary={values.customBoundary}
+            name={values.name} city={values.city} state={values.state} country={values.country ?? "US"}
+            disabled={stale || save.isPending} onChange={editBoundary} />
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
             disabled={stale || save.isPending || photoUploading} uploading={photoUploading}
             canUpload={Boolean(page && !stale && !save.isPending && !photoUploading &&

@@ -165,7 +165,8 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
   const publicMode = !neighborhood.preview;
   const authorizedMode = publicMode ? listings?.mode === "public"
     : listings?.mode === "owner_preview";
-  const matched = listings?.boundaryStatus === "verified" && authorizedMode;
+  const matched = (listings?.boundaryStatus === "verified" || listings?.boundaryStatus === "custom") && authorizedMode;
+  const customArea = listings?.boundaryStatus === "custom";
   const sales = matched && listings ? listings.sale : [];
   const rentals = matched && listings ? listings.rent : [];
   const title = escapeHtml(neighborhood.name);
@@ -177,7 +178,9 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       ? "Some previously synced properties are not shown because their current MLS availability cannot be verified."
       : !publicMode && listings.hasOlderMatchingInventory
         ? "Private test: these are previously synced listings, not verified current availability. Do not share as active properties."
-        : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
+        : customArea
+          ? "Properties are matched to an agent-defined custom area, not an official neighborhood boundary, and checked against MLS display permissions."
+          : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
   const filtersHtml = matched && publicMode ? `<form id="neighborhood-filters" class="neighborhood-filters" aria-label="Filter neighborhood homes">
       <label>Property type
         <select name="propertyType"><option value="">All types</option><option value="house">House</option><option value="condo">Condo</option><option value="townhouse">Townhouse</option><option value="multi_family">Multi-family</option><option value="land">Land</option><option value="other">Other</option></select>
@@ -227,6 +230,7 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       <a href="#homes-rent">Homes for Rent</a>
     </div>
     <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
+    ${customArea ? '<p class="neighborhood-property-status">Area drawn by this agent; it is not an official municipal neighborhood boundary.</p>' : ""}
     ${filtersHtml}
     ${listings?.candidateLimitReached ? '<p class="neighborhood-property-cap-note">Search results are limited to currently scanned inventory; counts may be incomplete. Ask the agent for more options.</p>' : ""}
     <div id="listings-grid" class="neighborhood-property-sections"${neighborhood.preview ? " inert" : ""}>
@@ -1049,11 +1053,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           var countEl = document.getElementById("neighborhood-" + kind + "-count");
           var button = document.getElementById("neighborhood-" + kind + "-more");
           if (!group || !gridEl) return;
-          if (data.boundaryStatus !== "verified") {
+          if (data.boundaryStatus !== "verified" && data.boundaryStatus !== "custom") {
             gridEl.innerHTML = "";
             var msg = document.createElement("div");
             msg.className = "neighborhood-property-empty";
-            msg.textContent = "Verified neighborhood boundaries are temporarily unavailable. Contact the agent for current options.";
+            msg.textContent = "Neighborhood area boundaries are temporarily unavailable. Contact the agent for current options.";
             gridEl.appendChild(msg);
             group.dataset.loaded = "0";
             group.dataset.total = "0";
