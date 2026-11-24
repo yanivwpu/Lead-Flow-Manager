@@ -250,7 +250,8 @@ export function registerProspectImportRoutes(app: Express): void {
         const destinationUserId=await resolveProspectWorkspaceUserId(initiatedByUserId);
         if(destinationUserId!==initiatedByUserId)
           return res.status(403).json({error:"Shopify customer review requires your own active Prospect AI workspace."});
-        const preview=await previewShopifyCustomers(destinationUserId,initiatedByUserId);
+        const offset=typeof req.query.offset==="string"?Number(req.query.offset):0;
+        const preview=await previewShopifyCustomers(destinationUserId,initiatedByUserId,offset);
         res.json({preview});
       }catch(error){
         res.status(error instanceof ShopifyProspectImportError?error.status:500).json({
