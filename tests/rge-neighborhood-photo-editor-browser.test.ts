@@ -57,4 +57,23 @@ test("real article editor visibly inserts an image at the chosen heading and per
   for (let i = 0; i < 4; i++) await widthSlider.press("ArrowRight");
   assert.equal(await figure.evaluate((node) => (node as HTMLElement).style.width), "60%");
   assert.ok((await page.evaluate(() => (window as unknown as { __guideContent?: string }).__guideContent ?? "")).includes("[[photo:" + photoId + "|60]]"), "width persists in the saved article marker");
+
+  // Regression: returning to an inactive dashboard/browser tab must not leave
+  // an empty or uneditable article. Restore from preserved React draft content
+  // only when the browser has emptied the contentEditable surface.
+  await page.evaluate(() => {
+    const editor = document.querySelector('[aria-label="Your local guide article"]');
+    editor?.replaceChildren();
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await editor.locator("figure[data-photo-id]").waitFor();
+  assert.equal(await editor.locator("h3").count(), 1, "the restored article heading remains editable");
+  assert.equal(await figure.evaluate((node) => (node as HTMLElement).style.width), "60%",
+    "restored inline photo keeps its saved width");
+  await page.evaluate(() => {
+    document.querySelector('[aria-label="Your local guide article"]')?.replaceChildren();
+  });
+  await editor.focus();
+  await editor.locator("figure[data-photo-id]").waitFor();
+  assert.equal(await editor.locator("h3").count(), 1, "focus also recovers an unexpectedly blank editor");
 });
