@@ -9,7 +9,7 @@ import { db } from "../../drizzle/db";
 import { contacts, integrations, prospectImportJobs, prospectImportPreviewJobs, prospectIntelligence, users, type Contact } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
-import { isShopifyCustomerContact } from "@shared/shopifyProspectCustomerGuard";
+import { linkedShopifyCustomerId } from "@shared/shopifyProspectCustomerGuard";
 import { customerPrivacyLocked } from "../shopifyPrivacyRequests";
 import { storage } from "../storage";
 import { INCLUDE_INBOX_IDENTITIES } from "@shared/contactCrmVisibility";
@@ -37,14 +37,6 @@ function consentState(v:unknown):ShopifyProspectCustomerPreviewRow["emailConsent
   const state = str(obj(v).state).toLowerCase();
   return ["subscribed","unsubscribed","not_subscribed","pending"].includes(state)
     ? state as ShopifyProspectCustomerPreviewRow["emailConsent"] : "unknown";
-}
-export function linkedShopifyCustomerId(c:Pick<Contact,"source"|"sourceDetails"|"customFields">,shop:string):string|null {
-  if(!isShopifyCustomerContact(c))return null;
-  const sd=obj(c.sourceDetails),cf=obj(c.customFields);
-  const sourceShop=normalizeShopifyShopDomain(str(cf.shopifyShop)||str(sd.shop));
-  if(sourceShop!==shop) return null; // unknown or another shop is never silently attached
-  const id=str(cf.shopifyCustomerId)||str(sd.shopifyCustomerId);
-  return /^[1-9][0-9]{0,24}$/.test(id)?id:null;
 }
 async function ownedShop(userId:string):Promise<string> {
   const [owner]=await db.select().from(users).where(eq(users.id,userId)).limit(1);
