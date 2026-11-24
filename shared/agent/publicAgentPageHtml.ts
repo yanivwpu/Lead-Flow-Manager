@@ -166,11 +166,14 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
   const authorizedMode = publicMode ? listings?.mode === "public"
     : listings?.mode === "owner_preview";
   const customArea = listings?.boundaryStatus === "custom_area";
-  const matched = (listings?.boundaryStatus === "verified" || customArea) && authorizedMode;
+  const communityArea = listings?.boundaryStatus === "community_area";
+  const matched = (listings?.boundaryStatus === "verified" || customArea || communityArea) && authorizedMode;
   const sales = matched && listings ? listings.sale : [];
   const rentals = matched && listings ? listings.rent : [];
   const title = escapeHtml(neighborhood.name);
-  const statusText = customArea && authorizedMode
+  const statusText = communityArea && authorizedMode
+    ? "Community-mapped boundary from Overture Maps; this outline is not a municipal or legal boundary. MLS display and freshness rules still apply."
+    : customArea && authorizedMode
     ? "Agent-defined service area — the outline was drawn by this agent, not verified by the city or an official map. Properties shown are inside this selected area and subject to MLS publication rules."
     : !listings || !matched
     ? listings?.boundaryStatus === "unavailable"
@@ -230,6 +233,7 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       <a href="#homes-rent">Homes for Rent</a>
     </div>
     <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
+    ${listings?.boundaryAttribution ? `<p class="neighborhood-boundary-attribution">${escapeHtml(listings.boundaryAttribution)}</p>` : ""}
     ${filtersHtml}
     ${listings?.candidateLimitReached ? '<p class="neighborhood-property-cap-note">Search results are limited to currently scanned inventory; counts may be incomplete. Ask the agent for more options.</p>' : ""}
     <div id="listings-grid" class="neighborhood-property-sections"${neighborhood.preview ? " inert" : ""}>
@@ -1052,7 +1056,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           var countEl = document.getElementById("neighborhood-" + kind + "-count");
           var button = document.getElementById("neighborhood-" + kind + "-more");
           if (!group || !gridEl) return;
-          if (data.boundaryStatus !== "verified" && data.boundaryStatus !== "custom_area") {
+          if (data.boundaryStatus !== "verified" && data.boundaryStatus !== "custom_area" && data.boundaryStatus !== "community_area") {
             gridEl.innerHTML = "";
             var msg = document.createElement("div");
             msg.className = "neighborhood-property-empty";
