@@ -11,6 +11,7 @@ test("CSV handles BOM, quoted commas/newlines, mapped columns and no consent inf
  assert.deepEqual(filterProspectCsv(r,{hasEmail:true}).length,2);
  assert.deepEqual(filterProspectCsv(r,{hasBoth:true}).length,1);
  assert.ok(!("consent" in r[0]));
+ assert.equal(parseProspectCsv("name,email\nOnly name,\nValid,valid@example.com").length,1);
 });
 test("reject malformed, unbounded and invalid CSV rows",()=>{
  for(const csv of ["", "wrong,columns\nabc,def", "name,email\nA,not-email","name\n\"unclosed", "name\nA".repeat(PROSPECT_CSV_MAX_ROWS+2)]) assert.throws(()=>parseProspectCsv(csv),ProspectCsvError);
