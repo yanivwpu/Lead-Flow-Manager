@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Copy, Eye, ImagePlus, Pencil, Trash2 } from "lucide-react";
 import {
@@ -34,6 +35,7 @@ export function NeighborhoodPageSettings({ publicPageUrl }: { publicPageUrl: str
 
 function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; publicPageUrl: string | null }) {
   const client = useQueryClient();
+  const { t } = useTranslation();
   const storageKey = neighborhoodDraftKey(userId);
   const photoInput = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -277,11 +279,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             ))}
           </div>
           <div className="max-w-xs">
-            <Label htmlFor="neighborhood-country">Country (2-letter code)</Label>
+            <Label htmlFor="neighborhood-country">{t("rgeMap.country")}</Label>
             <Input id="neighborhood-country" value={values.country ?? "US"} maxLength={2}
-              disabled={save.isPending} readOnly={stale} placeholder="US"
+              disabled={save.isPending} readOnly={stale} placeholder={t("rgeMap.countryPlaceholder")}
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
-            <p className="mt-1 text-xs text-slate-500">Examples: US, CA, GB, IL. Existing U.S. guides stay unchanged.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("rgeMap.countryHelp")}</p>
           </div>
           <NeighborhoodBoundaryEditor key={active} boundary={values.customBoundary}
             name={values.name} city={values.city} state={values.state} country={values.country ?? "US"}
