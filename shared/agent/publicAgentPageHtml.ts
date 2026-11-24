@@ -165,11 +165,14 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
   const publicMode = !neighborhood.preview;
   const authorizedMode = publicMode ? listings?.mode === "public"
     : listings?.mode === "owner_preview";
-  const matched = listings?.boundaryStatus === "verified" && authorizedMode;
+  const customArea = listings?.boundaryStatus === "custom_area";
+  const matched = (listings?.boundaryStatus === "verified" || customArea) && authorizedMode;
   const sales = matched && listings ? listings.sale : [];
   const rentals = matched && listings ? listings.rent : [];
   const title = escapeHtml(neighborhood.name);
-  const statusText = !listings || !matched
+  const statusText = customArea && authorizedMode
+    ? "Agent-defined service area — the outline was drawn by this agent, not verified by the city or an official map. Properties shown are inside this selected area and subject to MLS publication rules."
+    : !listings || !matched
     ? listings?.boundaryStatus === "unavailable"
       ? "The verified neighborhood map is temporarily unavailable. Local properties cannot be shown right now."
       : "Neighborhood property matching requires a verified local boundary. Contact the agent for available properties."
@@ -1049,7 +1052,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           var countEl = document.getElementById("neighborhood-" + kind + "-count");
           var button = document.getElementById("neighborhood-" + kind + "-more");
           if (!group || !gridEl) return;
-          if (data.boundaryStatus !== "verified") {
+          if (data.boundaryStatus !== "verified" && data.boundaryStatus !== "custom_area") {
             gridEl.innerHTML = "";
             var msg = document.createElement("div");
             msg.className = "neighborhood-property-empty";
