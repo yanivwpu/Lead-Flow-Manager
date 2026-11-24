@@ -69,6 +69,23 @@ export function NeighborhoodBoundaryEditor({
     setLonInput(next.lon.toFixed(5));
   }
 
+  // The parent can restore a saved page on Discard, or receive a newer save
+  // from another browser tab. Do not leave stale, uncommitted map vertices
+  // visible after its boundary prop changes.
+  const boundaryKey = JSON.stringify(boundary ?? null);
+  const locallyAppliedBoundary = useRef<string | null>(null);
+  useEffect(() => {
+    const saved = JSON.parse(boundaryKey) as PolygonBoundary | null;
+    setVertices(saved?.coordinates[0]?.slice(0, -1) ?? []);
+    if (saved) moveTo(initialCenter(saved), 14);
+    // Preserve the "Apply" / "Remove" confirmation only for our own action.
+    if (locallyAppliedBoundary.current === boundaryKey) {
+      locallyAppliedBoundary.current = null;
+    } else {
+      setStatus("");
+    }
+  }, [boundaryKey]);
+
   async function locate() {
     if (!name.trim() || !city.trim() || !state.trim() || !/^[a-zA-Z]{2}$/.test(country)) {
       setStatus(t("rgeMap.enterLocation"));
@@ -193,11 +210,13 @@ export function NeighborhoodBoundaryEditor({
           <Button type="button" size="sm" variant="outline" disabled={disabled || vertices.length === 0}
             onClick={() => { setVertices([]); setStatus(""); }}>{t("rgeMap.restart")}</Button>
           <Button type="button" size="sm" disabled={disabled || !safeShape || !pending}
-            onClick={() => { onChange(safeShape!); setStatus(t("rgeMap.applied")); }}>
+            onClick={() => { locallyAppliedBoundary.current = JSON.stringify(safeShape!);
+              onChange(safeShape!); setStatus(t("rgeMap.applied")); }}>
             {t("rgeMap.apply")}
           </Button>
           {boundary && <Button type="button" size="sm" variant="outline" disabled={disabled}
-            onClick={() => { onChange(null); setVertices([]); setStatus(t("rgeMap.removed")); }}>
+            onClick={() => { locallyAppliedBoundary.current = "null";
+              onChange(null); setVertices([]); setStatus(t("rgeMap.removed")); }}>
             {t("rgeMap.remove")}
           </Button>}
         </div>
