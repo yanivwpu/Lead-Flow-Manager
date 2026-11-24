@@ -150,7 +150,15 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   await page.setContent('<!doctype html><html><head><style>' + mapCss +
     '</style></head><body><div id="root"></div></body></html>');
   await page.addScriptTag({ content: js.text });
-  await page.locator("summary").click();
+  const disclosure = page.locator('[data-rge-map-toggle="true"]');
+  assert.equal(await disclosure.count(), 1, "one map disclosure before opening");
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "false");
+  assert.equal(await page.locator('[data-rge-custom-map="true"]').count(), 1,
+    "there is exactly one custom map section in the editor");
+  assert.equal(await page.locator("svg.cursor-crosshair").count(), 0,
+    "closed map does not mount its canvas or tile observers");
+  await disclosure.click();
+  assert.equal(await disclosure.getAttribute("aria-expanded"), "true");
   const map = page.locator("svg.cursor-crosshair");
   await map.waitFor();
   const circles = map.locator("circle");
@@ -169,6 +177,7 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   await page.evaluate((previousBoundary) => (window as any).__replaceBoundary(previousBoundary), square);
   await page.waitForFunction(() => document.querySelectorAll("svg.cursor-crosshair circle").length === 4);
   assert.equal(await circles.count(), 4, "discarding again restores the exact saved area");
+  assert.equal(await disclosure.count(), 1, "draft edits do not create duplicate map controls");
 
   // Navigation must feel like a modern map, without creating fake polygon corners.
   const bounds = await map.boundingBox();
@@ -215,4 +224,28 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   const collapsed = await page.locator('div[aria-label="rgeMap.map"]').boundingBox();
   assert.ok(collapsed && collapsed.height < 400, "Escape closes expanded view");
   assert.equal(await circles.count(), 4, "expanding and collapsing preserves existing boundary");
+
+  // Repeated collapse/reopen + simulated browser resizes must not append
+  // duplicate neighborhood map summaries or leak extra map canvases.
+  for (let i = 0; i < 8; i++) {
+    await disclosure.click();
+    assert.equal(await disclosure.getAttribute("aria-expanded"), "false");
+    assert.equal(await page.locator("svg.cursor-crosshair").count(), 0);
+    await page.setViewportSize({ width: 920 + i * 10, height: 800 });
+    await disclosure.click();
+    assert.equal(await disclosure.getAttribute("aria-expanded"), "true");
+    assert.equal(await page.locator("svg.cursor-crosshair").count(), 1);
+    assert.equal(await disclosure.count(), 1);
+    assert.equal(await page.locator('[data-rge-custom-map="true"]').count(), 1);
+  }
+});
+test("Neighborhood Page declares one map and guards against stale sibling DOM duplication", () => {
+  const owner = readFileSync("client/src/components/agentPage/NeighborhoodPageSettings.tsx", "utf8");
+  const editor = readFileSync("client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx", "utf8");
+  const css = readFileSync("client/src/index.css", "utf8");
+  assert.equal((owner.match(/<NeighborhoodBoundaryEditor\\b/g) ?? []).length, 1);
+  assert.match(owner, /data-rge-neighborhood-editor="true"/);
+  assert.match(editor, /data-rge-map-toggle="true"/);
+  assert.ok(!editor.includes("<details"), "native disclosure replaced by controlled button");
+  assert.match(css, /\\[data-rge-neighborhood-editor="true"\\].*\\[data-rge-custom-map="true"\\]/);
 });
