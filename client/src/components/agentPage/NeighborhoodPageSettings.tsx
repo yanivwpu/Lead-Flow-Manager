@@ -21,7 +21,7 @@ import {
   EMPTY_NEIGHBORHOOD, NEW_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts,
   mergeNeighborhoodDraftsPreservingActive, sameNeighborhoodContent, writeNeighborhoodDrafts, type NeighborhoodDrafts,
 } from "@/lib/neighborhoodDrafts";
-import { neighborhoodMapSessionKey } from "@/lib/neighborhoodMapSession";
+import { clearNeighborhoodMapSession, neighborhoodMapSessionKey } from "@/lib/neighborhoodMapSession";
 
 const defaultCountryCode = "US";
 const endpoint = "/api/agent-page/neighborhoods";
@@ -41,6 +41,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const storageKey = neighborhoodDraftKey(userId);
   const photoInput = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [mapEditorRevision, setMapEditorRevision] = useState(0);
   const [drafts, setDrafts] = useState<NeighborhoodDrafts>(() => {
     const storage = browserDraftStorage();
     return storage ? readNeighborhoodDrafts(storage, storageKey) : { active: null, entries: {} };
@@ -190,6 +191,12 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
         return { ...current, pages: pages.sort((a, b) => a.name.localeCompare(b.name)) };
       });
       void client.invalidateQueries({ queryKey: [endpoint, userId] });
+      if (!request.page || !page) {
+        try {
+          clearNeighborhoodMapSession(window.sessionStorage,
+            neighborhoodMapSessionKey(userId, request.page?.id ?? NEW_NEIGHBORHOOD));
+        } catch { /* blocked storage does not prevent saving */ }
+      }
       updateDrafts((current) => {
         const identity = request.page?.id ?? NEW_NEIGHBORHOOD;
         const entries = { ...current.entries };
@@ -220,7 +227,15 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id="neighborhood-pages-heading" className="text-sm font-semibold">Neighborhood Pages</h3>
         <Button type="button" size="sm" variant="outline" disabled={!data || save.isPending}
-          onClick={() => updateDrafts((current) => ({ ...current, active: NEW_NEIGHBORHOOD }))}>{drafts.entries[NEW_NEIGHBORHOOD] ? "Resume draft" : "+ Add"}</Button>
+          onClick={() => {
+            if (!drafts.entries[NEW_NEIGHBORHOOD]) {
+              try {
+                clearNeighborhoodMapSession(window.sessionStorage,
+                  neighborhoodMapSessionKey(userId, NEW_NEIGHBORHOOD));
+              } catch { /* browser storage may be unavailable */ }
+            }
+            updateDrafts((current) => ({ ...current, active: NEW_NEIGHBORHOOD }));
+          }}>{drafts.entries[NEW_NEIGHBORHOOD] ? "Resume draft" : "+ Add"}</Button>
       </div>
       {isPending && <p className="text-sm text-muted-foreground">Loading neighborhood pages…</p>}
       {isError && <p role="alert" className="text-sm text-destructive">Unable to load neighborhood pages.</p>}
@@ -288,7 +303,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
             <p className="mt-1 text-xs text-slate-500">{t("inboxUi.neighborhoodCountryExamples")}</p>
           </div>
-          <NeighborhoodBoundaryEditor key={active} boundary={values.customBoundary}
+          <NeighborhoodBoundaryEditor key={active + ":" + mapEditorRevision} boundary={values.customBoundary}
             name={values.name} city={values.city} state={values.state} country={values.country ?? "US"}
             sessionKey={neighborhoodMapSessionKey(userId, active)}
             disabled={stale || save.isPending} onChange={editBoundary} />
@@ -379,6 +394,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             <Button type="button" size="sm" variant="ghost" disabled={save.isPending} onClick={() => updateDrafts((current) => ({ ...current, active: null }))}>Close</Button>
             {dirty && <Button type="button" size="sm" variant="ghost" disabled={save.isPending} onClick={() => {
               if (!window.confirm("Discard your unsaved changes?")) return;
+              try {
+                clearNeighborhoodMapSession(window.sessionStorage,
+                  neighborhoodMapSessionKey(userId, active));
+              } catch { /* browser storage may be unavailable */ }
+              setMapEditorRevision((revision) => revision + 1);
               updateDrafts((current) => {
                 const entries = { ...current.entries };
                 delete entries[active];
