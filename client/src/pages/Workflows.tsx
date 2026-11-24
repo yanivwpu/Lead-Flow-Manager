@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Helmet } from "react-helmet";
@@ -151,6 +152,7 @@ const TAGS           = ["New", "Hot", "Quoted", "Paid", "Waiting", "Lost"];
 const STATUSES       = ["open", "pending", "resolved", "closed"];
 const PIPELINE_STAGES = ["Lead", "Contacted", "Proposal", "Negotiation", "Closed"];
 const FOLLOWUP_DAYS  = ["1", "3", "7", "14", "30"];
+const NO_REPLY_HOURS = ["1", "2", "4", "8", "12", "24", "48", "72"];
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
@@ -313,6 +315,7 @@ function TriggerPicker({
   lockProTriggers?: boolean;
   onProTriggerLocked?: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const normalized = normalizeTriggerType(current);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
@@ -334,13 +337,13 @@ function TriggerPicker({
             <p className="text-xs text-gray-500">{def?.description || "Click to select a trigger event"}</p>
           </div>
           <span className="text-xs text-brand-green font-medium px-2 py-1 rounded hover:bg-brand-green/5 shrink-0">
-            {def ? "Change" : "Select →"}
+            {def ? t("automationUi.change") : "Select →"}
           </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" sideOffset={8} className="w-80 p-0 max-h-[480px] overflow-y-auto">
         <div className="px-3 py-2.5 border-b bg-gray-50/80">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Choose trigger event</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("automationUi.chooseTrigger")}</p>
         </div>
         <div className="p-2 space-y-3">
           {TRIGGER_GROUPS.map((group) => (
@@ -377,7 +380,7 @@ function TriggerPicker({
                     <div className="flex items-center gap-1.5 shrink-0">
                       {locked && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-semibold border-amber-200 bg-white text-amber-900">
-                          Advanced
+                          {t("automationUi.advanced")}
                         </Badge>
                       )}
                       {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-brand-green" />}
@@ -402,6 +405,7 @@ function ActionPickerPopover({
   onSelect: (type: string) => void;
   growthEngine?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const categories = buildActionPickerCategories(!!growthEngine);
   return (
@@ -413,12 +417,12 @@ function ActionPickerPopover({
           data-testid="button-add-action"
         >
           <Plus className="h-4 w-4" />
-          Add action
+          {t("automationUi.addAction")}
         </button>
       </PopoverTrigger>
       <PopoverContent align="center" side="bottom" sideOffset={8} className="w-72 p-0 max-h-[400px] overflow-y-auto">
         <div className="px-3 py-2.5 border-b bg-gray-50/80">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Choose an action</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("automationUi.chooseAction")}</p>
         </div>
         <div className="p-2 space-y-3">
           {categories.map((cat) => (
@@ -477,6 +481,7 @@ function ActionBlock({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+  const { t } = useTranslation();
   const def = getWorkflowActionDefinition(action.type);
   const Icon = def?.icon || FileText;
   const summary = getWorkflowActionSummary(action);
@@ -493,7 +498,7 @@ function ActionBlock({
           <Input
             value={action.tag || action.value || ""}
             onChange={(e) => onPatch({ tag: e.target.value, type: "apply_tag" })}
-            placeholder="Tag name..."
+            placeholder={t("automationUi.tagName")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-apply-tag-${index}`}
           />
@@ -503,7 +508,7 @@ function ActionBlock({
           <Input
             value={action.stage || action.value || ""}
             onChange={(e) => onPatch({ stage: e.target.value, type: "set_pipeline_stage" })}
-            placeholder="Pipeline stage..."
+            placeholder={t("automationUi.stage")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-pipeline-stage-${index}`}
           />
@@ -515,7 +520,7 @@ function ActionBlock({
             onValueChange={(v) => onPatch({ templateKey: v, type: "send_message_template" })}
           >
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-template-${index}`}>
-              <SelectValue placeholder="Select template..." />
+              <SelectValue placeholder={t("automationUi.template")} />
             </SelectTrigger>
             <SelectContent>
               {messageTemplateKeys.map((k) => (
@@ -538,7 +543,7 @@ function ActionBlock({
             <Input
               value={action.title || ""}
               onChange={(e) => onPatch({ title: e.target.value })}
-              placeholder="Task title..."
+              placeholder={t("automationUi.taskTitle")}
               className="h-8 text-sm bg-gray-50 border-gray-200"
               data-testid={`input-action-task-title-${index}`}
             />
@@ -547,7 +552,7 @@ function ActionBlock({
               min={0}
               value={action.dueDays != null ? String(action.dueDays) : "1"}
               onChange={(e) => onPatch({ dueDays: parseInt(e.target.value, 10) || 1 })}
-              placeholder="Due in (days)"
+              placeholder={t("automationUi.dueDays")}
               className="h-8 text-sm bg-gray-50 border-gray-200"
               data-testid={`input-action-task-due-${index}`}
             />
@@ -592,8 +597,8 @@ function ActionBlock({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="round_robin">Round Robin</SelectItem>
-                <SelectItem value="specific">Specific User</SelectItem>
+                <SelectItem value="round_robin">{t("workflowEditor.roundRobin")}</SelectItem>
+                <SelectItem value="specific">{t("workflowEditor.specificUser")}</SelectItem>
               </SelectContent>
             </Select>
             {/* User dropdown — only when Specific User is chosen */}
@@ -603,14 +608,14 @@ function ActionBlock({
                 onValueChange={(v) => onUpdate("value", v)}
               >
                 <SelectTrigger className="h-8 text-sm bg-gray-50 border-gray-200" data-testid={`select-action-assign-user-${index}`}>
-                  <SelectValue placeholder="Select team member..." />
+                  <SelectValue placeholder={t("workflowEditor.selectMember")} />
                 </SelectTrigger>
                 <SelectContent>
                   {teamMembers.filter((m: any) => m.status === "active").map((m: any) => (
                     <SelectItem key={m.id} value={String(m.memberId || m.id)}>{m.name || m.email}</SelectItem>
                   ))}
                   {teamMembers.filter((m: any) => m.status === "active").length === 0 && (
-                    <div className="px-3 py-2 text-xs text-gray-400">No active members found</div>
+                    <div className="px-3 py-2 text-xs text-gray-400">{t("workflowEditor.noActiveMembers")}</div>
                   )}
                 </SelectContent>
               </Select>
@@ -621,7 +626,7 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-tag-${index}`}>
-              <SelectValue placeholder="Select tag..." />
+              <SelectValue placeholder={t("workflowEditor.selectTag")} />
             </SelectTrigger>
             <SelectContent>
               {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -632,7 +637,7 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-status-${index}`}>
-              <SelectValue placeholder="Select status..." />
+              <SelectValue placeholder={t("workflowEditor.selectStatus")} />
             </SelectTrigger>
             <SelectContent>
               {STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
@@ -643,7 +648,7 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-pipeline-${index}`}>
-              <SelectValue placeholder="Select stage..." />
+              <SelectValue placeholder={t("workflowEditor.selectStage")} />
             </SelectTrigger>
             <SelectContent>
               {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -655,7 +660,7 @@ function ActionBlock({
           <Input
             value={action.value}
             onChange={(e) => onUpdate("value", e.target.value)}
-            placeholder="Note text..."
+            placeholder={t("workflowEditor.note")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-note-${index}`}
           />
@@ -664,10 +669,10 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-followup-${index}`}>
-              <SelectValue placeholder="Days..." />
+              <SelectValue placeholder={t("workflowEditor.daysPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
-              {FOLLOWUP_DAYS.map(d => <SelectItem key={d} value={d}>{d} day{d !== "1" ? "s" : ""}</SelectItem>)}
+              {FOLLOWUP_DAYS.map(d => <SelectItem key={d} value={d}>{t("workflowEditor.durationDays", { count: Number(d) })}</SelectItem>)}
             </SelectContent>
           </Select>
         );
@@ -694,16 +699,16 @@ function ActionBlock({
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{def?.label || "Action"}</p>
             <div className="flex items-center gap-0.5 shrink-0">
               {index > 0 && (
-                <button onClick={onMoveUp} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Move up">
+                <button onClick={onMoveUp} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title={t("workflowEditor.moveUp")}>
                   <MoveUp className="h-3.5 w-3.5 text-gray-400" />
                 </button>
               )}
               {index < total - 1 && (
-                <button onClick={onMoveDown} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Move down">
+                <button onClick={onMoveDown} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title={t("workflowEditor.moveDown")}>
                   <MoveDown className="h-3.5 w-3.5 text-gray-400" />
                 </button>
               )}
-              <button onClick={onRemove} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-0.5" title="Remove">
+              <button onClick={onRemove} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-0.5" title={t("workflowEditor.remove")}>
                 <Trash2 className="h-3.5 w-3.5 text-red-400" />
               </button>
             </div>
@@ -711,7 +716,7 @@ function ActionBlock({
           {/* Assign renders two stacked selects; all others render a single row */}
           {action.type === "assign" ? (
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-500">Assignment method</Label>
+              <Label className="text-xs text-gray-500">{t("workflowEditor.assignment")}</Label>
               {renderValue()}
             </div>
           ) : (() => {
@@ -745,19 +750,20 @@ function ConditionsBlock({
   onUpdate: (id: string, field: "type" | "value", value: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Conditions <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 font-bold text-[10px]">{conditions.length || "0"}</span>
+          {t("automations.conditions")} <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 font-bold text-[10px]">{conditions.length || "0"}</span>
         </p>
-        <span className="text-[11px] text-gray-400">All conditions must match</span>
+        <span className="text-[11px] text-gray-400">{t("workflowEditor.allConditions")}</span>
       </div>
 
       <div className="p-4 space-y-3">
         {conditions.length === 0 && (
           <p className="text-xs text-gray-400 text-center py-2">
-            No conditions — workflow runs on every trigger event.
+            {t("workflowEditor.noConditions")}
           </p>
         )}
 
@@ -782,7 +788,7 @@ function ConditionsBlock({
             {cond.type === "channel" && (
               <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
                 <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Select channel..." />
+                  <SelectValue placeholder={t("workflowEditor.selectChannel")} />
                 </SelectTrigger>
                 <SelectContent>
                   {CHANNELS.filter(c => c.value !== "any").map(c => (
@@ -809,7 +815,7 @@ function ConditionsBlock({
             {cond.type === "tag" && (
               <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
                 <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Select tag..." />
+                  <SelectValue placeholder={t("workflowEditor.selectTag")} />
                 </SelectTrigger>
                 <SelectContent>
                   {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -820,7 +826,7 @@ function ConditionsBlock({
             {cond.type === "stage" && (
               <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
                 <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Select stage..." />
+                  <SelectValue placeholder={t("workflowEditor.selectStage")} />
                 </SelectTrigger>
                 <SelectContent>
                   {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -844,7 +850,7 @@ function ConditionsBlock({
           data-testid="button-add-condition"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add condition
+          {t("workflowEditor.addCondition")}
         </button>
       </div>
     </div>
@@ -868,6 +874,7 @@ function TriggerConfigBlock({
   lockProTriggers?: boolean;
   onProTriggerLocked?: () => void;
 }) {
+  const { t } = useTranslation();
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
   // Does this trigger need any config at all?
@@ -892,7 +899,7 @@ function TriggerConfigBlock({
           {/* Keyword */}
           {normalized === "keyword" && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">Keywords <span className="text-gray-400 font-normal">(comma separated)</span></Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">{t("workflowEditor.keywords")} <span className="text-gray-400 font-normal">(comma separated)</span></Label>
               <Input value={triggerKeywords} onChange={(e) => onChangeKeywords(e.target.value)} placeholder="e.g. price, quote, tour" className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="input-keywords" />
             </div>
           )}
@@ -903,10 +910,10 @@ function TriggerConfigBlock({
               <Label className="text-xs text-gray-500 mb-1.5 block">Tag <span className="text-gray-400 font-normal">(which tag fires this)</span></Label>
               <Select value={triggerTag} onValueChange={onChangeTag}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-tag">
-                  <SelectValue placeholder="Any tag" />
+                  <SelectValue placeholder={t("workflowEditor.anyTag")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any tag</SelectItem>
+                  <SelectItem value="any">{t("workflowEditor.anyTag")}</SelectItem>
                   {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -919,10 +926,10 @@ function TriggerConfigBlock({
               <Label className="text-xs text-gray-500 mb-1.5 block">Moves to stage <span className="text-gray-400 font-normal">(which stage fires this)</span></Label>
               <Select value={triggerToStage} onValueChange={onChangeToStage}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-stage">
-                  <SelectValue placeholder="Any stage" />
+                  <SelectValue placeholder={t("workflowEditor.anyStage")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any stage</SelectItem>
+                  <SelectItem value="any">{t("workflowEditor.anyStage")}</SelectItem>
                   {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -932,14 +939,18 @@ function TriggerConfigBlock({
           {/* No reply duration */}
           {normalized === "no_reply" && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">After no reply for</Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">{t("workflowEditor.noReply")}</Label>
               <Select value={triggerDuration} onValueChange={onChangeDuration}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-duration">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[["1","1 hour"],["2","2 hours"],["4","4 hours"],["8","8 hours"],["12","12 hours"],["24","24 hours"],["48","48 hours"],["72","3 days"]].map(([v,l]) => (
-                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  {NO_REPLY_HOURS.map(hours => (
+                    <SelectItem key={hours} value={hours}>
+                      {hours === "72"
+                        ? t("workflowEditor.durationDays", { count: 3 })
+                        : t("workflowEditor.durationHours", { count: Number(hours) })}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1002,6 +1013,7 @@ function WorkflowSummary({
 // ─── Start Screen ─────────────────────────────────────────────────────────────
 
 function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequence"; onScratch: () => void; onTemplate: (tpl: any) => void }) {
+  const { t } = useTranslation();
   const templates = type === "workflow" ? WORKFLOW_TEMPLATES : SEQUENCE_TEMPLATES;
   return (
     <div className="space-y-6 py-2">
@@ -1014,7 +1026,7 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
           <Plus className="h-5 w-5 text-gray-400 group-hover:text-brand-green" />
         </div>
         <div>
-          <p className="font-semibold text-gray-900">Start from scratch</p>
+          <p className="font-semibold text-gray-900">{t("workflowEditor.fromScratch")}</p>
           <p className="text-sm text-gray-500 mt-0.5">Build your own {type} step by step</p>
         </div>
         <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-brand-green ml-auto shrink-0" />
@@ -1022,7 +1034,7 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
 
       <div>
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <LayoutTemplate className="h-3.5 w-3.5" />Quick templates
+          <LayoutTemplate className="h-3.5 w-3.5" />{t("workflowEditor.quickTemplates")}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {templates.map((tpl) => {
@@ -1053,6 +1065,7 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function Workflows() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: subscriptionData, isLoading: subscriptionLoading } = useSubscription();
@@ -1440,7 +1453,7 @@ export function Workflows() {
               <Zap className="h-5 w-5 text-brand-green" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Automations</h1>
+              <h1 className="text-lg font-bold text-gray-900">{t("automations.title")}</h1>
               <p className="text-xs text-gray-500">Workflows and drip sequences</p>
             </div>
           </div>
@@ -1553,7 +1566,7 @@ export function Workflows() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => { resetWf(); setView("list"); }} className="h-9">
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleWfSubmit}
@@ -1562,7 +1575,7 @@ export function Workflows() {
               data-testid="button-save-workflow"
             >
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingWorkflow ? "Save changes" : "Create workflow"}
+              {editingWorkflow ? t("crmUi.saveChanges") : "Create workflow"}
             </Button>
           </div>
         </div>
@@ -1697,7 +1710,7 @@ export function Workflows() {
             <div className="flex justify-end pt-2 pb-8">
               <Button onClick={handleWfSubmit} disabled={isSaving} className="bg-brand-green hover:bg-brand-green/90 h-10 px-6">
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingWorkflow ? "Save changes" : "Create workflow"}
+                {editingWorkflow ? t("crmUi.saveChanges") : "Create workflow"}
               </Button>
             </div>
           </div>
@@ -1732,10 +1745,10 @@ export function Workflows() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => { resetSeq(); setView("list"); }} className="h-9">Cancel</Button>
+            <Button variant="outline" onClick={() => { resetSeq(); setView("list"); }} className="h-9">{t("common.cancel")}</Button>
             <Button onClick={handleSeqSubmit} disabled={isSaving} className="bg-brand-green hover:bg-brand-green/90 h-9" data-testid="button-save-campaign">
               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingCampaign ? "Save changes" : "Create sequence"}
+              {editingCampaign ? t("crmUi.saveChanges") : "Create sequence"}
             </Button>
           </div>
         </div>
@@ -1802,7 +1815,7 @@ export function Workflows() {
                         <div>
                           <Label className="text-xs text-gray-500 mb-1.5 block flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {i === 0 ? "Send" : "Wait, then send"}
+                            {i === 0 ? t("common.send") : "Wait, then send"}
                           </Label>
                           <Select value={String(step.delayMinutes)} onValueChange={(v) => updateStep(i, "delayMinutes", parseInt(v))}>
                             <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200"><SelectValue /></SelectTrigger>
@@ -1858,7 +1871,7 @@ export function Workflows() {
               <div className="rounded-2xl bg-blue-50 border border-blue-200 px-5 py-4">
                 <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1.5">Summary</p>
                 <p className="text-sm text-blue-900">
-                  Send <span className="font-semibold">{validStepCount} message{validStepCount !== 1 ? "s" : ""}</span> over{" "}
+                  {t("common.send")} <span className="font-semibold">{validStepCount} message{validStepCount !== 1 ? "s" : ""}</span> over{" "}
                   <span className="font-semibold">{formatDelay(totalDelay)}</span>.
                 </p>
               </div>
@@ -1867,7 +1880,7 @@ export function Workflows() {
             <div className="flex justify-end pt-2 pb-8">
               <Button onClick={handleSeqSubmit} disabled={isSaving} className="bg-brand-green hover:bg-brand-green/90 h-10 px-6">
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingCampaign ? "Save changes" : "Create sequence"}
+                {editingCampaign ? t("crmUi.saveChanges") : "Create sequence"}
               </Button>
             </div>
           </div>
@@ -1888,7 +1901,7 @@ export function Workflows() {
             <Zap className="h-5 w-5 text-brand-green" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Automations</h1>
+            <h1 className="text-lg font-bold text-gray-900">{t("automations.title")}</h1>
             <p className="text-xs text-gray-500">Workflows and drip sequences</p>
           </div>
         </div>
@@ -1948,7 +1961,7 @@ export function Workflows() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className={cn("font-semibold text-sm truncate", wf.isActive ? "text-gray-900" : "text-gray-400")}>{wf.name}</p>
-                            {!wf.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>}
+                            {!wf.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">{t("automations.paused")}</Badge>}
                           </div>
                           <p className="text-xs text-gray-500 truncate">{getTriggerLabel(wf)}{wf.executionCount > 0 && ` · ${wf.executionCount} runs`}</p>
                         </div>
@@ -1971,7 +1984,7 @@ export function Workflows() {
                       </div>
                       <CollapsibleContent>
                         <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-1.5">
-                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Actions</p>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("automations.actions")}</p>
                           {(wf.actions as WorkflowAction[])?.map((action, i) => {
                             const def = getWorkflowActionDefinition(action.type);
                             const Icon = def?.icon || FileText;
@@ -2030,7 +2043,7 @@ export function Workflows() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className={cn("font-semibold text-sm truncate", campaign.isActive ? "text-gray-900" : "text-gray-400")}>{campaign.name}</p>
-                            {!campaign.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>}
+                            {!campaign.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">{t("automations.paused")}</Badge>}
                           </div>
                           <p className="text-xs text-gray-500">
                             {campaign.steps?.length || 0} step{(campaign.steps?.length || 0) !== 1 ? "s" : ""}
@@ -2097,7 +2110,7 @@ export function Workflows() {
                                       </div>
                                       {enrollment.status === "active" && (
                                         <Button variant="ghost" size="sm" onClick={() => cancelEnrollmentMutation.mutate(enrollment.id)} className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50">
-                                          <X className="h-3 w-3 mr-1" />Cancel
+                                          <X className="h-3 w-3 mr-1" />{t("common.cancel")}
                                         </Button>
                                       )}
                                     </div>
@@ -2144,7 +2157,7 @@ export function Workflows() {
               )}
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>{t("common.cancel")}</Button>
               <Button
                 onClick={() => { if (enrollCampaignId && selectedChatId) enrollChatMutation.mutate({ campaignId: enrollCampaignId, chatId: selectedChatId }); }}
                 disabled={!selectedChatId || enrollChatMutation.isPending}

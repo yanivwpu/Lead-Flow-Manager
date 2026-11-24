@@ -550,12 +550,12 @@ function AIBrainContent() {
   const businessProfileFields = (
     <div className="space-y-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        About your business
+        {t("workspaceUi.aboutBusiness")}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="biz-name" className="text-xs font-medium text-muted-foreground">
-            Business name
+            {t("workspaceUi.businessName")}
           </Label>
           <Input
             id="biz-name"
@@ -567,13 +567,13 @@ function AIBrainContent() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
+          <Label className="text-xs font-medium text-muted-foreground">{t("aiBrain.industry")}</Label>
           <Select
             value={knowledge.industry || undefined}
             onValueChange={(value) => setKnowledge((prev) => ({ ...prev, industry: value }))}
           >
             <SelectTrigger className="h-9 text-sm" data-testid="select-industry">
-              <SelectValue placeholder="Select industry" />
+              <SelectValue placeholder={t("workspaceUi.selectIndustry")} />
             </SelectTrigger>
             <SelectContent>
               {INDUSTRY_OPTIONS.map((o) => (
@@ -587,7 +587,7 @@ function AIBrainContent() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="services" className="text-xs font-medium text-muted-foreground">
-          Services or products
+          {t("workspaceUi.services")}
         </Label>
         <Textarea
           id="services"
@@ -595,10 +595,10 @@ function AIBrainContent() {
           rows={2}
           value={knowledge.servicesProducts}
           onChange={(e) => setKnowledge((prev) => ({ ...prev, servicesProducts: e.target.value }))}
-          placeholder="Short summary of what you sell or deliver"
+          placeholder={t("workspaceUi.offerSummary")}
           data-testid="textarea-services-products"
         />
-        <p className="text-xs text-slate-500">Saved as you type.</p>
+        <p className="text-xs text-slate-500">{t("workspaceUi.autoSave")}</p>
       </div>
     </div>
   );
@@ -627,7 +627,7 @@ function AIBrainContent() {
             </div>
             <div className="min-w-0 space-y-2 pt-0.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-600/90">WhachatCRM</p>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.65rem]">AI workspace</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.65rem]">{t("workspaceUi.workspace")}</h1>
               {effectiveHasAIBrain && privatePilot && <AiTestChat/>}
               <div className="max-w-lg text-sm leading-relaxed text-slate-600">
                 <p>
@@ -635,7 +635,7 @@ function AIBrainContent() {
                   suggestions, inbox help, and modes your tier allows.
                 </p>
                 <p className="mt-1.5">
-                  <span className="font-medium text-violet-900">AI Brain</span> is the premium intelligence layer — full
+                  <span className="font-medium text-violet-900">{t("aiBrain.title")}</span> is the premium intelligence layer — full
                   business context for your inbox and automations.
                 </p>
               </div>
@@ -652,7 +652,7 @@ function AIBrainContent() {
           {effectiveHasAIBrain && saveKnowledgeMutation.isPending && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-100/90 bg-white/90 px-3 py-1 text-xs font-medium text-violet-800 shadow-sm">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" aria-hidden />
-              Saving…
+              {t("workspaceUi.saving")}
             </span>
           )}
         </header>
@@ -688,7 +688,7 @@ function AIBrainContent() {
             <CardHeader className="space-y-2 pb-2 pt-6">
               <div className="flex items-center gap-2">
                 <Brain className="h-6 w-6 text-violet-600 drop-shadow-sm" aria-hidden />
-                <CardTitle className="text-lg font-semibold tracking-tight text-violet-950">AI Brain</CardTitle>
+                <CardTitle className="text-lg font-semibold tracking-tight text-violet-950">{t("aiBrain.title")}</CardTitle>
               </div>
               <CardDescription className="text-base leading-relaxed text-slate-600">
                 The premium intelligence layer for your inbox and automations — memory, scoring, Copilot depth, and
@@ -723,7 +723,7 @@ function AIBrainContent() {
                       disabled={isCheckingOut}
                       data-testid="button-ai-brain-primary-cta"
                     >
-                      {isCheckingOut ? "Processing…" : isShopify ? "Choose plan in Shopify" : "Upgrade to Pro"}
+                      {isCheckingOut ? t("testChat.processing") : isShopify ? "Choose plan in Shopify" : "Upgrade to Pro"}
                     </Button>
                     <p className="text-xs text-slate-500">
                       {isShopify
@@ -942,7 +942,7 @@ function AIBrainContent() {
                   onClick={handleAddKeyword}
                   data-testid="add-handoff-keyword"
                 >
-                  Add
+                  {t("common.add")}
                 </Button>
               </div>
             </CardContent>
@@ -950,7 +950,7 @@ function AIBrainContent() {
         ) : (
           <div className="space-y-8">
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">AI Brain</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">{t("aiBrain.title")}</p>
               <h2 className="text-lg font-semibold tracking-tight text-violet-950">Unlock the intelligence layer</h2>
               <p className="max-w-2xl text-sm leading-relaxed text-slate-700">
                 Premium context on top of AI Assist — scoring, Copilot, automations, and handoffs. Your drafts stay saved
@@ -1008,7 +1008,7 @@ function AIBrainContent() {
                   className="flex w-full items-center justify-between text-left p-5 hover:bg-violet-50/40 transition-colors rounded-2xl"
                 >
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Advanced</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">{t("automationUi.advanced")}</p>
                     <p className="text-sm text-slate-600 mt-1">Optional extra guidance for the model</p>
                   </div>
                   <ChevronRight

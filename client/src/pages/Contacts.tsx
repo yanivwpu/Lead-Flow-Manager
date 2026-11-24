@@ -190,6 +190,7 @@ function ContactRowMenu({
   contact: Contact;
   onDelete: (contact: Contact) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -198,7 +199,7 @@ function ContactRowMenu({
           onClick={(e) => e.stopPropagation()}
           className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
           data-testid={`menu-contact-${contact.id}`}
-          aria-label="Contact actions"
+          aria-label={t("crmUi.contactActions")}
         >
           <MoreVertical className="w-4 h-4" />
         </button>
@@ -210,7 +211,7 @@ function ContactRowMenu({
           onSelect={() => onDelete(contact)}
         >
           <Trash2 className="w-4 h-4 mr-2" />
-          Delete Contact
+          {t("inboxUi.deleteContact")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -218,6 +219,7 @@ function ContactRowMenu({
 }
 
 function WebchatIdentityBadge({ contact }: { contact: Contact }) {
+  const { t } = useTranslation();
   if (agentInquiryLabel(contact)) return null;
   if (isIdentifiedFromWebsiteChat(contact)) {
     return (
@@ -225,7 +227,7 @@ function WebchatIdentityBadge({ contact }: { contact: Contact }) {
         className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0 text-[10px] font-medium whitespace-nowrap"
         data-testid={`badge-identified-webchat-${contact.id}`}
       >
-        Website Chat
+        {t("inboxUi.websiteChat")}
       </span>
     );
   }
@@ -235,7 +237,7 @@ function WebchatIdentityBadge({ contact }: { contact: Contact }) {
         className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0 text-[10px] font-medium whitespace-nowrap"
         data-testid={`badge-website-visitor-${contact.id}`}
       >
-        Unidentified
+        {t("crmUi.unidentified")}
       </span>
     );
   }
@@ -797,7 +799,7 @@ export function Contacts() {
                   onClick={() => setSelectedIds(new Set())}
                   data-testid="button-clear-contact-selection"
                 >
-                  Clear
+                  {t("contacts.clearFilters")}
                 </Button>
                 <Button
                   type="button"
@@ -810,7 +812,7 @@ export function Contacts() {
                   data-testid="button-delete-selected-contacts"
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-1" />
-                  Delete selected
+                  {t("crmUi.deleteSelected")}
                 </Button>
               </div>
               {selectedIds.size > CONTACTS_BULK_DELETE_MAX ? (
@@ -1215,7 +1217,7 @@ export function Contacts() {
               <Input
                 value={newContact.name}
                 onChange={(e) => setNewContact((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Contact name"
+                placeholder={t("crmUi.contactName")}
                 data-testid="input-new-contact-name"
               />
             </div>
@@ -1269,11 +1271,11 @@ export function Contacts() {
             {notesLoading && (
               <div className="flex items-center gap-2 text-gray-400 py-8 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Loading notes…</span>
+                <span className="text-sm">{t("crmUi.loadingNotes")}</span>
               </div>
             )}
             {!notesLoading && notesList.length === 0 && (
-              <div className="py-10 text-center text-gray-400 text-sm">No notes for this contact.</div>
+              <div className="py-10 text-center text-gray-400 text-sm">{t("crmUi.noContactNotes")}</div>
             )}
             {!notesLoading && notesList.map((note: any) => (
               <div key={note.id} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
@@ -1303,7 +1305,7 @@ export function Contacts() {
             {snapshotLoading ? (
               <div className="flex items-center gap-2 text-gray-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Generating snapshot…</span>
+                <span className="text-sm">{t("crmUi.generatingSnapshot")}</span>
               </div>
             ) : snapshotError ? (
               <p className="text-sm text-red-500">{snapshotError}</p>
@@ -1335,8 +1337,8 @@ export function Contacts() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {deleteTarget?.mode === "single"
-              ? "This permanently deletes the contact and all conversations and messages. This cannot be undone."
-              : "This permanently deletes these contacts and all related conversations and messages. This cannot be undone."}
+              ? t("contactProfile.deleteWarning")
+              : t("contactProfile.bulkDeleteWarning")}
           </p>
           {deleteExtraWarning ? (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2" data-testid="contacts-delete-extra-warning">
@@ -1350,7 +1352,7 @@ export function Contacts() {
               disabled={deletePending}
               data-testid="button-cancel-delete-contacts"
             >
-              Cancel
+              {t("inboxUi.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -1366,7 +1368,7 @@ export function Contacts() {
               }}
             >
               {deletePending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              {deleteTarget?.mode === "single" ? "Delete Contact" : "Delete selected"}
+              {deleteTarget?.mode === "single" ? t("inboxUi.deleteContact") : t("crmUi.deleteSelected")}
             </Button>
           </DialogFooter>
         </DialogContent>

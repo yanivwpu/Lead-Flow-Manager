@@ -119,6 +119,7 @@ function TaskListItem({
   onClick: (chatId: string) => void;
   onSetReminder?: (chat: Chat) => void;
 }) {
+  const { t } = useTranslation();
   const status = chat.followUpDate ? getTaskStatus(chat.followUpDate) : null;
   const needsReply = hasNeedsReply(chat);
   
@@ -133,7 +134,7 @@ function TaskListItem({
         onClick={(e) => onMarkDone(e, chat.id)}
         disabled={isPending}
         data-testid={`button-mark-done-${chat.id}`}
-        title="Mark as done"
+        title={t("crmUi.markDone")}
       >
         {isPending && pendingId === chat.id ? (
           <div className="h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
@@ -173,7 +174,7 @@ function TaskListItem({
       </div>
 
       {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ml-3 shrink-0"
-        onClick={(event) => { event.stopPropagation(); onSetReminder(chat); }}>Set Reminder</Button>
+        onClick={(event) => { event.stopPropagation(); onSetReminder(chat); }}>{t("inboxUi.setReminder")}</Button>
         : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ml-4" data-testid={`icon-arrow-${chat.id}`} />}
     </div>
   );
@@ -192,6 +193,7 @@ function PipelineCard({
   onDragEnd: () => void;
   isDragging: boolean;
 }) {
+  const { t } = useTranslation();
   const status = getTaskStatus(chat.followUpDate);
   const needsReply = hasNeedsReply(chat);
 
@@ -221,12 +223,12 @@ function PipelineCard({
         )}
         {status === 'overdue' && (
           <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
-            Overdue
+            {t("followups.overdue")}
           </span>
         )}
         {status === 'today' && (
           <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-medium">
-            Today
+            {t("inboxUi.today")}
           </span>
         )}
         {chat.followUpDate && status === 'upcoming' && (
@@ -531,6 +533,7 @@ function TaskCalendarView({
 }
 
 export function FollowUps() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -709,7 +712,7 @@ export function FollowUps() {
   if (isLoading) {
     return (
       <div className="flex-1 h-full bg-white flex items-center justify-center">
-        <div className="text-gray-400">Loading tasks...</div>
+        <div className="text-gray-400">{t("crmUi.loadingTasks")}</div>
       </div>
     );
   }
@@ -719,7 +722,7 @@ export function FollowUps() {
       <div className="p-4 md:p-8 pb-4 border-b border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">Tasks</h1>
+            <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">{t("crmUi.tasks")}</h1>
             <p className="text-sm md:text-base text-gray-500 mt-1">{scheduledFollowUps.length} scheduled follow-up{scheduledFollowUps.length !== 1 ? 's' : ''} · {appointmentTasks.length} appointment{appointmentTasks.length !== 1 ? 's' : ''}</p>
             <p className="text-xs text-gray-400 mt-1">Contact task and deal counts reflect the recent inbox.</p>
           </div>
@@ -736,7 +739,7 @@ export function FollowUps() {
               data-testid="toggle-list-view"
             >
               <List className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              {isMobile ? 'List' : 'List View'}
+              {isMobile ? t("crmUi.list") : t("crmUi.listView")}
             </button>
             <button
               onClick={() => setViewMode('calendar')}
@@ -749,7 +752,7 @@ export function FollowUps() {
               data-testid="toggle-calendar-view"
             >
               <CalendarIcon className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              {isMobile ? 'Calendar' : 'Calendar View'}
+              {isMobile ? t("crmUi.calendar") : t("crmUi.calendarView")}
             </button>
             <button
               onClick={() => setViewMode('pipeline')}
@@ -762,7 +765,7 @@ export function FollowUps() {
               data-testid="toggle-pipeline-view"
             >
               <Kanban className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              {isMobile ? 'Pipeline' : 'Pipeline View'}
+              {isMobile ? t("crmUi.pipeline") : t("crmUi.pipelineView")}
             </button>
           </div>
         </div>
@@ -772,16 +775,16 @@ export function FollowUps() {
         <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
         <Dialog open={!!reminder} onOpenChange={(open) => { if (!open) setReminder(undefined); }}>
           <DialogContent aria-describedby={undefined}>
-            <DialogTitle>Set Reminder</DialogTitle>
+            <DialogTitle>{t("inboxUi.setReminder")}</DialogTitle>
             <form className="space-y-4" onSubmit={(event) => {
               event.preventDefault();
               const date = new Date(String(new FormData(event.currentTarget).get('reminderAt')));
               if (reminder && Number.isFinite(date.getTime())) updateFollowUpDateMutation.mutate({ chatId: reminder.id, newDate: date, title: reminder.reviewRecommended });
             }}>
-              <label className="grid gap-1 text-sm">Date and time
+              <label className="grid gap-1 text-sm">{t("crmUi.dateTime")}
                 <input name="reminderAt" type="datetime-local" required className="rounded-md border border-gray-300 p-2" />
               </label>
-              <Button type="submit" disabled={updateFollowUpDateMutation.isPending}>Save Reminder</Button>
+              <Button type="submit" disabled={updateFollowUpDateMutation.isPending}>{t("crmUi.saveReminder")}</Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -806,7 +809,7 @@ export function FollowUps() {
               className="text-sm text-brand-green hover:underline"
               data-testid="button-clear-filter"
             >
-              Clear filter
+              {t("crmUi.clearFilter")}
             </button>
           </div>
         )}
@@ -825,7 +828,7 @@ export function FollowUps() {
             {savedTasks.length > 0 && (
               <section className="min-w-0 space-y-3" aria-labelledby="follow-up-tasks-heading">
                 <h2 id="follow-up-tasks-heading" className="text-sm font-semibold text-gray-700 uppercase tracking-wider" data-testid="section-all-tasks">
-                  {kpiFilter ? 'Matching Tasks' : 'Follow-up Tasks'}
+                  {kpiFilter ? t("crmUi.matchingTasks") : t("crmUi.followUpTasks")}
                 </h2>
                 {savedTasks.map(chat => (
                   <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
@@ -840,7 +843,7 @@ export function FollowUps() {
                 <div className="flex items-center gap-2 mb-4">
                   <Sparkles className="h-4 w-4 text-purple-500" />
                   <h2 id="recommended-tasks-heading" tabIndex={-1} className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
-                    Recommended Tasks
+                    {t("crmUi.recommendedTasks")}
                   </h2>
                 </div>
                 <p className="text-xs text-gray-500 mb-3" title="Rule-based priority using due dates, urgency, customer inquiries, and sales qualification.">
@@ -885,7 +888,7 @@ export function FollowUps() {
             {followUps.length === 0 && (
               <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                 <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">No matching tasks</p>
+                <p className="text-gray-500 font-medium">{t("crmUi.noMatchingTasks")}</p>
                 <p className="text-sm text-gray-400 mt-1">No actionable contact tasks in the recent inbox for this view.</p>
                 <Button className="mt-4 bg-brand-green hover:bg-emerald-700" data-testid="button-view-chats"
                   onClick={() => setLocation('/app/inbox')}>

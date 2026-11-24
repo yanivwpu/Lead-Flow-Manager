@@ -1,3 +1,4 @@
+import en from "../client/src/locales/en.json";
 /**
  * Contact hard-delete: ownership, orphan cleanup, bulk fail-closed, Contacts UI.
  * Run: npx tsx tests/contact-deletion.test.ts
@@ -101,8 +102,10 @@ run("orphan cleanup lives in the shared delete service", () => {
 
 run("Contacts UI: row menu, checkboxes, select-all filtered, bulk bar, hard-delete copy", () => {
   const page = readFileSync(join(ROOT, "client/src/pages/Contacts.tsx"), "utf8");
-  assert.ok(page.includes("Delete Contact"));
-  assert.ok(page.includes("Delete selected"));
+  assert.ok(page.includes('t("inboxUi.deleteContact")'));
+  assert.equal(en.inboxUi.deleteContact, "Delete Contact");
+  assert.ok(page.includes('t("crmUi.deleteSelected")'));
+  assert.equal(en.crmUi.deleteSelected, "Delete selected");
   assert.ok(page.includes("checkbox-select-all-contacts"));
   assert.ok(page.includes("checkbox-contact-${contact.id}"));
   assert.ok(page.includes("contacts-bulk-bar"));
@@ -110,8 +113,10 @@ run("Contacts UI: row menu, checkboxes, select-all filtered, bulk bar, hard-dele
   assert.ok(page.includes("selectedIds.size"));
   assert.ok(page.includes("toggleSelectAllFiltered"));
   assert.ok(page.includes("allFilteredSelected"));
-  assert.ok(page.includes("This permanently deletes the contact and all conversations and messages. This cannot be undone."));
-  assert.ok(page.includes("This permanently deletes these contacts and all related conversations and messages. This cannot be undone."));
+  assert.ok(page.includes('t("contactProfile.deleteWarning")'));
+  assert.equal(en.contactProfile.deleteWarning, "This permanently deletes the contact and all conversations and messages. This cannot be undone.");
+  assert.ok(page.includes('t("contactProfile.bulkDeleteWarning")'));
+  assert.equal(en.contactProfile.bulkDeleteWarning, "This permanently deletes these contacts and all related conversations and messages. This cannot be undone.");
   assert.ok(page.includes("/api/contacts/bulk-delete"));
   assert.ok(page.includes("method: \"DELETE\""));
   assert.ok(page.includes("invalidateQueriesAfterContactDeletion"));

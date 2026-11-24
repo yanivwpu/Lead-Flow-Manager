@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Helmet } from "react-helmet";
@@ -82,11 +83,12 @@ function NodeLocaleVariantsEditor({
   onChange: (localized: NonNullable<typeof localized>) => void;
   contentPlaceholder?: { es: string; he: string };
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Optional translations</Label>
+      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("automationUi.translations")}</Label>
       <p className="text-[11px] text-gray-400">
-        Spanish and Hebrew variants are optional. English/default copy is the fallback. Nothing is machine-translated unless you write it.
+        {t("chatbotEditor.variantsHelp")}
       </p>
       {(["es", "he"] as const).map((loc) => {
         const variant = localized?.[loc] || {};
@@ -328,6 +330,7 @@ function DelayStepEditor({
   delayUnit: "minutes" | "hours" | "days" | undefined;
   updateStep: (id: string, u: Partial<ChatbotNode["data"]>) => void;
 }) {
+  const { t } = useTranslation();
   const unit: "minutes" | "hours" | "days" = delayUnit || "minutes";
   const committed = delayMinutes ?? 5;
 
@@ -368,7 +371,7 @@ function DelayStepEditor({
 
   return (
     <div>
-      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Delay duration</Label>
+      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("automationUi.delay")}</Label>
       <div className="flex items-center gap-2">
         <Input
           type="text"
@@ -409,14 +412,14 @@ function DelayStepEditor({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="minutes">Minutes</SelectItem>
-            <SelectItem value="hours">Hours</SelectItem>
-            <SelectItem value="days">Days</SelectItem>
+            <SelectItem value="minutes">{t("automationUi.minutes")}</SelectItem>
+            <SelectItem value="hours">{t("automationUi.hours")}</SelectItem>
+            <SelectItem value="days">{t("automationUi.days")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
       <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-        The flow will pause and resume automatically — even after a server restart. Supports minutes, hours, or days.
+        {t("automationUi.autoResume")}
       </p>
     </div>
   );
@@ -456,6 +459,7 @@ function FileUploadButton({ onUploaded, accept, nodeId, label = "Upload" }: {
 }
 
 function AddStepPicker({ onAdd, hint }: { onAdd: (type: ChatbotNode["type"]) => void; hint?: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -469,7 +473,7 @@ function AddStepPicker({ onAdd, hint }: { onAdd: (type: ChatbotNode["type"]) => 
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-60 p-1.5 shadow-lg border border-gray-100" align="center" sideOffset={6}>
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 pt-1 pb-1.5">Choose step type</div>
+        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 pt-1 pb-1.5">{t("automationUi.stepType")}</div>
         {STEP_TYPES.map((st) => {
           const Icon = st.icon;
           return (
@@ -495,6 +499,7 @@ function AddStepPicker({ onAdd, hint }: { onAdd: (type: ChatbotNode["type"]) => 
 /* ─── Main component ─────────────────────────────────────────────────── */
 
 export function ChatbotBuilder() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: subscription } = useSubscription();
@@ -765,7 +770,7 @@ export function ChatbotBuilder() {
             <div className="mx-auto h-16 w-16 bg-gradient-to-br from-brand-green to-brand-teal rounded-2xl flex items-center justify-center mb-6">
               <Zap className="h-8 w-8 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Flow Builder</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("automationUi.flowBuilder")}</h2>
             <p className="text-gray-500 mb-6">Design automated conversation flows to qualify leads, answer questions, and route conversations — 24/7. Available on Pro.</p>
             <InAppProUpgradeButton
               canStartInternalTrial={canStartInternalTrial}
@@ -815,7 +820,7 @@ export function ChatbotBuilder() {
             <Zap className="h-3.5 w-3.5 text-white" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-semibold text-gray-400">Flow Builder</span>
+            <span className="text-[13px] font-semibold text-gray-400">{t("automationUi.flowBuilder")}</span>
             {selectedFlow && (
               <>
                 <span className="text-gray-300 text-sm">/</span>
@@ -831,7 +836,7 @@ export function ChatbotBuilder() {
           </div>
           {selectedFlow && unsavedChanges && (
             <span className="hidden md:inline text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md tracking-wide">
-              UNSAVED
+              {t("automationUi.unsaved")}
             </span>
           )}
         </div>
@@ -854,7 +859,7 @@ export function ChatbotBuilder() {
               data-testid="button-new-flow-header"
             >
               <Plus className="h-3.5 w-3.5" />
-              + New Flow
+              {t("automationUi.createFlow")}
             </Button>
 
             {/* Status toggle — all breakpoints (dropdown no longer carries mobile toggle) */}
@@ -908,7 +913,7 @@ export function ChatbotBuilder() {
               data-testid="button-toggle-status"
             >
               <div className={cn("h-1.5 w-1.5 rounded-full", selectedFlow.isActive ? "bg-emerald-500" : "bg-gray-400")} />
-              {selectedFlow.isActive ? "Active" : "Draft"}
+              {selectedFlow.isActive ? t("automations.active") : t("automationUi.draft")}
             </button>
 
             {/* How to Test — hidden on mobile */}
@@ -916,7 +921,7 @@ export function ChatbotBuilder() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="hidden md:flex h-8 text-xs font-medium gap-1.5 text-gray-600" data-testid="button-test-flow">
                   <Info className="h-3 w-3" />
-                  How to Test
+                  {t("automationUi.howToTest")}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-72 p-4" side="bottom" align="end">
@@ -941,7 +946,7 @@ export function ChatbotBuilder() {
             >
               {updateFlowMutation.isPending
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <><Save className="h-3.5 w-3.5" /><span className="hidden md:inline">Save</span></>
+                : <><Save className="h-3.5 w-3.5" /><span className="hidden md:inline">{t("common.save")}</span></>
               }
             </Button>
 
@@ -971,7 +976,7 @@ export function ChatbotBuilder() {
                   data-testid="menu-delete-flow"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete
+                  {t("common.delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -984,7 +989,7 @@ export function ChatbotBuilder() {
             data-testid="button-new-flow-header"
           >
             <Plus className="h-3.5 w-3.5" />
-            + New Flow
+            {t("automationUi.createFlow")}
           </Button>
         )}
       </header>
@@ -998,7 +1003,7 @@ export function ChatbotBuilder() {
           {/* Sidebar header */}
           <div className="px-3.5 pt-4 pb-3 border-b border-gray-100">
             <div className="mb-3">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Flows</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t("chatbotEditor.yourFlows")}</span>
             </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-300 pointer-events-none" />
@@ -1017,9 +1022,9 @@ export function ChatbotBuilder() {
             {filteredFlows.length === 0 && !isCreating && (
               <div className="text-center py-10 px-4">
                 <Zap className="h-7 w-7 mx-auto text-gray-200 mb-2.5" />
-                <p className="text-xs font-medium text-gray-400 mb-0.5">No flows yet</p>
+                <p className="text-xs font-medium text-gray-400 mb-0.5">{t("chatbotEditor.noFlows")}</p>
                 <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Use <span className="font-semibold text-gray-600">+ New Flow</span> at the top to create one.
+                  Use <span className="font-semibold text-gray-600">{t("automationUi.createFlow")}</span> at the top to create one.
                 </p>
               </div>
             )}
@@ -1054,7 +1059,7 @@ export function ChatbotBuilder() {
                         <span className="text-gray-200">·</span>
                         <span className="text-[10px] text-gray-400">{flow.executionCount || 0} runs</span>
                         {flow.isActive && (
-                          <span className="text-[10px] font-semibold text-emerald-600">Active</span>
+                          <span className="text-[10px] font-semibold text-emerald-600">{t("automations.active")}</span>
                         )}
                       </div>
                     </div>
@@ -1080,12 +1085,12 @@ export function ChatbotBuilder() {
                   <div className="h-10 w-10 bg-gradient-to-br from-brand-green to-brand-teal rounded-xl flex items-center justify-center mb-4">
                     <Zap className="h-5 w-5 text-white" />
                   </div>
-                  <h2 className="text-base font-bold text-gray-900">Create a new flow</h2>
+                  <h2 className="text-base font-bold text-gray-900">{t("chatbotEditor.createNew")}</h2>
                   <p className="text-xs text-gray-400 mt-0.5">Give it a name to get started. You can always rename it later.</p>
                 </div>
                 <div className="p-6 space-y-4">
                   <div>
-                    <Label className="text-xs font-semibold text-gray-600 mb-1.5 block">Flow name</Label>
+                    <Label className="text-xs font-semibold text-gray-600 mb-1.5 block">{t("chatbotEditor.flowName")}</Label>
                     <Input
                       value={newFlowName}
                       onChange={(e) => setNewFlowName(e.target.value)}
@@ -1116,10 +1121,10 @@ export function ChatbotBuilder() {
                       data-testid="button-confirm-create-flow"
                     >
                       {createFlowMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
-                      Create Flow
+                      {t("chatbotEditor.create")}
                     </Button>
                     <Button variant="outline" className="text-sm" onClick={() => setIsCreating(false)} data-testid="button-cancel-create">
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </div>
                 </div>
@@ -1133,12 +1138,12 @@ export function ChatbotBuilder() {
               <div className="h-14 w-14 bg-white border border-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
                 <Zap className="h-6 w-6 text-gray-300" />
               </div>
-              <h3 className="text-sm font-bold text-gray-700 mb-1">Select a flow or create one</h3>
+              <h3 className="text-sm font-bold text-gray-700 mb-1">{t("chatbotEditor.selectFlow")}</h3>
               <p className="text-xs text-gray-400 mb-2 max-w-xs">
                 Design automated conversation flows to qualify leads, answer questions, and route contacts.
               </p>
               <p className="text-xs text-gray-500">
-                Tap <span className="font-semibold text-gray-700">+ New Flow</span> above to get started.
+                Tap <span className="font-semibold text-gray-700">{t("automationUi.createFlow")}</span> above to get started.
               </p>
             </div>
           )}
@@ -1164,9 +1169,9 @@ export function ChatbotBuilder() {
                   {/* Start on new conversation */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="text-xs font-semibold text-gray-700">Start on new conversation</div>
+                      <div className="text-xs font-semibold text-gray-700">{t("chatbotEditor.startOnNew")}</div>
                       <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">
-                        Runs when a contact starts a new conversation
+                        {t("chatbotEditor.startOnNewHint")}
                       </div>
                     </div>
                     <Switch
@@ -1184,7 +1189,7 @@ export function ChatbotBuilder() {
 
                   {/* Keywords */}
                   <div>
-                    <div className="text-xs font-semibold text-gray-700 mb-2">Keyword triggers</div>
+                    <div className="text-xs font-semibold text-gray-700 mb-2">{t("chatbotEditor.keywordTriggers")}</div>
                     {selectedFlow.triggerKeywords.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {selectedFlow.triggerKeywords.map((kw) => (
@@ -1216,7 +1221,7 @@ export function ChatbotBuilder() {
                             setKeywordInput("");
                           }
                         }}
-                        placeholder="Type keyword and press Enter…"
+                        placeholder={t("chatbotEditor.keywordPlaceholder")}
                         className="flex-1 px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green/40 transition-all"
                         data-testid="input-trigger-keywords"
                       />
@@ -1226,7 +1231,7 @@ export function ChatbotBuilder() {
                         className="px-3 py-2 text-xs font-semibold bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
                         data-testid="button-add-keyword"
                       >
-                        Add
+                        {t("common.add")}
                       </button>
                     </div>
                   </div>
@@ -1284,7 +1289,7 @@ export function ChatbotBuilder() {
                     if (hasKw && newChat) return (
                       <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-700" data-testid="trigger-summary-both">
                         <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                        <span>This flow runs when a new conversation starts <strong>or</strong> when a message matches a keyword — whichever comes first.</span>
+                        <span>This flow runs when a new conversation starts <strong>{t("common.or")}</strong> when a message matches a keyword — whichever comes first.</span>
                       </div>
                     );
                     if (newChat) return (
@@ -1635,7 +1640,7 @@ export function ChatbotBuilder() {
                                       <SelectValue placeholder="Next step (optional)" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="__none__">End flow</SelectItem>
+                                      <SelectItem value="__none__">{t("chatbotEditor.endFlow")}</SelectItem>
                                       {otherNodes.map(n => <SelectItem key={n.id} value={n.id}>{n.data.label || n.id}</SelectItem>)}
                                     </SelectContent>
                                   </Select>

@@ -6,6 +6,15 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { I18nextProvider } from "react-i18next";
+import { createInstance } from "i18next";
+import en from "../client/src/locales/en.json";
+import es from "../client/src/locales/es.json";
+import he from "../client/src/locales/he.json";
+
+const resources = { en: { translation: en }, es: { translation: es }, he: { translation: he } };
+const i18n = createInstance();
+await i18n.init({ lng: "en", resources, interpolation: { escapeValue: false } });
 
 const globals = globalThis as typeof globalThis & { contactDetailsFixture: any };
 mkdirSync("work", { recursive: true });
@@ -19,7 +28,7 @@ await build({ entryPoints: ["client/src/pages/ContactDetails.tsx"], bundle: true
 } }] });
 const { ContactDetails } = await import(pathToFileURL(bundle).href);
 const contact = { id: "contact", name: "Jane Doe", email: "jane@example.com", phone: "15551234567", source: "whatsapp", primaryChannel: "whatsapp", tag: "Hot", pipelineStage: "Lead", createdAt: "2026-10-01", updatedAt: "2026-10-02" };
-const render = (details: any) => { globals.contactDetailsFixture = { details, notes: [{ id: "n", content: "Review purchase", createdByName: "Team", createdAt: "2026-10-03" }] }; return renderToStaticMarkup(React.createElement(ContactDetails)); };
+const render = (details: any) => { globals.contactDetailsFixture = { details, notes: [{ id: "n", content: "Review purchase", createdByName: "Team", createdAt: "2026-10-03" }] }; return renderToStaticMarkup(React.createElement(I18nextProvider, { i18n, children: React.createElement(ContactDetails) })); };
 
 test("non-Shopify customer renders CRM profile, notes, existing conversation link and filtered return", () => {
   const html = render({ contact, conversations: [{ id: "thread", channel: "whatsapp" }], shopify: false, orders: [], activity: [] });
@@ -48,4 +57,22 @@ test("the API-resolved anonymous visitor label is preserved", () => {
   const html = render({ contact: { ...contact, name: "Agent Page Visitor", email: null, phone: null,
     source: "webchat", primaryChannel: "webchat" }, conversations: [], shopify: false, orders: [], activity: [] });
   assert.match(html, /<h1[^>]*>Agent Page Visitor<\/h1>/);
+});
+
+test("the contact profile changes interface copy without changing contact data or navigation", async () => {
+  for (const [language, { translation }] of Object.entries(resources)) {
+    await i18n.changeLanguage(language);
+    const html = render({
+      contact,
+      conversations: [{ id: "thread", channel: "whatsapp" }],
+      shopify: false,
+      orders: [],
+      activity: [],
+    });
+    assert.ok(html.includes(translation.crmUi.contactProfile));
+    assert.ok(html.includes(translation.crmUi.openConversation));
+    assert.ok(html.includes("jane@example.com"));
+    assert.ok(html.includes("Review purchase"));
+    assert.ok(html.includes("/app/inbox/contact?conversation=thread"));
+  }
 });

@@ -311,7 +311,7 @@ export function OffersPaymentLinksSettings({
           </div>
           <div className="min-w-0 space-y-1">
             <h2 className="text-base sm:text-lg font-bold text-gray-900">
-              Offers & Payment Links
+              {t("manualCatalog.title")}
             </h2>
             <p className="text-sm leading-relaxed text-gray-600">
               Structured packages AI can quote accurately — prices, benefits,
@@ -342,7 +342,7 @@ export function OffersPaymentLinksSettings({
             data-testid="button-add-offer"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add offer
+            {t("manualCatalog.add")}
           </Button>
         )}
       </div>
@@ -397,7 +397,7 @@ export function OffersPaymentLinksSettings({
       {offersQuery.isLoading ? (
         <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading offers…
+          {t("manualCatalog.loading")}
         </div>
       ) : offersQuery.isError ? null : offers.length === 0 && !showEditor ? (
         <p className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-4 text-sm text-gray-600">
@@ -406,7 +406,7 @@ export function OffersPaymentLinksSettings({
                 "salesCatalog.empty",
                 "No matching items. Change your filters or add an offer.",
               )
-            : "No offers yet. Add packages, retainers, or listing products with an HTTPS checkout link (Stripe Payment Links, PayPal, and other providers are fine)."}
+            : t("manualCatalog.empty")}
         </p>
       ) : (
         <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
@@ -456,7 +456,7 @@ export function OffersPaymentLinksSettings({
                       className="h-8 w-8 p-0"
                       disabled={index === 0 || reorderMutation.isPending}
                       onClick={() => moveOffer(offer.id, -1)}
-                      aria-label="Move up"
+                      aria-label={t("workflowEditor.moveUp")}
                     >
                       <ArrowUp className="h-3.5 w-3.5" />
                     </Button>
@@ -469,7 +469,7 @@ export function OffersPaymentLinksSettings({
                         index === offers.length - 1 || reorderMutation.isPending
                       }
                       onClick={() => moveOffer(offer.id, 1)}
-                      aria-label="Move down"
+                      aria-label={t("workflowEditor.moveDown")}
                     >
                       <ArrowDown className="h-3.5 w-3.5" />
                     </Button>
@@ -488,7 +488,7 @@ export function OffersPaymentLinksSettings({
                         setForm(formFromOffer(offer));
                       }}
                     >
-                      Edit
+                      {t("common.edit")}
                     </Button>
                     <Button
                       type="button"
@@ -504,7 +504,7 @@ export function OffersPaymentLinksSettings({
                           archiveMutation.mutate(offer.id);
                         }
                       }}
-                      aria-label="Archive offer"
+                      aria-label={t("manualCatalog.archive")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -542,11 +542,11 @@ export function OffersPaymentLinksSettings({
       {showEditor && (
         <div className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
           <p className="text-sm font-semibold text-gray-900">
-            {creating ? "New offer" : "Edit offer"}
+            {creating ? t("manualCatalog.newOffer") : t("manualCatalog.editOffer")}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer-display-name">Display name</Label>
+              <Label htmlFor="offer-display-name">{t("offerUi.displayName")}</Label>
               <Input
                 id="offer-display-name"
                 value={form.displayName}
@@ -556,7 +556,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="offer-internal-name">Internal name</Label>
+              <Label htmlFor="offer-internal-name">{t("offerUi.internalName")}</Label>
               <Input
                 id="offer-internal-name"
                 value={form.internalName}
@@ -565,7 +565,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="offer-category">Category</Label>
+              <Label htmlFor="offer-category">{t("offerUi.category")}</Label>
               <Input
                 id="offer-category"
                 value={form.category}
@@ -574,7 +574,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="offer-price">Price display</Label>
+              <Label htmlFor="offer-price">{t("offerUi.priceDisplay")}</Label>
               <Input
                 id="offer-price"
                 value={form.priceDisplay}
@@ -584,7 +584,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Billing cadence</Label>
+              <Label>{t("offerUi.billingCadence")}</Label>
               <Select
                 value={form.billingCadence}
                 onValueChange={(v) => setForm((f) => ({ ...f, billingCadence: v }))}
@@ -593,17 +593,17 @@ export function OffersPaymentLinksSettings({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="once">One-time</SelectItem>
-                  <SelectItem value="week">Weekly</SelectItem>
-                  <SelectItem value="month">Monthly</SelectItem>
-                  <SelectItem value="quarter">Quarterly</SelectItem>
-                  <SelectItem value="year">Yearly</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="once">{t("offerUi.oneTime")}</SelectItem>
+                  <SelectItem value="week">{t("offerUi.weekly")}</SelectItem>
+                  <SelectItem value="month">{t("offerUi.monthly")}</SelectItem>
+                  <SelectItem value="quarter">{t("offerUi.quarterly")}</SelectItem>
+                  <SelectItem value="year">{t("offerUi.yearly")}</SelectItem>
+                  <SelectItem value="custom">{t("offerUi.custom")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer-checkout">Checkout URL (HTTPS)</Label>
+              <Label htmlFor="offer-checkout">{t("offerUi.checkoutUrl")}</Label>
               <Input
                 id="offer-checkout"
                 value={form.checkoutUrl}
@@ -616,7 +616,7 @@ export function OffersPaymentLinksSettings({
               </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer-followup">Follow-up / onboarding URL (optional)</Label>
+              <Label htmlFor="offer-followup">{t("offerUi.followupUrl")}</Label>
               <Input
                 id="offer-followup"
                 value={form.followUpUrl}
@@ -625,7 +625,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer-benefits">Benefits (one per line)</Label>
+              <Label htmlFor="offer-benefits">{t("offerUi.benefits")}</Label>
               <Textarea
                 id="offer-benefits"
                 value={form.benefitsText}
@@ -635,7 +635,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer-description">Description (optional)</Label>
+              <Label htmlFor="offer-description">{t("offerUi.description")}</Label>
               <Textarea
                 id="offer-description"
                 value={form.description}
@@ -644,7 +644,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer-guidance">AI guidance (optional)</Label>
+              <Label htmlFor="offer-guidance">{t("offerUi.guidance")}</Label>
               <Textarea
                 id="offer-guidance"
                 value={form.aiGuidance}
@@ -654,7 +654,7 @@ export function OffersPaymentLinksSettings({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Availability</Label>
+              <Label>{t("offerUi.availability")}</Label>
               <Select
                 value={form.availability}
                 onValueChange={(v) => setForm((f) => ({ ...f, availability: v }))}
@@ -663,17 +663,17 @@ export function OffersPaymentLinksSettings({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="available">Available</SelectItem>
-                  <SelectItem value="limited">Limited</SelectItem>
-                  <SelectItem value="waitlist">Waitlist</SelectItem>
-                  <SelectItem value="unavailable">Unavailable</SelectItem>
+                  <SelectItem value="available">{t("offerUi.available")}</SelectItem>
+                  <SelectItem value="limited">{t("offerUi.limited")}</SelectItem>
+                  <SelectItem value="waitlist">{t("offerUi.waitlist")}</SelectItem>
+                  <SelectItem value="unavailable">{t("offerUi.unavailable")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
               <div>
-                <p className="text-sm font-medium text-gray-900">Active</p>
-                <p className="text-[11px] text-gray-500">Inactive offers are hidden from AI.</p>
+                <p className="text-sm font-medium text-gray-900">{t("offerUi.active")}</p>
+                <p className="text-[11px] text-gray-500">{t("offerUi.inactiveHint")}</p>
               </div>
               <Switch
                 checked={form.active}
@@ -692,7 +692,7 @@ export function OffersPaymentLinksSettings({
               {saveMutation.isPending ? (
                 <>
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  Saving…
+                  {t("workspaceUi.saving")}
                 </>
               ) : (
                 "Save offer"
@@ -707,7 +707,7 @@ export function OffersPaymentLinksSettings({
                 setForm(EMPTY_FORM);
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>

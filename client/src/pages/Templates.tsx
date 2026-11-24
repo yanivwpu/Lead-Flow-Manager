@@ -171,6 +171,7 @@ const RE_ENGAGEMENT_CHANNEL_BADGE: Record<
 };
 
 function ReEngagementStatusChip({ chat }: { chat: RetargetableChat }) {
+  const { t } = useTranslation();
   const ch = (chat.channel || "").toLowerCase();
   if (ch === "facebook" || ch === "instagram") {
     return (
@@ -178,14 +179,14 @@ function ReEngagementStatusChip({ chat }: { chat: RetargetableChat }) {
         variant="secondary"
         className="text-[10px] font-normal shrink-0 border-gray-200 bg-slate-50 text-slate-700"
       >
-        Inbox
+        {t("inboxUi.inbox")}
       </Badge>
     );
   }
   if (chat.reEngagementState === "failed" || chat.lastTemplateStatus === "failed") {
     return (
       <Badge variant="destructive" className="text-[10px] font-normal shrink-0">
-        Failed to deliver
+        {t("campaignUi.failedDelivery")}
       </Badge>
     );
   }
@@ -195,20 +196,20 @@ function ReEngagementStatusChip({ chat }: { chat: RetargetableChat }) {
         variant="secondary"
         className="text-[10px] font-normal shrink-0 border-amber-200/90 bg-amber-50/90 text-amber-950"
       >
-        Awaiting reply
+        {t("campaignUi.awaitingReply")}
       </Badge>
     );
   }
   if (chat.reEngagementState === "blocked") {
     return (
       <Badge variant="secondary" className="text-[10px] font-normal shrink-0">
-        Blocked
+        {t("campaignUi.blocked")}
       </Badge>
     );
   }
   return (
     <Badge variant="outline" className="text-[10px] font-normal shrink-0 text-gray-600 border-gray-200">
-      Outside window
+      {t("campaignUi.outsideWindow")}
     </Badge>
   );
 }
@@ -354,6 +355,7 @@ function ReEngagementTemplatePicker({
   lastFailedTemplateName?: string | null;
   onPickTemplate: (template: MessageTemplate, chat: RetargetableChat) => void;
 }) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const pickInFlightRef = useRef(false);
   const triggerLabel = recoveryMode ? "Try another template" : placeholder;
@@ -387,9 +389,9 @@ function ReEngagementTemplatePicker({
       >
         {approvedTemplates.length === 0 ? (
           <div className="px-2 py-3 text-xs text-gray-500 text-center leading-snug">
-            No approved WhatsApp templates found.
+            {t("campaignUi.noApprovedTemplates")}
             <br />
-            Sync templates from your WhatsApp provider, then try again.
+            {t("campaignUi.syncTemplatesHint")}
           </div>
         ) : (
           approvedTemplates.map((template) => {
@@ -1341,9 +1343,9 @@ export function Templates() {
       <div className="px-4 md:px-6 py-2 md:py-4 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between gap-3 max-w-5xl mx-auto">
           <div className="min-w-0 space-y-0.5">
-            <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">Message Templates</h1>
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">{t("templateLibrary.title")}</h1>
             <p className="text-gray-500 text-xs md:text-sm leading-snug">
-              Manage WhatsApp-approved templates and send them to a contact when Meta requires a template.
+              {t("templateLibrary.description")}
             </p>
           </div>
           <Button 
@@ -1354,7 +1356,7 @@ export function Templates() {
             data-testid="button-sync-templates"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
-            Sync Templates
+            {t("templateLibrary.sync")}
           </Button>
         </div>
       </div>
@@ -1365,7 +1367,7 @@ export function Templates() {
           <TabsList className={`grid w-full ${hideGrowthEngine ? "grid-cols-3" : "grid-cols-4"} h-auto gap-0.5 p-0.5 sticky top-0 z-20 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm`}>
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
-              <span>Presets</span>
+              <span>{t("templateLibrary.presets")}</span>
             </TabsTrigger>
             <TabsTrigger value="templates" data-testid="tab-templates" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
@@ -1382,7 +1384,7 @@ export function Templates() {
             <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight relative">
               <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
               <span className="text-center leading-tight">
-                <span className="hidden sm:inline">Growth Engines</span>
+                <span className="hidden sm:inline">{t("nav.growthEngines")}</span>
                 <span className="sm:hidden">Growth</span>
               </span>
               <Badge variant="secondary" className="absolute -top-0.5 -right-0.5 text-[9px] px-1 py-0 h-4 bg-purple-100 text-purple-700 border-0 hidden sm:flex">NEW</Badge>
@@ -1398,7 +1400,7 @@ export function Templates() {
                     <Lock className="h-8 w-8 text-gray-400" />
                   </div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Campaign automation is available on Pro
+                    {t("campaignUi.availableOnPro")}
                   </h2>
                   <p className="text-gray-500 max-w-md mb-6">
                     Basic WhatsApp templates stay available on Free for 1:1 sends outside the 24-hour
@@ -1418,11 +1420,11 @@ export function Templates() {
               <CardHeader className="pb-2 pt-4 md:pt-6 px-4 md:px-6">
                 <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                   <Sparkles className="h-5 w-5 text-purple-500 shrink-0" />
-                  Preset Automation Templates
+                  {t("templateLibrary.presetAutomations")}
                 </CardTitle>
                 <CardDescription className="text-sm">
                   <span className="block">
-                    These gallery templates are shared starting points. <strong>Use This Template</strong> creates
+                    These gallery templates are shared starting points. <strong>{t("templates.useTemplate")}</strong> creates
                     a draft campaign and opens it so you can edit and activate. Your changes never affect the originals.
                   </span>
                 </CardDescription>
@@ -1464,7 +1466,7 @@ export function Templates() {
                     className="bg-brand-green hover:bg-brand-green/90"
                   >
                     <RefreshCw className={`h-4 w-4 mr-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
-                    Sync Templates
+                    {t("templateLibrary.sync")}
                   </Button>
                 </CardContent>
               </Card>
@@ -1740,7 +1742,7 @@ export function Templates() {
                                     ) : null}
                                     {chat.lastTemplateSentAt ? (
                                       <p className="text-gray-500">
-                                        Sent{" "}
+                                        {t("inboxUi.sent")}{" "}
                                         {formatRegionalRelativeTime(new Date(chat.lastTemplateSentAt), i18n.language)}
                                       </p>
                                     ) : null}
@@ -1748,7 +1750,7 @@ export function Templates() {
                                 )}
                                 {isWhatsApp && failedWa && (
                                   <div className="text-xs text-red-700 space-y-1 pt-0.5 border-l-2 border-red-200 pl-2">
-                                    <p className="font-medium text-red-900">Failed to deliver</p>
+                                    <p className="font-medium text-red-900">{t("campaignUi.failedDelivery")}</p>
                                     {chat.lastDeliveryErrorCode ? (
                                       <p className="text-red-800">
                                         Error code{" "}
@@ -1872,7 +1874,7 @@ export function Templates() {
                                   chat={chat}
                                   approvedTemplates={approvedReEngagementTemplates}
                                   triggerClass="w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm"
-                                  placeholder="Send WhatsApp template"
+                                  placeholder={t("inboxUi.sendWhatsappTemplate")}
                                   testId={`select-template-${chat.id}`}
                                   buttonVariant="default"
                                   onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
@@ -2092,7 +2094,7 @@ export function Templates() {
                                     setVariableValues((prev) => ({ ...prev, [ph]: sug.name }))
                                   }
                                 >
-                                  Name
+                                  {t("inboxUi.name")}
                                 </Button>
                                 <Button
                                   type="button"
@@ -2103,7 +2105,7 @@ export function Templates() {
                                     setVariableValues((prev) => ({ ...prev, [ph]: sug.phone }))
                                   }
                                 >
-                                  Phone
+                                  {t("inboxUi.phone")}
                                 </Button>
                                 <Button
                                   type="button"
@@ -2114,7 +2116,7 @@ export function Templates() {
                                     setVariableValues((prev) => ({ ...prev, [ph]: sug.email }))
                                   }
                                 >
-                                  Email
+                                  {t("inboxUi.emailChannel")}
                                 </Button>
                                 <Button
                                   type="button"
@@ -2125,7 +2127,7 @@ export function Templates() {
                                     setVariableValues((prev) => ({ ...prev, [ph]: sug.stage }))
                                   }
                                 >
-                                  Stage
+                                  {t("inboxUi.stage")}
                                 </Button>
                                 <Button
                                   type="button"
@@ -2235,7 +2237,7 @@ export function Templates() {
                           }}
                           data-testid="button-change-template-recipient"
                         >
-                          Change
+                          {t("automationUi.change")}
                         </Button>
                       </div>
                     ) : null}
@@ -2316,7 +2318,7 @@ export function Templates() {
                   </Alert>
                 ) : null}
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setSendDialogOpen(false)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setSendDialogOpen(false)}>{t("inboxUi.cancel")}</Button>
                   <Button 
                     onClick={() => {
                       if (!selectedChat) return;
@@ -2351,7 +2353,7 @@ export function Templates() {
                     className="bg-brand-green hover:bg-brand-green/90"
                     data-testid="button-send-template"
                   >
-                    {sendTemplateMutation.isPending ? "Sending..." : "Send Template"}
+                    {sendTemplateMutation.isPending ? t("templateLibrary.sending") : t("inboxUi.sendTemplate")}
                   </Button>
                 </DialogFooter>
               </>
@@ -2440,7 +2442,7 @@ export function Templates() {
                 ) : null}
                 <DialogFooter className="gap-2 sm:justify-end">
                   <Button type="button" variant="outline" onClick={() => setLibraryModalOpen(false)}>
-                    Close
+                    {t("inboxUi.close")}
                   </Button>
                   {isApprovedTemplateStatus(libraryModalTemplate.status) ? (
                     <Button

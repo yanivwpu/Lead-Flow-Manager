@@ -1,3 +1,4 @@
+import en from "../client/src/locales/en.json";
 /**
  * Website Chat launcher/branding: sanitization, isolation, public payload, chrome states.
  * Run: npx tsx tests/webchat-widget-branding.test.ts
@@ -447,7 +448,8 @@ function read(rel: string): string {
   assert.match(locale, /Powered by WhaChat/);
   assert.match(frame, /\[overflow-wrap:anywhere\]/);
   const website = read("client/src/pages/WebsiteWidget.tsx");
-  assert.match(website, /Launcher & Branding/);
+  assert.match(website, /t\("widgetSettingsUi.branding"\)/);
+  assert.equal(en.widgetSettingsUi.branding, "Launcher & Branding");
   assert.match(website, /WebchatChromePreview/);
   assert.match(website, /button-reset-branding/);
   assert.match(website, /button-preview-\$\{item\.id\}/);

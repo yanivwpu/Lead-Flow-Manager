@@ -477,6 +477,7 @@ function WidgetPreview({
   viewport: "desktop" | "mobile";
   onViewportChange: (viewport: "desktop" | "mobile") => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
@@ -491,7 +492,7 @@ function WidgetPreview({
             data-testid="button-preview-desktop"
           >
             <Monitor className="h-3.5 w-3.5" />
-            Desktop
+            {t("widgetSettingsUi.desktop")}
           </button>
           <button
             type="button"
@@ -503,7 +504,7 @@ function WidgetPreview({
             data-testid="button-preview-mobile"
           >
             <Smartphone className="h-3.5 w-3.5" />
-            Mobile
+            {t("widgetSettingsUi.mobile")}
           </button>
         </div>
         <div className="flex flex-wrap flex-1 gap-1 rounded-lg bg-gray-100 p-0.5">
@@ -943,8 +944,8 @@ export function WebsiteWidget() {
             <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3 bg-white">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <CardTitle className="text-base sm:text-lg font-bold">Status</CardTitle>
-                  <CardDescription className="text-xs">Public availability on your website</CardDescription>
+                  <CardTitle className="text-base sm:text-lg font-bold">{t("widgetSettingsUi.status")}</CardTitle>
+                  <CardDescription className="text-xs">{t("widgetSettingsUi.availability")}</CardDescription>
                 </div>
                 <Switch
                   checked={surface.switchChecked}
@@ -981,7 +982,7 @@ export function WebsiteWidget() {
               </div>
               {showOriginHint && (
                 <p className="text-xs text-amber-800" data-testid="text-origin-required">
-                  Add a website domain before enabling the widget.
+                  {t("widgetSettingsUi.domainRequired")}
                 </p>
               )}
             </CardContent>
@@ -999,7 +1000,7 @@ export function WebsiteWidget() {
                   data-testid="text-widget-save-status"
                 >
                   {saveQueued || saveMutation.isPending
-                    ? "Saving..."
+                    ? t("widgetSettingsUi.saving")
                     : saveMutation.isError
                       ? "Could not save"
                       : saveMutation.isSuccess
@@ -1020,7 +1021,7 @@ export function WebsiteWidget() {
               />
               {saveMutation.isError ? (
                 <p className="text-xs text-red-600" data-testid="text-widget-save-error">
-                  Changes were not saved. Check the fields and try again.
+                  {t("widgetSettingsUi.saveFailed")}
                 </p>
               ) : null}
             </CardContent>
@@ -1030,7 +1031,7 @@ export function WebsiteWidget() {
             <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <CardTitle className="text-base sm:text-lg font-bold">Launcher & Branding</CardTitle>
+                  <CardTitle className="text-base sm:text-lg font-bold">{t("widgetSettingsUi.branding")}</CardTitle>
                   <CardDescription className="text-[11px] sm:text-xs leading-snug">
                     Visitor-facing name, launcher, and chat wrapper. Empty fields use placeholders until you save a value - they do not advertise WhachatCRM.
                   </CardDescription>
@@ -1038,23 +1039,23 @@ export function WebsiteWidget() {
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button type="button" variant="outline" size="sm" data-testid="button-reset-branding">
-                      Reset to default
+                      {t("widgetSettingsUi.resetDefault")}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Reset launcher and branding?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("widgetSettingsUi.resetConfirm")}</AlertDialogTitle>
                       <AlertDialogDescription>
                         This restores the circle launcher and empty brand fields. It does not change domains, page rules, widget ID, or the Powered by footer.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                       <AlertDialogAction
                         data-testid="button-confirm-reset-branding"
                         onClick={() => updateSettings({ ...NEUTRAL_WEBCHAT_BRANDING })}
                       >
-                        Reset
+                        {t("widgetSettingsUi.reset")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -1063,7 +1064,7 @@ export function WebsiteWidget() {
             </CardHeader>
             <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-3">
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-gray-600">Launcher style</Label>
+                <Label className="text-[11px] font-semibold text-gray-600">{t("widgetSettingsUi.launcherStyle")}</Label>
                 <div className="flex p-0.5 bg-gray-100 rounded-lg">
                   {WEBCHAT_LAUNCHER_STYLES.map((style) => (
                     <button
@@ -1076,7 +1077,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid={`button-launcher-${style}`}
                     >
-                      {style === "circle" ? "Circle" : style === "pill" ? "Pill" : "Card"}
+                      {style === "circle" ? t("widgetSettingsUi.circle") : style === "pill" ? "Pill" : "Card"}
                     </button>
                   ))}
                 </div>
@@ -1084,7 +1085,7 @@ export function WebsiteWidget() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="brand-name" className="text-[11px] font-semibold text-gray-600">
-                    Business name
+                    {t("workspaceUi.businessName")}
                   </Label>
                   <Input
                     id="brand-name"
@@ -1110,7 +1111,7 @@ export function WebsiteWidget() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="launcher-label" className="text-[11px] font-semibold text-gray-600">
-                    Launcher label
+                    {t("widgetEditor.launcherLabel")}
                   </Label>
                   <Input
                     id="launcher-label"
@@ -1129,13 +1130,13 @@ export function WebsiteWidget() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="panel-heading" className="text-[11px] font-semibold text-gray-600">
-                    Panel heading
+                    {t("widgetEditor.panelHeading")}
                   </Label>
                   <Input
                     id="panel-heading"
                     value={settings.panelHeading}
                     onChange={(e) => updateBrandingText({ panelHeading: e.target.value })}
-                    placeholder="Same as business name"
+                    placeholder={t("widgetEditor.sameName")}
                     className="h-9 text-sm border-gray-200 rounded-lg"
                     data-testid="input-panel-heading"
                   />
@@ -1147,7 +1148,7 @@ export function WebsiteWidget() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="panel-subtitle" className="text-[11px] font-semibold text-gray-600">
-                    Subtitle
+                    {t("widgetEditor.subtitle")}
                   </Label>
                   <Input
                     id="panel-subtitle"
@@ -1166,7 +1167,7 @@ export function WebsiteWidget() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="teaser-greeting" className="text-[11px] font-semibold text-gray-600">
-                  Teaser greeting
+                  {t("widgetEditor.teaserGreeting")}
                 </Label>
                 <Input
                   id="teaser-greeting"
@@ -1187,7 +1188,7 @@ export function WebsiteWidget() {
                 )}
               </div>
               <div className="space-y-1" data-testid="section-widget-logo">
-                <Label className="text-[11px] font-semibold text-gray-600">Logo</Label>
+                <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.logo")}</Label>
                 <input
                   id={WIDGET_LOGO_FILE_INPUT_ID}
                   ref={logoFileRef}
@@ -1215,7 +1216,7 @@ export function WebsiteWidget() {
                         openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
                       }}
                     >
-                      {logoBusy ? "Uploading..." : "Replace"}
+                      {logoBusy ? t("widgetEditor.uploading") : t("widgetEditor.replace")}
                     </Button>
                     <Button
                       type="button"
@@ -1225,7 +1226,7 @@ export function WebsiteWidget() {
                       data-testid="button-logo-remove"
                       onClick={() => setLogoRemoveOpen(true)}
                     >
-                      Remove
+                      {t("workflowEditor.remove")}
                     </Button>
                   </div>
                 ) : (
@@ -1242,20 +1243,20 @@ export function WebsiteWidget() {
                         openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
                       }}
                     >
-                      {logoBusy ? "Uploading..." : "Upload"}
+                      {logoBusy ? t("widgetEditor.uploading") : t("common.upload")}
                     </Button>
                   </div>
                 )}
                 <AlertDialog open={logoRemoveOpen} onOpenChange={setLogoRemoveOpen}>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Remove logo?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("widgetEditor.removeLogo")}</AlertDialogTitle>
                       <AlertDialogDescription>
                         The logo will be removed from your widget after this change is saved.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                       <AlertDialogAction
                         data-testid="button-confirm-remove-logo"
                         onClick={() => {
@@ -1265,7 +1266,7 @@ export function WebsiteWidget() {
                           updateSettings({ logoUrl: "" });
                         }}
                       >
-                        Remove
+                        {t("workflowEditor.remove")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -1280,7 +1281,7 @@ export function WebsiteWidget() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Chat icon</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.chatIcon")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_CHAT_ICONS.map((icon) => (
                       <button
@@ -1299,7 +1300,7 @@ export function WebsiteWidget() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Open behavior</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.openBehavior")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_OPEN_BEHAVIORS.map((behavior) => (
                       <button
@@ -1312,13 +1313,13 @@ export function WebsiteWidget() {
                         )}
                         data-testid={behavior === "teaser" ? "button-open-teaser" : "button-open-direct"}
                       >
-                        {behavior === "teaser" ? "Teaser first" : "Open chat"}
+                        {behavior === "teaser" ? t("widgetEditor.teaserFirst") : t("widgetEditor.openChat")}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Corner style</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.corner")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_CORNER_STYLES.map((corner) => (
                       <button
@@ -1337,7 +1338,7 @@ export function WebsiteWidget() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Panel width</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.panelWidth")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_PANEL_WIDTHS.map((width) => (
                       <button
@@ -1359,7 +1360,7 @@ export function WebsiteWidget() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="accent-color" className="text-[11px] font-semibold text-gray-600">
-                    Accent color
+                    {t("widgetEditor.accent")}
                   </Label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1390,7 +1391,7 @@ export function WebsiteWidget() {
                   ) : null}
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Header text</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.headerText")}</Label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1403,7 +1404,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid="button-header-auto"
                     >
-                      Auto contrast
+                      {t("widgetEditor.autoContrast")}
                     </button>
                     <input
                       type="color"
@@ -1428,7 +1429,7 @@ export function WebsiteWidget() {
 
           <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl" data-testid="card-widget-translations">
             <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
-              <CardTitle className="text-base sm:text-lg font-bold">Visitor languages</CardTitle>
+              <CardTitle className="text-base sm:text-lg font-bold">{t("widgetEditor.visitorLanguages")}</CardTitle>
               <CardDescription className="text-[11px] sm:text-xs leading-snug">
                 Optional Spanish and Hebrew copy. The fields above stay as the default. Empty translations use that default, then the built-in phrase for that language. Product and personal names are never translated automatically.
               </CardDescription>
@@ -1567,7 +1568,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid="button-position-left"
                     >
-                      Left
+                      {t("widgetEditor.left")}
                     </button>
                     <button
                       type="button"
@@ -1578,7 +1579,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid="button-position-right"
                     >
-                      Right
+                      {t("widgetEditor.right")}
                     </button>
                   </div>
                 </div>
@@ -1685,7 +1686,7 @@ export function WebsiteWidget() {
                 <div className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Monitor className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-800">Desktop</span>
+                    <span className="text-sm text-gray-800">{t("widgetSettingsUi.desktop")}</span>
                   </div>
                   <Switch
                     checked={settings.showOnDesktop}
@@ -1697,7 +1698,7 @@ export function WebsiteWidget() {
                 <div className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Smartphone className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-800">Mobile</span>
+                    <span className="text-sm text-gray-800">{t("widgetSettingsUi.mobile")}</span>
                   </div>
                   <Switch
                     checked={settings.showOnMobile}
@@ -2133,7 +2134,7 @@ export function WebsiteWidget() {
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                         <AlertDialogAction
                           data-testid="button-confirm-rotate-widget-id"
                           onClick={async () => {
