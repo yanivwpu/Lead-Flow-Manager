@@ -27,6 +27,7 @@ export async function previewCsvProspects(input: {
   // Opportunistically remove expired CSV previews; never touch GHL previews.
   await db.delete(prospectImportPreviewJobs).where(and(
     eq(prospectImportPreviewJobs.integrationId,CSV_PROVIDER),
+    eq(prospectImportPreviewJobs.destinationUserId,input.destinationUserId),
     lt(prospectImportPreviewJobs.createdAt,new Date(Date.now()-CSV_PREVIEW_TTL))
   ));
   const filters:ProspectImportContactFilter={
