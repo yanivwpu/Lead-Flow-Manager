@@ -138,7 +138,17 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   const page = await browser.newPage({ viewport: { width: 960, height: 800 } });
   t.after(() => page.close());
   await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
-  await page.setContent('<!doctype html><html><body><div id="root"></div></body></html>');
+  // The production dashboard supplies Tailwind. This isolated esbuild harness
+  // intentionally loads no CSS, so supply the small positioning rules needed
+  // to exercise real map overlays and the expanded view in Chromium.
+  const mapCss = [
+    "div[aria-label='rgeMap.map'] { position: relative; width: 100%; overflow: hidden; box-sizing: border-box; }",
+    "svg.cursor-crosshair { position: absolute; inset: 0; z-index: 1; }",
+    "div[role='group'][aria-label='rgeMap.mapControls'] { position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; gap: 4px; }",
+    "div[aria-label='rgeMap.map'][class*='fixed'] { position: fixed; inset: 16px; width: auto; z-index: 80; }",
+  ].join("\n");
+  await page.setContent('<!doctype html><html><head><style>' + mapCss +
+    '</style></head><body><div id="root"></div></body></html>');
   await page.addScriptTag({ content: js.text });
   await page.locator("summary").click();
   const map = page.locator("svg.cursor-crosshair");
