@@ -52,12 +52,14 @@ async function ownedShop(userId:string):Promise<string> {
     throw new ShopifyProspectImportError("The Shopify connection needs to be restored in this workspace.",403);
   return shop;
 }
-export async function previewShopifyCustomers(userId:string,initiatedByUserId:string):Promise<ShopifyProspectCustomerPreview> {
+export async function previewShopifyCustomers(userId:string,initiatedByUserId:string,offset=0):Promise<ShopifyProspectCustomerPreview> {
+  if(!Number.isSafeInteger(offset)||offset<0||offset>50000||offset%MAX_PREVIEW!==0)
+    throw new ShopifyProspectImportError("Invalid Shopify preview page.");
   if(userId!==initiatedByUserId)throw new ShopifyProspectImportError("Shopify customer import must stay in the owning workspace.",403);
   const shop=await ownedShop(userId);
   const all=await storage.getContacts(userId,50000,INCLUDE_INBOX_IDENTITIES);
-  const synced=all.filter(c=>linkedShopifyCustomerId(c,shop)).slice(0,1000);
-  const candidate=synced.slice(0,MAX_PREVIEW);
+  const synced=all.filter(c=>linkedShopifyCustomerId(c,shop));
+  const candidate=synced.slice(offset,offset+MAX_PREVIEW);
   const existing=candidate.length?await db.select({contactId:prospectIntelligence.contactId}).from(prospectIntelligence)
     .where(inArray(prospectIntelligence.contactId,candidate.map(c=>c.id))):[];
   const already=new Set(existing.map(r=>r.contactId));
@@ -87,13 +89,14 @@ export async function previewShopifyCustomers(userId:string,initiatedByUserId:st
     filters:{reviewOnly:true},filterFingerprint:fingerprint,
     scanScope:String(synced.length),importLimit:MAX_PREVIEW,
     status:"completed",progressScanned:synced.length,progressTarget:synced.length,
-    progressMatches:rows.length,scanComplete:synced.length<=MAX_PREVIEW,
-    scanStoppedEarly:synced.length>MAX_PREVIEW,
+    progressMatches:rows.length,scanComplete:offset+MAX_PREVIEW>=synced.length,
+    scanStoppedEarly:offset+MAX_PREVIEW<synced.length,
     allMatchedExternalIds:rows.map(r=>r.contactId),
     matchedSnapshots:[],scannedAt:new Date(),completedAt:new Date(),
   }).returning({id:prospectImportPreviewJobs.id});
   return {previewJobId:job.id,fingerprint,shop,syncedTotal:synced.length,
-    shown:rows.length,alreadyInReview:rows.filter(r=>r.alreadyInReview).length,
+    shown:rows.length,offset,nextOffset:offset+MAX_PREVIEW<synced.length?offset+MAX_PREVIEW:null,
+    alreadyInReview:rows.filter(r=>r.alreadyInReview).length,
     available:rows.filter(r=>!r.alreadyInReview).length,rows,expiresInMinutes:15};
 }
 export type ShopifyProspectReviewImportResult = {
