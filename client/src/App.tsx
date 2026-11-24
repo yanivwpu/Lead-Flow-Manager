@@ -85,6 +85,7 @@ const ProspectAiLanding = lazy(() =>
   import("@/pages/ProspectAiLanding").then((m) => ({ default: m.ProspectAiLanding })),
 );
 const EcommerceGrowthEnginePreview = lazy(() => import("@/pages/EcommerceGrowthEnginePreview").then(m => ({default:m.EcommerceGrowthEnginePreview})));
+const ShopifyGrowthEngineLanding = lazy(() => import("@/pages/ShopifyGrowthEngineLanding").then(m => ({default:m.ShopifyGrowthEngineLanding})));
 const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ default: m.WidgetFrame })));
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
@@ -277,6 +278,7 @@ function MarketingRoutes() {
       <Route path="/partner-portal/reset-password" component={PartnerResetPassword} />
       <Route path="/partner-portal" component={PartnerPortal} />
       {localeRoutes("/realtor-growth-engine", RealtorLanding)}
+      {localeRoutes("/shopify-growth-engine", ShopifyGrowthEngineLanding)}
       {localeRoutes("/prospect-ai", ProspectAiLanding)}
       <Route path="/ecommerce-growth-engine" component={EcommerceGrowthEnginePreview} />
       <Route path="/widget-frame/:widgetId">
