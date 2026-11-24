@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Maximize2, Minimize2, Minus, Plus } from "lucide-react";
+import { ChevronDown, Maximize2, Minimize2, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
@@ -54,6 +54,7 @@ export function NeighborhoodBoundaryEditor({
   const [lonInput, setLonInput] = useState(String(initial.lon.toFixed(5)));
   const [status, setStatus] = useState("");
   const [locating, setLocating] = useState(false);
+  const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -63,14 +64,14 @@ export function NeighborhoodBoundaryEditor({
 
   useEffect(() => {
     const element = mapRef.current;
-    if (!element || typeof ResizeObserver === "undefined") return;
+    if (!open || !element || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
       if (entry.contentRect.width > 0 && entry.contentRect.height > 0)
         setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [open]);
 
   function moveTo(next: Center, nextZoom = zoom) {
     setCenter(next);
@@ -98,7 +99,7 @@ export function NeighborhoodBoundaryEditor({
   // Use an explicit non-passive listener so wheel zoom never scrolls the page.
   useEffect(() => {
     const element = mapRef.current;
-    if (!element) return;
+    if (!open || !element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
       if (Math.abs(event.deltaY) < 0.01) return;
@@ -109,7 +110,7 @@ export function NeighborhoodBoundaryEditor({
     };
     element.addEventListener("wheel", onWheel, { passive: false });
     return () => element.removeEventListener("wheel", onWheel);
-  }, [center, zoom]);
+  }, [open, center, zoom]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -297,11 +298,16 @@ export function NeighborhoodBoundaryEditor({
   }
 
   return (
-    <details className="rounded-lg border border-slate-200 bg-white p-3">
-      <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-        {t("rgeMap.title")} · {boundary ? t("rgeMap.saved") : t("rgeMap.optional")}
-      </summary>
-      <div className="mt-3 space-y-3">
+    <section className="rge-custom-map-section rounded-lg border border-slate-200 bg-white p-3"
+      data-rge-custom-map="true">
+      <button type="button" data-rge-map-toggle="true"
+        aria-expanded={open} className="flex w-full items-center gap-2 text-start text-sm font-semibold text-slate-800"
+        onClick={() => { setOpen((wasOpen) => !wasOpen); setExpanded(false); }}>
+        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
+          aria-hidden="true" />
+        <span>{t("rgeMap.title")} · {boundary ? t("rgeMap.saved") : t("rgeMap.optional")}</span>
+      </button>
+      {open && <div className="mt-3 space-y-3">
         <p className="text-xs text-slate-600">
           {t("rgeMap.instructions")}
         </p>
@@ -396,7 +402,7 @@ export function NeighborhoodBoundaryEditor({
           {t("rgeMap.invalid")}
         </p>}
         {status && <p role="status" className="text-xs text-slate-700">{status}</p>}
-      </div>
-    </details>
+      </div>}
+    </section>
   );
 }
