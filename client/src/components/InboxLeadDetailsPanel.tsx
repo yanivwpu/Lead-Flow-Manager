@@ -204,10 +204,9 @@ interface TeamMember {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  manual: 'Manual', whatsapp: 'WhatsApp', instagram: 'Instagram',
-  facebook: 'Facebook', webchat: 'Web Chat', import: 'CSV Import',
+  whatsapp: 'WhatsApp', instagram: 'Instagram',
+  facebook: 'Facebook',
   api: 'API', tiktok: 'TikTok', sms: 'SMS', telegram: 'Telegram',
-  email: 'Email', website_form: 'Website Form',
 };
 
 function resolveContactSourceLabel(contact: {
@@ -217,13 +216,19 @@ function resolveContactSourceLabel(contact: {
 }): string | null {
   const inquiryLabel = agentInquiryLabel(contact);
   if (inquiryLabel) return inquiryLabel;
-  if (contact.source === "webchat") return "Website Chat";
+  if (contact.source === "webchat") return i18n.t("inboxUi.websiteChat");
   const cf = contact.customFields || {};
-  if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `Agent Page · ${cf.agentNeighborhoodName}`;
+  if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `${i18n.t("inboxUi.agentPageSource")} · ${cf.agentNeighborhoodName}`;
   if (typeof cf.leadSource === 'string' && cf.leadSource.trim()) {
     return cf.leadSource.trim();
   }
-  if (cf.sourcePage === 'agent_page') return 'Agent Page';
+  if (cf.sourcePage === 'agent_page') return i18n.t("inboxUi.agentPageSource");
+  switch (contact.source) {
+    case "manual": return i18n.t("inboxUi.manualSource");
+    case "import": return i18n.t("inboxUi.csvImportSource");
+    case "email": return i18n.t("inboxUi.emailChannel");
+    case "website_form": return i18n.t("inboxUi.websiteFormSource");
+  }
   if (contact.source) return SOURCE_LABELS[contact.source] || contact.source;
   return null;
 }
@@ -262,8 +267,8 @@ function formatFollowUpDisplay(isoString: string): string {
     const d = parseISO(isoString);
     const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
     return hasTime
-      ? format(d, "MMM d 'at' h:mm a")
-      : format(d, 'MMM d, yyyy');
+      ? formatRegionalDate(d, i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : formatRegionalDate(d, i18n.language, { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return isoString;
   }
@@ -724,7 +729,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     if (to === "Appointment Requested" || title === "Showing requested") {
       return {
         title: i18n.t("inboxUi.appointmentRequested"),
-        detail: "Customer asked for a showing",
+        detail: i18n.t("inboxUi.customerAskedForAShowing"),
         tone: "green",
       };
     }
@@ -733,7 +738,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     }
     return {
       title: i18n.t("inboxUi.tagUpdated"),
-      detail: from && to ? `${from} → ${to}` : sanitizeUserFacingText(to || from) || "Contact tag updated",
+      detail: from && to ? `${from} → ${to}` : sanitizeUserFacingText(to || from) || i18n.t("inboxUi.contactTagUpdated"),
       tone: "gray",
     };
   }
@@ -743,7 +748,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     const to = typeof data.to === "string" ? data.to : "";
     return {
       title: i18n.t("inboxUi.pipelineStageUpdated"),
-      detail: from && to ? `${from} → ${to}` : to || from || "Stage changed",
+      detail: from && to ? `${from} → ${to}` : to || from || i18n.t("inboxUi.stageChanged"),
       tone: "gray",
     };
   }
@@ -751,7 +756,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
   if (event.eventType === "assignment" || kind === "assignment") {
     return {
       title: i18n.t("inboxUi.agentAssigned"),
-      detail: content || title || "Conversation assigned",
+      detail: content || title || i18n.t("inboxUi.conversationAssigned"),
       tone: "gray",
     };
   }
@@ -765,7 +770,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     if (/customer requested a showing/i.test(hay)) {
       return {
         title: i18n.t("inboxUi.customerRequestedAShowing"),
-        detail: /booking link sent/i.test(hay) ? "Booking link sent to customer" : "",
+        detail: /booking link sent/i.test(hay) ? i18n.t("inboxUi.bookingLinkSentToCustomer") : "",
         tone: "green",
       };
     }
@@ -775,7 +780,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     if (/book|showing|appointment/i.test(hay)) {
       return {
         title: i18n.t("inboxUi.appointmentRequested"),
-        detail: formatActivityDetailText(content) || "Customer asked about a showing or appointment",
+        detail: formatActivityDetailText(content) || i18n.t("inboxUi.customerAskedAboutAppointment"),
         tone: "green",
       };
     }
@@ -784,7 +789,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
   if (event.eventType === "ai_handoff") {
     return {
       title: i18n.t("inboxUi.followUpNeeded"),
-      detail: formatActivityDetailText(content) || "This conversation needs a personal reply",
+      detail: formatActivityDetailText(content) || i18n.t("inboxUi.personalReplyNeeded"),
       tone: "amber",
     };
   }
@@ -792,63 +797,63 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
   if (event.eventType === "calendly_booking") {
     return {
       title: i18n.t("inboxUi.appointmentBooked"),
-      detail: when ? `Scheduled for ${when}` : inviteeName || inviteeEmail || "Meeting confirmed",
+      detail: when ? i18n.t("inboxUi.scheduledFor", { when }) : inviteeName || inviteeEmail || i18n.t("inboxUi.meetingConfirmed"),
       tone: "green",
     };
   }
   if (event.eventType === "calendly_booking_canceled") {
     return {
       title: i18n.t("inboxUi.appointmentCanceled"),
-      detail: when ? `Was scheduled for ${when}` : "Meeting canceled",
+      detail: when ? i18n.t("inboxUi.wasScheduledFor", { when }) : i18n.t("inboxUi.meetingCanceled"),
       tone: "amber",
     };
   }
   if (event.eventType === "appointment_deleted") {
     return {
       title: i18n.t("inboxUi.appointmentRemoved"),
-      detail: when ? `Was scheduled for ${when}` : title || "Meeting removed from calendar",
+      detail: when ? i18n.t("inboxUi.wasScheduledFor", { when }) : title || i18n.t("inboxUi.meetingRemovedFromCalendar"),
       tone: "amber",
     };
   }
   if (event.eventType === "calendly_rescheduled") {
     return {
       title: i18n.t("inboxUi.appointmentRescheduled"),
-      detail: when ? `New time: ${when}` : "Meeting time updated",
+      detail: when ? i18n.t("inboxUi.newMeetingTime", { when }) : i18n.t("inboxUi.meetingTimeUpdated"),
       tone: "green",
     };
   }
   if (event.eventType === "note" && data.kind === "calendly_booking_confirmed") {
     return {
       title: i18n.t("inboxUi.appointmentBooked"),
-      detail: [content || title || "Meeting", when].filter(Boolean).join(" · "),
+      detail: [content || title || i18n.t("inboxUi.meeting"), when].filter(Boolean).join(" · "),
       tone: "green",
     };
   }
   if (event.eventType === "appointment_created") {
     return {
       title: i18n.t("inboxUi.appointmentBooked"),
-      detail: content || title || "Meeting scheduled",
+      detail: content || title || i18n.t("inboxUi.meetingScheduled"),
       tone: "green",
     };
   }
   if (event.eventType === "message") {
     return {
       title: i18n.t("inboxUi.messageActivity"),
-      detail: formatActivityDetailText(typeof data.content === "string" ? data.content : "") || "Conversation updated",
+      detail: formatActivityDetailText(typeof data.content === "string" ? data.content : "") || i18n.t("inboxUi.conversationUpdated"),
       tone: "gray",
     };
   }
   if (kind === "campaign_enrolled" || title.toLowerCase().includes("enrolled in")) {
     return {
-      title: title || "Campaign enrollment",
-      detail: formatActivityDetailText(content) || "Contact added to a saved campaign",
+      title: title || i18n.t("inboxUi.campaignEnrollment"),
+      detail: formatActivityDetailText(content) || i18n.t("inboxUi.contactAddedToSavedCampaign"),
       tone: "green",
     };
   }
   const fallbackTitle = event.eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return {
     title: fallbackTitle,
-    detail: formatActivityDetailText(content || title) || "Activity recorded",
+    detail: formatActivityDetailText(content || title) || i18n.t("inboxUi.activityRecorded"),
     tone: "gray",
   };
 }
@@ -2349,7 +2354,7 @@ export function InboxLeadDetailsPanel({
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-gray-700 font-medium shrink-0">{a.appointmentType}</span>
                             <span className="text-gray-400">·</span>
-                            <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d · h:mm a')}</span>
+                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                           </div>
                           <button
                             onClick={() => void deleteContactAppointment(a.id).catch(() => {
@@ -2379,7 +2384,7 @@ export function InboxLeadDetailsPanel({
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-gray-700 font-medium shrink-0">{a.appointmentType}</span>
                             <span className="text-gray-300">·</span>
-                            <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d, h:mm a')}</span>
+                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                           </div>
                           <button
                             onClick={(e) => {
@@ -3364,10 +3369,10 @@ export function InboxLeadDetailsPanel({
                       <CalendarIcon className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold text-emerald-900">
-                          {a.title || a.appointmentType || "Calendly meeting"}
+                          {a.title || a.appointmentType || inboxText("inboxUi.calendlyMeeting")}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {format(new Date(a.appointmentDate), "MMM d 'at' h:mm a")}
+                          {formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                           {a.status ? ` · ${a.status}` : ""}
                         </p>
                       </div>

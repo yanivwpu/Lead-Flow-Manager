@@ -439,15 +439,15 @@ interface MessageTemplate {
   carouselDefaultMedia?: TemplateCarouselDefaultMediaMap | null;
 }
 
-const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
+const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label?: string }> = {
   whatsapp: { icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
   instagram: { icon: Instagram, color: '#E4405F', label: 'Instagram' },
   facebook: { icon: Facebook, color: '#1877F2', label: 'Messenger' },
   sms: { icon: Smartphone, color: '#6B7280', label: 'SMS' },
-  webchat: { icon: Globe, color: '#3B82F6', label: 'Website Chat' },
+  webchat: { icon: Globe, color: '#3B82F6' },
   telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
-  email: { icon: Mail, color: '#EA4335', label: 'Email' },
+  email: { icon: Mail, color: '#EA4335' },
   gohighlevel: { icon: Zap, color: '#F97316', label: 'CRM' },
   calendly: { icon: Calendar, color: '#006BFF', label: 'Calendly' },
   shopify: { icon: ShoppingCart, color: '#96BF48', label: 'Shopify' },
@@ -510,6 +510,11 @@ export function UnifiedInbox() {
   const searchString = useSearch();
   const { user, sessionAligned } = useAuth();
   const { t: inboxText, i18n } = useTranslation();
+  const channelLabel = (channel: string) => {
+    if (channel === "webchat") return inboxText("inboxUi.websiteChat");
+    if (channel === "email") return inboxText("inboxUi.emailChannel");
+    return CHANNEL_CONFIG[channel]?.label;
+  };
   const presenceSocket=useRef<WebSocket|null>(null);
   const presenceRoom=useRef<string|null>(null);
   const activityTimers=useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -3402,7 +3407,7 @@ export function UnifiedInbox() {
                         data-testid={`checkbox-channel-${ch}`}
                       />
                       <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: cfg.color }} />
-                      <span className="text-sm text-gray-700">{ch === "webchat" ? inboxText("inboxUi.websiteChat") : ch === "email" ? inboxText("inboxUi.emailChannel") : cfg.label}</span>
+                      <span className="text-sm text-gray-700">{channelLabel(ch)}</span>
                     </label>
                   );
                 })}
@@ -3979,7 +3984,7 @@ export function UnifiedInbox() {
                     >
                       {getChannelIcon(activeChannel)}
                       <span className="hidden min-w-0 truncate sm:inline">
-                        {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : inboxText("inboxUi.noChannel")}
+                        {activeChannel ? channelLabel(activeChannel) : inboxText("inboxUi.noChannel")}
                       </span>
                       <ChevronDown className="h-3 w-3 shrink-0 text-gray-500" />
                     </Button>
@@ -4007,7 +4012,7 @@ export function UnifiedInbox() {
                           )}
                         >
                           <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: cfg.color }} />
-                          {cfg.label}
+                          {channelLabel(key)}
                           {isActive && <span className="ml-auto text-[11px] text-slate-400">✓</span>}
                         </DropdownMenuItem>
                       );
