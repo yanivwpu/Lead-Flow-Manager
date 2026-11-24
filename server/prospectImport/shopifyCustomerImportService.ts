@@ -6,10 +6,10 @@
 import crypto from "node:crypto";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { contacts, integrations, prospectImportJobs, prospectImportPreviewJobs, prospectIntelligence, users, type Contact } from "@shared/schema";
+import { contacts, integrations, prospectImportJobs, prospectImportPreviewJobs, prospectIntelligence, users } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
-import { linkedShopifyCustomerId } from "@shared/shopifyProspectCustomerGuard";
+import { linkedShopifyCustomerId, type ShopifyProspectCustomerPreview, type ShopifyProspectCustomerPreviewRow, type ShopifyProspectReviewImportResult } from "@shared/shopifyProspectCustomerGuard";
 import { customerPrivacyLocked } from "../shopifyPrivacyRequests";
 import { storage } from "../storage";
 import { INCLUDE_INBOX_IDENTITIES } from "@shared/contactCrmVisibility";
@@ -21,18 +21,6 @@ const obj = (v:unknown):Record<string,unknown> =>
   v && typeof v==="object" && !Array.isArray(v) ? v as Record<string,unknown> : {};
 const str = (v:unknown) => typeof v==="string" ? v : "";
 export class ShopifyProspectImportError extends Error { constructor(message:string,public status=400){ super(message); } }
-export type ShopifyProspectCustomerPreviewRow = {
-  contactId:string; name:string; email:string|null; phone:string|null;
-  emailConsent:"subscribed"|"unsubscribed"|"not_subscribed"|"pending"|"unknown";
-  smsConsent:"subscribed"|"unsubscribed"|"not_subscribed"|"pending"|"unknown";
-  alreadyInReview:boolean;
-};
-export type ShopifyProspectCustomerPreview = {
-  previewJobId:string;fingerprint:string;shop:string;
-  syncedTotal:number;shown:number;alreadyInReview:number;available:number;
-  rows:ShopifyProspectCustomerPreviewRow[];
-  expiresInMinutes:number;
-};
 function consentState(v:unknown):ShopifyProspectCustomerPreviewRow["emailConsent"] {
   const state = str(obj(v).state).toLowerCase();
   return ["subscribed","unsubscribed","not_subscribed","pending"].includes(state)
@@ -48,7 +36,7 @@ async function ownedShop(userId:string):Promise<string> {
     eq(integrations.userId,userId),eq(integrations.type,"shopify"),eq(integrations.isActive,true)
   )).limit(1);
   const configuredShop=obj(integration?.config).shop;
-  if(!integration || (configuredShop!=null && normalizeShopifyShopDomain(configuredShop)!==shop))
+  if(!integration || (configuredShop!=null && (typeof configuredShop!=="string" || normalizeShopifyShopDomain(configuredShop)!==shop)))
     throw new ShopifyProspectImportError("The Shopify connection needs to be restored in this workspace.",403);
   return shop;
 }
@@ -99,11 +87,6 @@ export async function previewShopifyCustomers(userId:string,initiatedByUserId:st
     alreadyInReview:rows.filter(r=>r.alreadyInReview).length,
     available:rows.filter(r=>!r.alreadyInReview).length,rows,expiresInMinutes:15};
 }
-export type ShopifyProspectReviewImportResult = {
-  id:string;status:"completed";provider:"shopify";batchName:string;
-  imported:number;skipped:number;duplicates:number;errors:number;
-  progressCurrent:number;progressTotal:number;
-};
 export async function importShopifyCustomers(input:{
   workspaceUserId:string;initiatedByUserId:string;
   previewJobId:string;fingerprint:string;selectedContactIds:string[];
@@ -127,7 +110,8 @@ export async function importShopifyCustomers(input:{
     const [installed]=await tx.select().from(integrations).where(and(
       eq(integrations.userId,input.workspaceUserId),eq(integrations.type,"shopify"),eq(integrations.isActive,true)
     )).for("share").limit(1);
-    if(!installed || (obj(installed.config).shop!=null && normalizeShopifyShopDomain(obj(installed.config).shop)!==shop))
+    const installedShop=obj(installed?.config).shop;
+    if(!installed || (installedShop!=null && (typeof installedShop!=="string" || normalizeShopifyShopDomain(installedShop)!==shop)))
       throw new ShopifyProspectImportError("Shopify connection changed. Preview again.",403);
     const [preview]=await tx.select().from(prospectImportPreviewJobs).where(and(
       eq(prospectImportPreviewJobs.id,input.previewJobId),
