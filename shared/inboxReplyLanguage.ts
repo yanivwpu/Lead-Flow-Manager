@@ -25,7 +25,7 @@ export function resolveInboxReplyLanguage({
     // Split once, then inspect complete tokens. Searching for an embedded @ with
     // overlapping regex matches can rescan the same customer text quadratically.
     const text = turn.content.split(/\s+/u)
-      .filter((token) => !token.includes("@") && !/^https?:\/\//i.test(token))
+      .filter((token) => !token.includes("@") && !/https?:\/\//i.test(token))
       .join(" ");
     const words = text.match(/\p{L}+/gu) || [];
     if (!words.length || ambiguous.test(words.join(" "))) continue;

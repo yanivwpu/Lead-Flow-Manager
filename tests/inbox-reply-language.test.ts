@@ -51,9 +51,9 @@ test("explicit reply language beats an established conversation language, which 
 test("language detection ignores URLs, email addresses and long unbroken tokens", () => {
   const history = [
     { role: "user", content: "¿Cuánto cuesta el envío?" },
-    { role: "user", content: "OK https://example.invalid/שלום שלום@example.invalid " + "x".repeat(100_000) },
+    { role: "user", content: "OK (https://example.invalid/שלום) שלום@example.invalid " + "x".repeat(100_000) },
   ];
   assert.equal(resolveInboxReplyLanguage({ explicit: undefined, history }), "es");
-  history[1].content = "אני מחפש דירה באזור הזה https://example.invalid/precio";
+  history[1].content = "אני מחפש דירה באזור הזה (https://example.invalid/precio)";
   assert.equal(resolveInboxReplyLanguage({ explicit: undefined, history }), "he");
 });
