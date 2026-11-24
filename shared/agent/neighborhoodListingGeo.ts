@@ -10,7 +10,7 @@ export type NeighborhoodBoundary = PolygonBoundary | MultiPolygonBoundary;
 export type BoundaryBounds = { minLat: number; maxLat: number; minLon: number; maxLon: number };
 
 export function normalizeNeighborhoodName(value: string): string {
-  return value.normalize("NFKC").toLowerCase().replace(/[^a-z0-9 ]+/g, " ")
+  return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, " ")
     .replace(/\b(?:civic association|homeowners association|home owners association|residents association|neighborhood association|neighborhood improvement district|community association|homeowners|association|hoa|inc)\b/g, " ")
     .replace(/\s+/g, " ").trim();
 }
@@ -35,10 +35,20 @@ export function readBoundaryGeometry(raw: unknown): NeighborhoodBoundary | null 
     return Number.isFinite(lon) && Number.isFinite(lat) &&
       lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90 && ++vertices <= 25000;
   };
-  const validRing = (ring: unknown): boolean => Array.isArray(ring) && ring.length >= 4 &&
-    ring.every(validPosition) &&
-    ring[0][0] === ring[ring.length - 1][0] &&
-    ring[0][1] === ring[ring.length - 1][1];
+  // Closed rings with repeated coordinates but no interior area are not boundaries.
+  // Reject self-contained zero-area rings before they reach point-in-polygon.
+  const validRing = (ring: unknown): boolean => {
+    if (!Array.isArray(ring) || ring.length < 4 || !ring.every(validPosition) ||
+        ring[0][0] !== ring[ring.length - 1][0] ||
+        ring[0][1] !== ring[ring.length - 1][1]) return false;
+    let twiceArea = 0;
+    for (let i = 1; i < ring.length; i++) {
+      const a = ring[i - 1] as Position;
+      const b = ring[i] as Position;
+      twiceArea += a[0] * b[1] - b[0] * a[1];
+    }
+    return Number.isFinite(twiceArea) && Math.abs(twiceArea) > 1e-12;
+  };
   const validPolygon = (polygon: unknown): boolean =>
     Array.isArray(polygon) && polygon.length > 0 && polygon.length <= 50 && polygon.every(validRing);
   const valid = obj.type === "Polygon"
