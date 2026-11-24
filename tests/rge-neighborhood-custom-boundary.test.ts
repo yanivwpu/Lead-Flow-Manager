@@ -180,13 +180,14 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
 
   const tile = page.locator('img[src*="tile.openstreetmap.org"]').first();
   const tileBefore = await tile.getAttribute("src");
-  const beforeZoom = Number(tileBefore?.match(/tile\\.openstreetmap\\.org\\/(\\d+)\\//)?.[1]);
+  const beforeZoom = tileBefore ? Number(new URL(tileBefore).pathname.split("/")[1]) : NaN;
   assert.ok(beforeZoom >= 10);
   await page.mouse.move(midX, midY);
   await page.mouse.wheel(0, -500);
   await page.waitForFunction((prior) => {
     const image = document.querySelector('img[src*="tile.openstreetmap.org"]');
-    const zoom = Number(image?.getAttribute("src")?.match(/tile\\.openstreetmap\\.org\\/(\\d+)\\//)?.[1]);
+    const src = image?.getAttribute("src");
+    const zoom = src ? Number(new URL(src).pathname.split("/")[1]) : NaN;
     return zoom > prior;
   }, beforeZoom);
   assert.equal(await circles.count(), 4, "wheel zoom does not change the boundary");
