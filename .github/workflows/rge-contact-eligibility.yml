@@ -66,6 +66,7 @@ jobs:
           tests/rge-neighborhood-verified-listings.test.ts
           tests/rge-neighborhood-municipal-providers.test.ts
           tests/rge-neighborhood-global-foundation.test.ts
+          tests/rge-neighborhood-curated-boundaries.test.ts
           tests/rge-neighborhood-browse.test.ts
           tests/public-agent-page-publication.test.ts
           tests/public-listings-sitemap.test.ts
