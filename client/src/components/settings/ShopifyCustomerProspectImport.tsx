@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import type { ShopifyProspectCustomerPreview, ShopifyProspectReviewImportResult } from "../../../../server/prospectImport/shopifyCustomerImportService";
+import type { ShopifyProspectCustomerPreview, ShopifyProspectReviewImportResult } from "@shared/shopifyProspectCustomerGuard";
 
 const BASE="/api/growth-tools/prospect-import";
 async function request<T>(url:string,body?:unknown):Promise<T>{
