@@ -107,6 +107,6 @@ test("inline neighborhood photos use existing owned upload IDs rather than arbit
   assert.match(html, /<h3 class="neighborhood-guide-subheading">Parks<\/h3>/);
   assert.doesNotMatch(html, /class="neighborhood-guide-gallery"/);
   assert.doesNotMatch(html, /\[\[photo:/);
-  assert.ok(html.indexOf("A guide to Victoria Park") < html.indexOf("neighborhood-guide-inline-photo"));
-  assert.ok(html.indexOf("neighborhood-guide-inline-photo") < html.indexOf("Parks</h3>"));
+  assert.ok(html.indexOf("A guide to Victoria Park") < html.indexOf('class="neighborhood-guide-inline-photo"'));
+  assert.ok(html.indexOf('class="neighborhood-guide-inline-photo"') < html.indexOf("Parks</h3>"));
 });
