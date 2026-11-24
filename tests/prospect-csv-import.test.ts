@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {parseProspectCsv,filterProspectCsv,ProspectCsvError,PROSPECT_CSV_MAX_ROWS} from "../shared/prospectCsvImport";
@@ -14,3 +15,18 @@ test("CSV handles BOM, quoted commas/newlines, mapped columns and no consent inf
 test("reject malformed, unbounded and invalid CSV rows",()=>{
  for(const csv of ["", "wrong,columns\nabc,def", "name,email\nA,not-email","name\n\"unclosed", "name\nA".repeat(PROSPECT_CSV_MAX_ROWS+2)]) assert.throws(()=>parseProspectCsv(csv),ProspectCsvError);
 });
+
+test("CSV endpoint and job preserve tenant-scoped preview, duplicate and no-consent boundaries",()=>{
+  const fs=requireSource("server/prospectImport/csvImportService.ts");
+  const route=requireSource("server/routes/prospectImport.ts");
+  const worker=requireSource("server/prospectImport/prospectImportService.ts");
+  assert.match(fs,/destinationUserId/);assert.match(fs,/initiatedByUserId/);
+  assert.match(fs,/pg_advisory_xact_lock/);assert.match(fs,/already been imported/);
+  assert.match(route,/requireProspectImportAccess/);
+  assert.match(route,/\/csv\/preview/);assert.match(route,/\/csv\/import/);
+  assert.match(worker,/job.provider === "csv"/);
+  assert.match(worker,/prospectImportProvider: "csv"/);
+  assert.match(worker,/if \(dup\) \{ duplicates\+\+; skipped\+\+; continue; \}/);
+  assert.doesNotMatch(fs,/sendMessage|sendTemplate|autoSend/);
+});
+function requireSource(path:string):string {return readFileSync(path,"utf8");}
