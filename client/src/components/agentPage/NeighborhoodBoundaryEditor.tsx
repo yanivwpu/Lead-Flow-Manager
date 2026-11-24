@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
@@ -39,6 +40,7 @@ export function NeighborhoodBoundaryEditor({
   disabled: boolean;
   onChange: (next: PolygonBoundary | null) => void;
 }) {
+  const { t } = useTranslation();
   const initial = useMemo(() => initialCenter(boundary), []);
   const [center, setCenter] = useState<Center>(initial);
   const [zoom, setZoom] = useState(boundary ? 14 : 3);
@@ -69,7 +71,7 @@ export function NeighborhoodBoundaryEditor({
 
   async function locate() {
     if (!name.trim() || !city.trim() || !state.trim() || !/^[a-zA-Z]{2}$/.test(country)) {
-      setStatus("Enter neighborhood, city, region and country before locating the map.");
+      setStatus(t("rgeMap.enterLocation"));
       return;
     }
     setLocating(true);
@@ -79,12 +81,12 @@ export function NeighborhoodBoundaryEditor({
       const response = await fetch(`/api/agent-page/neighborhoods/map-center?${query.toString()}`, { credentials: "include" });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
-        throw new Error(result.error || "Location unavailable");
+        throw new Error(result.error || t("rgeMap.locationUnavailable"));
       }
       moveTo({ lat: result.latitude, lon: result.longitude }, 14);
-      setStatus("Location found. Click the map to outline the area; review the streets before applying.");
+      setStatus(t("rgeMap.located"));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Map location failed");
+      setStatus(error instanceof Error ? error.message : t("rgeMap.locationFailed"));
     } finally { setLocating(false); }
   }
 
@@ -114,10 +116,10 @@ export function NeighborhoodBoundaryEditor({
 
   function addPoint(event: React.MouseEvent<SVGSVGElement>) {
     if (disabled || zoom < 10) {
-      setStatus(zoom < 10 ? "Zoom in before outlining a neighborhood." : "Editing unavailable.");
+      setStatus(zoom < 10 ? t("rgeMap.zoomRequired") : t("rgeMap.editUnavailable"));
       return;
     }
-    if (vertices.length >= 128) { setStatus("The map area has too many corners."); return; }
+    if (vertices.length >= 128) { setStatus(t("rgeMap.tooMany")); return; }
     const rect = event.currentTarget.getBoundingClientRect();
     const x = centerX + event.clientX - rect.left - rect.width / 2;
     const y = centerY + event.clientY - rect.top - rect.height / 2;
@@ -135,75 +137,72 @@ export function NeighborhoodBoundaryEditor({
   return (
     <details className="rounded-lg border border-slate-200 bg-white p-3">
       <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-        Custom neighborhood map {boundary ? "· Agent-defined area saved" : "· Optional"}
+        {t("rgeMap.title")} · {boundary ? t("rgeMap.saved") : t("rgeMap.optional")}
       </summary>
       <div className="mt-3 space-y-3">
         <p className="text-xs text-slate-600">
-          Use a custom area only when the official neighborhood map is missing or needs a different service area.
-          Locate your neighborhood, click its corners on the map, then apply the shape and save the page.
-          The public page will label it as an agent-defined area.
+          {t("rgeMap.instructions")}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" disabled={disabled || locating}
-            onClick={() => void locate()}>{locating ? "Locating…" : "Find neighborhood on map"}</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))}>Zoom +</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))}>Zoom −</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(0, -120)} aria-label="Move map north">↑</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(0, 120)} aria-label="Move map south">↓</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(-120, 0)} aria-label="Move map west">←</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(120, 0)} aria-label="Move map east">→</Button>
+            onClick={() => void locate()}>{locating ? t("rgeMap.locating") : t("rgeMap.find")}</Button>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))}>{t("rgeMap.zoomIn")}</Button>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))}>{t("rgeMap.zoomOut")}</Button>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(0, -120)} aria-label={t("rgeMap.north")}>↑</Button>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(0, 120)} aria-label={t("rgeMap.south")}>↓</Button>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(-120, 0)} aria-label={t("rgeMap.west")}>←</Button>
+          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => pan(120, 0)} aria-label={t("rgeMap.east")}>→</Button>
         </div>
         <div ref={mapRef} className="relative w-full overflow-hidden rounded-md border bg-slate-100"
-          style={{ height: MAP_HEIGHT }} aria-label="Neighborhood boundary map">
+          style={{ height: MAP_HEIGHT }} aria-label={t("rgeMap.map")}>
           {tiles.map((tile) => <img key={tile.id} alt="" src={tile.url} width={TILE} height={TILE}
             decoding="async" referrerPolicy="strict-origin-when-cross-origin" draggable={false}
             style={{ position: "absolute", width: TILE, height: TILE, left: tile.left, top: tile.top, maxWidth: "none" }} />)}
           <svg width="100%" height="100%" className="absolute inset-0 cursor-crosshair"
-            role="img" aria-label="Click to place corners of your custom neighborhood" onClick={addPoint}>
+            role="img" aria-label={t("rgeMap.clickCorners")} onClick={addPoint}>
             {points.length >= 3 && <polygon points={polygonPoints} fill="rgba(16,185,129,.16)" stroke="#047857" strokeWidth={2}/>}
             {points.length === 2 && <polyline points={polygonPoints} fill="none" stroke="#047857" strokeWidth={2}/>}
             {points.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={5} fill="#047857" stroke="white" strokeWidth={2}/>)}
           </svg>
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
             className="absolute bottom-1 right-1 rounded bg-white/90 px-1 text-[10px] text-slate-800">
-            © OpenStreetMap contributors
+            {t("rgeMap.attribution")}
           </a>
         </div>
         <p className="text-xs text-slate-500">
-          Zoom level {zoom}. {vertices.length} corner{vertices.length === 1 ? "" : "s"} selected.
-          Zoom to level 10 or above to draw. Only small, non-overlapping polygons can be applied.
+          {t("rgeMap.corners", { count: vertices.length, zoom })}
         </p>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="space-y-1 text-xs">Map center latitude
+          <label className="space-y-1 text-xs">{t("rgeMap.latitude")}
             <Input className="w-32" inputMode="decimal" value={latInput} onChange={(e) => setLatInput(e.target.value)} disabled={disabled} />
           </label>
-          <label className="space-y-1 text-xs">Longitude
+          <label className="space-y-1 text-xs">{t("rgeMap.longitude")}
             <Input className="w-32" inputMode="decimal" value={lonInput} onChange={(e) => setLonInput(e.target.value)} disabled={disabled} />
           </label>
           <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => {
             const lat = Number(latInput), lon = Number(lonInput);
             if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 85 || Math.abs(lon) > 180) {
-              setStatus("Enter valid latitude and longitude."); return;
+              setStatus(t("rgeMap.coordsInvalid")); return;
             }
             moveTo({ lat, lon }, 14);
-          }}>Center map</Button>
+          }}>{t("rgeMap.center")}</Button>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" disabled={disabled || vertices.length === 0}
-            onClick={() => { setVertices((p) => p.slice(0, -1)); setStatus(""); }}>Undo corner</Button>
+            onClick={() => { setVertices((p) => p.slice(0, -1)); setStatus(""); }}>{t("rgeMap.undo")}</Button>
           <Button type="button" size="sm" variant="outline" disabled={disabled || vertices.length === 0}
-            onClick={() => { setVertices([]); setStatus(""); }}>Start new outline</Button>
+            onClick={() => { setVertices([]); setStatus(""); }}>{t("rgeMap.restart")}</Button>
           <Button type="button" size="sm" disabled={disabled || !safeShape || !pending}
-            onClick={() => { onChange(safeShape!); setStatus("Area applied to your draft. Save the neighborhood page to publish it."); }}>
-            Apply this area
+            onClick={() => { onChange(safeShape!); setStatus(t("rgeMap.applied")); }}>
+            {t("rgeMap.apply")}
           </Button>
           {boundary && <Button type="button" size="sm" variant="outline" disabled={disabled}
-            onClick={() => { onChange(null); setVertices([]); setStatus("Custom area removed from draft. Save to use official GIS again."); }}>
-            Remove custom area
+            onClick={() => { onChange(null); setVertices([]); setStatus(t("rgeMap.removed")); }}>
+            {t("rgeMap.remove")}
           </Button>}
         </div>
         {shape && !safeShape && <p role="alert" className="text-xs text-amber-700">
-          That outline is invalid, self-crossing or too large. Adjust its corners before applying.
+          {t("rgeMap.invalid")}
         </p>}
         {status && <p role="status" className="text-xs text-slate-700">{status}</p>}
       </div>
