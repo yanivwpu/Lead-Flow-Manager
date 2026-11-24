@@ -22,10 +22,11 @@ function read(rel: string): string {
   return fs.readFileSync(path.join(root, rel), "utf8");
 }
 
-function gmailRaw(headers: Array<{ name: string; value: string }>, id = "m1", threadId = "t1") {
+function gmailRaw(headers: Array<{ name: string; value: string }>, labelIds = ["INBOX"]) {
   return {
-    id,
-    threadId,
+    id: "m1",
+    threadId: "t1",
+    labelIds,
     snippet: "hello",
     internalDate: "1710000000000",
     payload: { headers, body: { data: "" } },
@@ -38,7 +39,6 @@ test("Gmail From with no display name → Inbox title uses the email address", (
       { name: "From", value: "ssammikat@aol.com" },
       { name: "To", value: "owner@workspace.example" },
     ]),
-    "owner@workspace.example",
   );
   assert.equal(normalized?.direction, "inbound");
   assert.equal(normalized?.from.name, null);
@@ -67,7 +67,6 @@ test("Gmail From with a valid display name → Inbox title uses that sender name
       { name: "From", value: '"Ada Lovelace" <ada@example.com>' },
       { name: "To", value: "owner@workspace.example" },
     ]),
-    "owner@workspace.example",
   );
   assert.equal(normalized?.from.name, "Ada Lovelace");
   assert.equal(
@@ -113,8 +112,7 @@ test("sent-mail and inbound-mail direction cannot cross-assign participant ident
     gmailRaw([
       { name: "From", value: '"Yaniv Haramatiy" <owner@workspace.example>' },
       { name: "To", value: "ssammikat@aol.com" },
-    ]),
-    "owner@workspace.example",
+    ], ["SENT"]),
   );
   assert.equal(outbound?.direction, "outbound");
   assert.equal(outbound?.from.email, "owner@workspace.example");

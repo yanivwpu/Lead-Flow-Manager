@@ -56,7 +56,7 @@ try {
   await persistNormalizedEmailMessage({...params,normalized:{...params.normalized,textBody:"Unsubscribe",textBodySource:"plain",htmlBody:'<div>Plaintext counterpart omitted request</div>'}});
   assert.equal(state.identities.at(-1).scope,"email","native plain-text requests remain authoritative");
   const beforeNormalizedHtml = state.attempts;
-  const normalizedHtml = normalizeGmailApiMessage({id:"already-persisted",threadId:"thread",snippet:"Unsubscribe",payload:{mimeType:"text/html",headers:[{name:"From",value:"person@example.com"},{name:"To",value:"sender@example.com"}],body:{data:Buffer.from('<div>Sounds good</div><blockquote>Unsubscribe from marketing emails</blockquote>').toString("base64url")}}},"sender@example.com");
+  const normalizedHtml = normalizeGmailApiMessage({id:"already-persisted",threadId:"thread",snippet:"Unsubscribe",payload:{mimeType:"text/html",headers:[{name:"From",value:"person@example.com"},{name:"To",value:"sender@example.com"}],body:{data:Buffer.from('<div>Sounds good</div><blockquote>Unsubscribe from marketing emails</blockquote>').toString("base64url")}}});
   assert.equal(normalizedHtml.textBodySource,"html");
   assert(normalizedHtml.textBody.includes("Unsubscribe"),"retain full display/audit text");
   await persistNormalizedEmailMessage({...params,normalized:normalizedHtml});
