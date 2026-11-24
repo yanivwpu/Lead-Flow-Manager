@@ -17,9 +17,11 @@ test("new Shopify product page is crawlable, localized, and distinct from privat
   assert.ok(PRODUCT_NAV.groups.some(group => group.items.some(item => item.href === path)));
   assert.ok(PAGE_META[path]);
   for (const locale of ["en", "es", "he"] as const) {
-    const seo = getLocalizedPageMeta(path, locale);
+    // English SEO is canonical in PAGE_META. LocalizedPageMeta only supplies es/he overlays.
+    const seo = locale === "en" ? PAGE_META[path] : getLocalizedPageMeta(path, locale);
     assert.ok(seo?.title.includes("Shopify"));
-    assert.ok(seo?.description && seo.description.length > 50);
+    const description = seo && ("description" in seo ? seo.description : undefined);
+    assert.ok(description && description.length > 50);
     assert.ok(getCanonicalUrl(path, locale));
   }
   assert.deepEqual(getHreflangLinks(path).map(a=>a.hreflang), ["en","es","he","x-default"]);
