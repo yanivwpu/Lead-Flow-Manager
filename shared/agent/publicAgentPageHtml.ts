@@ -783,18 +783,38 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-property-group-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
     .neighborhood-property-group h3 { font-size: 1.25rem; margin: 0; color: #0f172a; }
     .neighborhood-property-number { color: #64748b; font-size: .83rem; }
-    .neighborhood-filters { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px;
-      padding: 16px; margin: 16px 0 22px; background: #f8faf9; border: 1px solid #dce9e4; border-radius: 14px; }
-    .neighborhood-filters label { font-size: .8rem; font-weight: 600; color: #334155; display: flex; flex-direction: column; gap: 5px; }
+    /* Compact, single-line filter toolbar in the neighborhood content column.
+       Narrow devices scroll the toolbar horizontally instead of stacking controls. */
+    .neighborhood-filters { display: flex; flex-wrap: nowrap; align-items: flex-end; gap: 7px;
+      width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+      padding: 8px 0 12px; margin: 12px 0 18px;
+      overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin;
+      background: transparent; border: 0; border-bottom: 1px solid #dce9e4; border-radius: 0; }
+    .neighborhood-filters label { display: flex; flex-direction: column; gap: 4px;
+      flex: 1 1 72px; min-width: 66px; white-space: nowrap;
+      font-size: .73rem; font-weight: 600; color: #334155; }
+    .neighborhood-filters label:first-child { flex: 1.2 1 94px; min-width: 96px; }
+    .neighborhood-filters label:nth-child(2), .neighborhood-filters label:nth-child(3) {
+      flex: .65 1 58px; min-width: 57px; }
+    .neighborhood-filters label:nth-child(4), .neighborhood-filters label:nth-child(5) {
+      flex: .8 1 73px; min-width: 72px; }
+    .neighborhood-filters label:nth-child(6) { flex: 1.1 1 99px; min-width: 96px; }
     .neighborhood-filters select, .neighborhood-filters input { box-sizing: border-box; min-width: 0; width: 100%;
-      min-height: 40px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; padding: 8px; font: inherit; color: #0f172a; }
-    .neighborhood-filters select:focus-visible, .neighborhood-filters input:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
-    .neighborhood-filter-actions { display: flex; align-items: end; gap: 9px; flex-wrap: wrap; grid-column: 1/-1; }
+      height: 35px; min-height: 35px; border: 1px solid #cbd5e1; border-radius: 7px;
+      background: #fff; padding: 6px; font-size: .76rem; color: #0f172a; }
+    .neighborhood-filters select:focus-visible, .neighborhood-filters input:focus-visible {
+      outline: 2px solid #059669; outline-offset: 2px; }
+    .neighborhood-filter-actions { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 5px;
+      white-space: nowrap; }
+    .neighborhood-filter-actions .btn { min-height: 35px; padding: 6px 9px; font-size: .74rem;
+      white-space: nowrap; }
     .neighborhood-load-more { margin: 16px 0 6px; }
     .neighborhood-load-more[hidden] { display: none; }
     .neighborhood-property-cap-note { color: #92400e; font-size: .82rem; }
-    @media (max-width: 700px) { .neighborhood-filters { grid-template-columns: repeat(2, minmax(0,1fr)); padding: 12px; gap: 10px; }
-      .neighborhood-filter-actions .btn { flex: 1 1 120px; } }
+    @media (max-width: 700px) {
+      .neighborhood-filters { padding: 8px 0 12px; gap: 8px; }
+      .neighborhood-filters label { flex-grow: 0; }
+    }
     .neighborhood-property-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
     .neighborhood-property-grid .listing-card { min-width: 0; }
     .neighborhood-property-empty { grid-column: 1/-1; border: 1px dashed #dbe5e7;

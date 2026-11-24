@@ -167,6 +167,39 @@ test("real neighborhood browser filters, resets and appends homes without replac
         hasOlderMatchingInventory: false, candidateLimitReached: false }) });
   });
   await page.goto(siteUrl, { waitUntil: "domcontentloaded" });
+  // The filters should be one compact row within the content column on desktop,
+  // without pushing the page sideways on mobile.
+  await page.setViewportSize({ width: 1280, height: 850 });
+  const desktopToolbar = await page.locator("#neighborhood-filters").evaluate((form) => {
+    const outer = form.getBoundingClientRect();
+    const labels = Array.from(form.querySelectorAll("label")).map((el) => el.getBoundingClientRect());
+    const actions = form.querySelector(".neighborhood-filter-actions")!.getBoundingClientRect();
+    return {
+      width: outer.width, height: outer.height, scrollWidth: form.scrollWidth, clientWidth: form.clientWidth,
+      topDelta: Math.max(...labels.map((x) => x.top)) - Math.min(...labels.map((x) => x.top)),
+      actionsTop: actions.top, labelsBottom: Math.max(...labels.map((x) => x.bottom)),
+    };
+  });
+  assert.ok(desktopToolbar.width > 580, "full main-column width is available for the filters");
+  assert.ok(desktopToolbar.height < 105, "filter toolbar is not a tall multi-row panel");
+  assert.ok(desktopToolbar.topDelta < 2, "all six filter controls are aligned in one row");
+  assert.ok(desktopToolbar.actionsTop < desktopToolbar.labelsBottom,
+    "Apply and Reset buttons remain on the same row");
+  assert.ok(desktopToolbar.scrollWidth <= desktopToolbar.clientWidth + 2,
+    "desktop toolbar fits without horizontal scrolling");
+  await page.setViewportSize({ width: 390, height: 820 });
+  const mobileToolbar = await page.locator("#neighborhood-filters").evaluate((form) => ({
+    height: form.getBoundingClientRect().height,
+    scrollWidth: form.scrollWidth,
+    clientWidth: form.clientWidth,
+    pageScrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  assert.ok(mobileToolbar.height < 105, "mobile keeps the controls on one swipeable row");
+  assert.ok(mobileToolbar.scrollWidth > mobileToolbar.clientWidth,
+    "narrow screens scroll only the filter strip");
+  assert.ok(mobileToolbar.pageScrollWidth <= mobileToolbar.viewportWidth + 2,
+    "filter controls do not cause page-wide horizontal overflow");
   assert.equal(await page.locator("#neighborhood-sale-grid .listing-card").count(), 1);
   await page.getByRole("button", { name: "Load more homes for sale" }).click();
   await page.waitForFunction(() => document.querySelector("#homes-sale")?.getAttribute("data-loaded") === "3");
