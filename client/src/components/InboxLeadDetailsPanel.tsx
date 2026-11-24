@@ -1,3 +1,6 @@
+import { copilotActionLabel, quickFollowUpDate, quickFollowUpOptions, type QuickFollowUpValue } from "@/lib/inboxCopilotPresentation";
+import i18n from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { InboxAssignmentControl } from "@/components/InboxAssignmentControl";
 import { agentInquiryLabel, agentInquiryRecommendation } from "@shared/agent/agentPageInquiry";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
@@ -103,6 +106,7 @@ import {
 import { useMarkProspectAiWon, useSetProspectAiOutcome } from "@/lib/prospectAi";
 import { isProspectAiAttributedContact } from "@shared/prospectAI";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
+import { formatRegionalDate, formattingLocale } from "@/lib/regionalFormatting";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, pipelineStageOptions } from "@/lib/data";
 import { CONVERSATION_STATUS_ROWS, getConversationStatusRow } from "@/lib/conversationStatusUi";
@@ -200,10 +204,9 @@ interface TeamMember {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  manual: 'Manual', whatsapp: 'WhatsApp', instagram: 'Instagram',
-  facebook: 'Facebook', webchat: 'Web Chat', import: 'CSV Import',
+  whatsapp: 'WhatsApp', instagram: 'Instagram',
+  facebook: 'Facebook',
   api: 'API', tiktok: 'TikTok', sms: 'SMS', telegram: 'Telegram',
-  email: 'Email', website_form: 'Website Form',
 };
 
 function resolveContactSourceLabel(contact: {
@@ -213,13 +216,19 @@ function resolveContactSourceLabel(contact: {
 }): string | null {
   const inquiryLabel = agentInquiryLabel(contact);
   if (inquiryLabel) return inquiryLabel;
-  if (contact.source === "webchat") return "Website Chat";
+  if (contact.source === "webchat") return i18n.t("inboxUi.websiteChat");
   const cf = contact.customFields || {};
-  if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `Agent Page · ${cf.agentNeighborhoodName}`;
+  if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `${i18n.t("inboxUi.agentPageSource")} · ${cf.agentNeighborhoodName}`;
   if (typeof cf.leadSource === 'string' && cf.leadSource.trim()) {
     return cf.leadSource.trim();
   }
-  if (cf.sourcePage === 'agent_page') return 'Agent Page';
+  if (cf.sourcePage === 'agent_page') return i18n.t("inboxUi.agentPageSource");
+  switch (contact.source) {
+    case "manual": return i18n.t("inboxUi.manualSource");
+    case "import": return i18n.t("inboxUi.csvImportSource");
+    case "email": return i18n.t("inboxUi.emailChannel");
+    case "website_form": return i18n.t("inboxUi.websiteFormSource");
+  }
   if (contact.source) return SOURCE_LABELS[contact.source] || contact.source;
   return null;
 }
@@ -258,8 +267,8 @@ function formatFollowUpDisplay(isoString: string): string {
     const d = parseISO(isoString);
     const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
     return hasTime
-      ? format(d, "MMM d 'at' h:mm a")
-      : format(d, 'MMM d, yyyy');
+      ? formatRegionalDate(d, i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : formatRegionalDate(d, i18n.language, { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return isoString;
   }
@@ -317,28 +326,31 @@ interface InboxLeadDetailsPanelProps {
   workspaceIntelligence?: WorkspaceIntelligenceSnapshot | null;
 }
 
-function formatRelativeTime(date: Date | string | null | undefined): string {
-  if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
+function formatRelativeTime(date: Date | string | null | undefined, language: string): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
   const diff = Date.now() - d.getTime();
-  const mins  = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days  = Math.floor(diff / 86400000);
-  if (mins < 1)   return 'just now';
-  if (mins < 60)  return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7)   return `${days}d ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (!Number.isFinite(diff)) return "";
+  const minutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (minutes < 1) return i18n.t("inboxUi.justNow");
+  const formatter = new Intl.RelativeTimeFormat(formattingLocale(language), { style: "narrow" });
+  if (minutes < 60) return formatter.format(-minutes, "minute");
+  if (hours < 24) return formatter.format(-hours, "hour");
+  if (days < 7) return formatter.format(-days, "day");
+  return formatRegionalDate(d, language, { month: "short", day: "numeric" });
 }
 
 function CopilotPopoverHeader({ title, onClose }: { title: string; onClose: () => void }) {
+  const { t: inboxText } = useTranslation();
   return (
     <div className="mb-2 flex items-center justify-between gap-2">
       <span className="text-[11px] font-semibold text-gray-700">{title}</span>
       <button
         type="button"
         onClick={onClose}
-        aria-label="Close"
+        aria-label={inboxText("inboxUi.close")}
         className="rounded p-0.5 text-gray-300 hover:text-gray-500 transition-colors"
       >
         <X className="w-3.5 h-3.5" />
@@ -368,6 +380,7 @@ interface AddNoteModalProps {
   onClose: () => void;
 }
 function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers, onSave, onDelete, onClose }: AddNoteModalProps) {
+  const { t: inboxText } = useTranslation();
   const { toast } = useToast();
   const [noteText, setNoteText] = useState('');
   const [saving,   setSaving]   = useState(false);
@@ -387,13 +400,13 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
       if (res.ok) {
         onDelete(noteId);
         setConfirmDeleteId(null);
-        toast({ title: "Note deleted", duration: 2000 });
+        toast({ title: inboxText("inboxUi.noteDeleted"), duration: 2000 });
       } else {
         const body = await res.json().catch(() => ({}));
-        toast({ title: "Delete failed", description: body?.error || "Please try again.", variant: "destructive" });
+        toast({ title: inboxText("inboxUi.deleteFailed"), description: inboxText("inboxUi.retryMoment"), variant: "destructive" });
       }
     } catch {
-      toast({ title: "Delete failed", description: "Network error.", variant: "destructive" });
+      toast({ title: inboxText("inboxUi.deleteFailed"), description: inboxText("inboxUi.networkError"), variant: "destructive" });
     } finally {
       setDeleting(false);
     }
@@ -401,7 +414,7 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
 
   const handleSave = async () => {
     if (!noteText.trim()) {
-      toast({ title: "Note is empty", description: "Please type something before saving.", variant: "destructive" });
+      toast({ title: inboxText("inboxUi.noteIsEmpty"), description: inboxText("inboxUi.pleaseTypeSomethingBeforeSaving"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -415,14 +428,14 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
         const saved: ContactNote = await res.json();
         onSave(saved);
         onClose();
-        toast({ title: "Note saved", duration: 2000 });
+        toast({ title: inboxText("inboxUi.noteSaved"), duration: 2000 });
       } else {
         let errMsg = "Failed to save note. Please try again.";
         try { const b = await res.json(); if (b?.error) errMsg = b.error; } catch {}
-        toast({ title: "Save failed", description: errMsg, variant: "destructive" });
+        toast({ title: inboxText("inboxUi.saveFailed"), description: errMsg, variant: "destructive" });
       }
     } catch {
-      toast({ title: "Save failed", description: "Network error — please check your connection and try again.", variant: "destructive" });
+      toast({ title: inboxText("inboxUi.saveFailed"), description: inboxText("inboxUi.networkErrorPleaseCheckYourConnectionAndTry"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -444,8 +457,8 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
         {/* Header */}
         <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
           <div>
-            <h2 className="text-[15px] font-semibold text-gray-900">Add Team Note</h2>
-            <p className="text-[11px] text-gray-400 mt-0.5">Visible to all team members — not shown to customer</p>
+            <h2 className="text-[15px] font-semibold text-gray-900">{inboxText("inboxUi.addTeamNote")}</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">{inboxText("inboxUi.visibleToAllTeamMembersNotShownTo")}</p>
           </div>
           <button
             onClick={onClose}
@@ -475,7 +488,7 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
                     <button
                       onClick={() => setConfirmDeleteId(note.id)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-300 hover:text-red-400 rounded"
-                      title="Delete note"
+                      title={inboxText("inboxUi.deleteNote")}
                       data-testid={`button-delete-note-${note.id}`}
                     >
                       <Trash2 className="w-3 h-3" />
@@ -486,21 +499,19 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
                 {/* Inline confirm */}
                 {confirmDeleteId === note.id && (
                   <div className="flex items-center gap-2 mt-1 pt-1 border-t border-gray-100">
-                    <span className="text-[11px] text-gray-500 flex-1">Delete this note?</span>
+                    <span className="text-[11px] text-gray-500 flex-1">{inboxText("inboxUi.deleteThisNote")}</span>
                     <button
                       onClick={() => setConfirmDeleteId(null)}
                       className="text-[11px] text-gray-500 hover:text-gray-700 font-medium px-2 py-0.5 rounded transition-colors"
                       data-testid={`button-cancel-delete-${note.id}`}
-                    >
-                      Cancel
-                    </button>
+                    >{inboxText("inboxUi.cancel")}</button>
                     <button
                       onClick={() => handleDelete(note.id)}
                       disabled={deleting}
                       className="text-[11px] text-white font-semibold bg-red-500 hover:bg-red-600 disabled:opacity-50 px-2 py-0.5 rounded transition-colors"
                       data-testid={`button-confirm-delete-${note.id}`}
                     >
-                      {deleting ? '…' : 'Delete'}
+                      {deleting ? '…' : inboxText("inboxUi.delete")}
                     </button>
                   </div>
                 )}
@@ -515,7 +526,7 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
           <textarea
             className="notes-textarea w-full min-h-[120px] bg-white rounded-xl p-3 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
             style={{ outline: 'none', boxShadow: 'none', border: '1px solid #E5E7EB' }}
-            placeholder="Add context, objections, preferences…"
+            placeholder={inboxText("inboxUi.addContextObjectionsPreferences")}
             value={noteText}
             onChange={e => setNoteText(e.target.value)}
             autoFocus
@@ -529,16 +540,14 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
             onClick={onClose}
             className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             data-testid="button-cancel-note"
-          >
-            Cancel
-          </button>
+          >{inboxText("inboxUi.cancel")}</button>
           <button
             onClick={handleSave}
             disabled={!noteText.trim() || saving}
             className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
             data-testid="button-save-note"
           >
-            {saving ? 'Saving…' : 'Save Note'}
+            {saving ? inboxText("inboxUi.saving") : inboxText("inboxUi.saveNote")}
           </button>
         </div>
       </div>
@@ -554,6 +563,7 @@ interface EditNoteModalProps {
   onClose: () => void;
 }
 function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteModalProps) {
+  const { t: inboxText } = useTranslation();
   const [text, setText] = useState(note.content);
   const [saving, setSaving] = useState(false);
 
@@ -599,7 +609,7 @@ function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteM
         {/* Header */}
         <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
           <div>
-            <h2 className="text-[15px] font-semibold text-gray-900">Edit Note</h2>
+            <h2 className="text-[15px] font-semibold text-gray-900">{inboxText("inboxUi.editNote")}</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">
               {note.createdByName || 'Team member'} · {note.createdAt
                 ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -634,24 +644,20 @@ function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteM
             className="flex items-center gap-1.5 py-2 px-3 text-[12px] font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
             data-testid="button-delete-edit-note"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete
-          </button>
+            <Trash2 className="w-3.5 h-3.5" />{inboxText("inboxUi.delete")}</button>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
               data-testid="button-cancel-edit-note"
-            >
-              Cancel
-            </button>
+            >{inboxText("inboxUi.cancel")}</button>
             <button
               onClick={handleSave}
               disabled={!text.trim() || saving}
               className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               data-testid="button-save-edit-note"
             >
-              {saving ? 'Saving…' : 'Save Note'}
+              {saving ? inboxText("inboxUi.saving") : inboxText("inboxUi.saveNote")}
             </button>
           </div>
         </div>
@@ -722,17 +728,17 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     const to = typeof data.to === "string" ? data.to : "";
     if (to === "Appointment Requested" || title === "Showing requested") {
       return {
-        title: "Appointment requested",
-        detail: "Customer asked for a showing",
+        title: i18n.t("inboxUi.appointmentRequested"),
+        detail: i18n.t("inboxUi.customerAskedForAShowing"),
         tone: "green",
       };
     }
     if (to === "Appointment Booked") {
-      return { title: "Appointment booked", detail: "Showing confirmed with the customer", tone: "green" };
+      return { title: i18n.t("inboxUi.appointmentBooked"), detail: i18n.t("inboxUi.showingConfirmed"), tone: "green" };
     }
     return {
-      title: "Tag updated",
-      detail: from && to ? `${from} → ${to}` : sanitizeUserFacingText(to || from) || "Contact tag updated",
+      title: i18n.t("inboxUi.tagUpdated"),
+      detail: from && to ? `${from} → ${to}` : sanitizeUserFacingText(to || from) || i18n.t("inboxUi.contactTagUpdated"),
       tone: "gray",
     };
   }
@@ -741,16 +747,16 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     const from = typeof data.from === "string" ? data.from : "";
     const to = typeof data.to === "string" ? data.to : "";
     return {
-      title: "Pipeline stage updated",
-      detail: from && to ? `${from} → ${to}` : to || from || "Stage changed",
+      title: i18n.t("inboxUi.pipelineStageUpdated"),
+      detail: from && to ? `${from} → ${to}` : to || from || i18n.t("inboxUi.stageChanged"),
       tone: "gray",
     };
   }
 
   if (event.eventType === "assignment" || kind === "assignment") {
     return {
-      title: "Agent assigned",
-      detail: content || title || "Conversation assigned",
+      title: i18n.t("inboxUi.agentAssigned"),
+      detail: content || title || i18n.t("inboxUi.conversationAssigned"),
       tone: "gray",
     };
   }
@@ -759,22 +765,22 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     const taskTitle = title || "";
     const hay = `${taskTitle} ${content}`.toLowerCase();
     if (/scheduling link sent|scheduling link/i.test(hay)) {
-      return { title: "Booking link sent to customer", detail: "", tone: "green" };
+      return { title: i18n.t("inboxUi.bookingLinkSentToCustomer"), detail: "", tone: "green" };
     }
     if (/customer requested a showing/i.test(hay)) {
       return {
-        title: "Customer requested a showing",
-        detail: /booking link sent/i.test(hay) ? "Booking link sent to customer" : "",
+        title: i18n.t("inboxUi.customerRequestedAShowing"),
+        detail: /booking link sent/i.test(hay) ? i18n.t("inboxUi.bookingLinkSentToCustomer") : "",
         tone: "green",
       };
     }
     if (/showing requested|appointment requested/i.test(hay)) {
-      return { title: "Customer requested a showing", detail: "", tone: "green" };
+      return { title: i18n.t("inboxUi.customerRequestedAShowing"), detail: "", tone: "green" };
     }
     if (/book|showing|appointment/i.test(hay)) {
       return {
-        title: "Appointment requested",
-        detail: formatActivityDetailText(content) || "Customer asked about a showing or appointment",
+        title: i18n.t("inboxUi.appointmentRequested"),
+        detail: formatActivityDetailText(content) || i18n.t("inboxUi.customerAskedAboutAppointment"),
         tone: "green",
       };
     }
@@ -782,72 +788,72 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
 
   if (event.eventType === "ai_handoff") {
     return {
-      title: "Follow-up needed",
-      detail: formatActivityDetailText(content) || "This conversation needs a personal reply",
+      title: i18n.t("inboxUi.followUpNeeded"),
+      detail: formatActivityDetailText(content) || i18n.t("inboxUi.personalReplyNeeded"),
       tone: "amber",
     };
   }
 
   if (event.eventType === "calendly_booking") {
     return {
-      title: "Appointment booked",
-      detail: when ? `Scheduled for ${when}` : inviteeName || inviteeEmail || "Meeting confirmed",
+      title: i18n.t("inboxUi.appointmentBooked"),
+      detail: when ? i18n.t("inboxUi.scheduledFor", { when }) : inviteeName || inviteeEmail || i18n.t("inboxUi.meetingConfirmed"),
       tone: "green",
     };
   }
   if (event.eventType === "calendly_booking_canceled") {
     return {
-      title: "Appointment canceled",
-      detail: when ? `Was scheduled for ${when}` : "Meeting canceled",
+      title: i18n.t("inboxUi.appointmentCanceled"),
+      detail: when ? i18n.t("inboxUi.wasScheduledFor", { when }) : i18n.t("inboxUi.meetingCanceled"),
       tone: "amber",
     };
   }
   if (event.eventType === "appointment_deleted") {
     return {
-      title: "Appointment removed",
-      detail: when ? `Was scheduled for ${when}` : title || "Meeting removed from calendar",
+      title: i18n.t("inboxUi.appointmentRemoved"),
+      detail: when ? i18n.t("inboxUi.wasScheduledFor", { when }) : title || i18n.t("inboxUi.meetingRemovedFromCalendar"),
       tone: "amber",
     };
   }
   if (event.eventType === "calendly_rescheduled") {
     return {
-      title: "Appointment rescheduled",
-      detail: when ? `New time: ${when}` : "Meeting time updated",
+      title: i18n.t("inboxUi.appointmentRescheduled"),
+      detail: when ? i18n.t("inboxUi.newMeetingTime", { when }) : i18n.t("inboxUi.meetingTimeUpdated"),
       tone: "green",
     };
   }
   if (event.eventType === "note" && data.kind === "calendly_booking_confirmed") {
     return {
-      title: "Appointment booked",
-      detail: [content || title || "Meeting", when].filter(Boolean).join(" · "),
+      title: i18n.t("inboxUi.appointmentBooked"),
+      detail: [content || title || i18n.t("inboxUi.meeting"), when].filter(Boolean).join(" · "),
       tone: "green",
     };
   }
   if (event.eventType === "appointment_created") {
     return {
-      title: "Appointment booked",
-      detail: content || title || "Meeting scheduled",
+      title: i18n.t("inboxUi.appointmentBooked"),
+      detail: content || title || i18n.t("inboxUi.meetingScheduled"),
       tone: "green",
     };
   }
   if (event.eventType === "message") {
     return {
-      title: "Message activity",
-      detail: formatActivityDetailText(typeof data.content === "string" ? data.content : "") || "Conversation updated",
+      title: i18n.t("inboxUi.messageActivity"),
+      detail: formatActivityDetailText(typeof data.content === "string" ? data.content : "") || i18n.t("inboxUi.conversationUpdated"),
       tone: "gray",
     };
   }
   if (kind === "campaign_enrolled" || title.toLowerCase().includes("enrolled in")) {
     return {
-      title: title || "Campaign enrollment",
-      detail: formatActivityDetailText(content) || "Contact added to a saved campaign",
+      title: title || i18n.t("inboxUi.campaignEnrollment"),
+      detail: formatActivityDetailText(content) || i18n.t("inboxUi.contactAddedToSavedCampaign"),
       tone: "green",
     };
   }
   const fallbackTitle = event.eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return {
     title: fallbackTitle,
-    detail: formatActivityDetailText(content || title) || "Activity recorded",
+    detail: formatActivityDetailText(content || title) || i18n.t("inboxUi.activityRecorded"),
     tone: "gray",
   };
 }
@@ -884,6 +890,7 @@ export function InboxLeadDetailsPanel({
   onCopilotExpandedChange,
   workspaceIntelligence: workspaceIntelligenceProp,
 }: InboxLeadDetailsPanelProps) {
+  const { t: inboxText } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
@@ -982,8 +989,8 @@ export function InboxLeadDetailsPanel({
           });
         } catch {
           toast({
-            title: "Could not resume AI",
-            description: "Try again in a moment.",
+            title: inboxText("inboxUi.couldNotResumeAi"),
+            description: inboxText("inboxUi.tryAgainInAMoment"),
             variant: "destructive",
           });
         }
@@ -1231,12 +1238,12 @@ export function InboxLeadDetailsPanel({
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/timeline?limit=60`] });
       setCampaignPickerOpen(false);
       setPickedCampaignId("");
-      toast({ title: "Enrolled in campaign", duration: 2500 });
+      toast({ title: inboxText("inboxUi.enrolledInCampaign"), duration: 2500 });
     },
     onError: (e: Error) => {
       toast({
-        title: "Could not enroll",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: inboxText("inboxUi.couldNotEnroll"),
+        description: inboxText("inboxUi.retryMoment"),
         variant: "destructive",
       });
     },
@@ -1251,8 +1258,8 @@ export function InboxLeadDetailsPanel({
     },
     onError: (e: Error) => {
       toast({
-        title: "Pause failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: inboxText("inboxUi.pauseFailed"),
+        description: inboxText("inboxUi.retryMoment"),
         variant: "destructive",
       });
     },
@@ -1267,8 +1274,8 @@ export function InboxLeadDetailsPanel({
     },
     onError: (e: Error) => {
       toast({
-        title: "Resume failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: inboxText("inboxUi.resumeFailed"),
+        description: inboxText("inboxUi.retryMoment"),
         variant: "destructive",
       });
     },
@@ -1283,8 +1290,8 @@ export function InboxLeadDetailsPanel({
     },
     onError: (e: Error) => {
       toast({
-        title: "Cancel failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: inboxText("inboxUi.cancelFailed"),
+        description: inboxText("inboxUi.retryMoment"),
         variant: "destructive",
       });
     },
@@ -1429,15 +1436,11 @@ export function InboxLeadDetailsPanel({
     return d.toISOString();
   };
 
-  // Quick follow-up: sets 9am on the target day
-  const setQuickFollowUp = (label: string) => {
-    const now = new Date();
-    const d   = new Date(now);
-    if      (label === '24h')    d.setDate(d.getDate() + 1);
-    else if (label === '3 days') d.setDate(d.getDate() + 3);
-    else if (label === '1 week') d.setDate(d.getDate() + 7);
-    d.setHours(9, 0, 0, 0);
-    onUpdateContact({ followUp: agentInquiryRecommendation(contact) || label, followUpDate: d.toISOString() });
+  const setQuickFollowUp = (value: QuickFollowUpValue) => {
+    onUpdateContact({
+      followUp: agentInquiryRecommendation(contact) || value,
+      followUpDate: quickFollowUpDate(value),
+    });
   };
 
   const confirmCustomFollowUp = () => {
@@ -1451,7 +1454,7 @@ export function InboxLeadDetailsPanel({
   const clearFollowUp = () => {
     void clearBookedMeetings()
       .catch(() => {
-        toast({ title: "Failed to clear booked meeting", variant: "destructive" });
+        toast({ title: inboxText("inboxUi.failedToClearBookedMeeting"), variant: "destructive" });
       })
       .finally(() => setFollowOpen(false));
   };
@@ -1567,33 +1570,25 @@ export function InboxLeadDetailsPanel({
     currentWorkspaceMember?.role === "admin";
 
   // ─── Copilot computed values ───────────────────────────────────────────────
-  const AI_STATE_LABELS: Record<string, string> = {
-    Ready:     "Ready to convert",
-    Qualifying:"Collecting details",
-    Engaging:  "Engaging",
-    Waiting:   "Waiting for reply",
-    Stalled:   "Stalled",
+  const AI_STATE_LABELS = {
+    Ready: inboxText("inboxUi.readyToAct"),
+    Qualifying: inboxText("inboxUi.collectingDetails"),
+    Engaging: inboxText("inboxUi.engaging"),
+    Waiting: inboxText("inboxUi.waitingForReply"),
+    Stalled: inboxText("inboxUi.stalled"),
   };
-  const aiStateLabel = AI_STATE_LABELS[intel.aiState] ?? intel.aiState;
-
-  /** Collapsed Copilot row — display-only */
-  const copilotCollapsedSummary = useMemo(() => {
-    const label =
-      intel.leadScoreDetails?.bucket === "unqualified" ? "Unqualified" : intel.leadScore.label;
-    const tail =
-      intel.aiState === "Ready"
-        ? "Ready to act"
-        : intel.aiState === "Qualifying"
-          ? "Qualifying"
-          : intel.aiState === "Engaging"
-            ? "Engaging"
-            : intel.aiState === "Waiting"
-              ? "Waiting for reply"
-              : intel.aiState === "Stalled"
-                ? "Stalled"
-                : aiStateLabel;
-    return `${label} lead • ${tail}`;
-  }, [intel.leadScoreDetails?.bucket, intel.leadScore.label, intel.aiState, aiStateLabel]);
+  const aiStateLabel = AI_STATE_LABELS[intel.aiState];
+  const leadLabel = intel.leadScoreDetails?.bucket === "unqualified"
+    ? inboxText("inboxUi.leadUnqualified")
+    : intel.leadScore.label === "Hot"
+      ? inboxText("inboxUi.leadHot")
+      : intel.leadScore.label === "Warm"
+        ? inboxText("inboxUi.leadWarm")
+        : inboxText("inboxUi.leadCold");
+  const copilotCollapsedSummary = inboxText("inboxUi.leadState", {
+    lead: leadLabel,
+    state: aiStateLabel,
+  });
 
   const stageSignals = useMemo(
     () =>
@@ -2103,8 +2098,8 @@ export function InboxLeadDetailsPanel({
           });
           if (res.status === 401) {
             toast({
-              title: "Session expired",
-              description: "Sign in again to insert a scheduling link.",
+              title: inboxText("inboxUi.sessionExpired"),
+              description: inboxText("inboxUi.signInAgainToInsertASchedulingLink"),
               variant: "destructive",
             });
             return;
@@ -2135,18 +2130,18 @@ export function InboxLeadDetailsPanel({
           if (data.syncWarning) {
             console.warn("[CalendlySyncWarning]", data.syncWarning);
             toast({
-              title: "Draft added to composer",
+              title: inboxText("inboxUi.draftAddedToComposer"),
               description: data.syncWarning,
               duration: 5000,
             });
           } else if (!data.url?.trim()) {
             toast({
-              title: "Draft added to composer",
-              description: "Connect Calendly in Integrations to include your booking link.",
+              title: inboxText("inboxUi.draftAddedToComposer"),
+              description: inboxText("inboxUi.connectCalendlyInIntegrationsToIncludeYourBooking"),
               duration: 4500,
             });
           } else {
-            toast({ title: "Draft added to composer", duration: 2500 });
+            toast({ title: inboxText("inboxUi.draftAddedToComposer"), duration: 2500 });
           }
         } catch (err) {
           console.warn("[CopilotSchedulingDraft] scheduling URL fetch failed:", err);
@@ -2154,8 +2149,8 @@ export function InboxLeadDetailsPanel({
           const inserted = onInsertComposerDraft?.(fallback) ?? false;
           if (inserted) {
             toast({
-              title: "Draft added without booking link",
-              description: "Could not load your Calendly URL. Connect Calendly in Integrations and try again.",
+              title: inboxText("inboxUi.draftAddedWithoutBookingLink"),
+              description: inboxText("inboxUi.couldNotLoadYourCalendlyUrlConnectCalendly"),
               variant: "destructive",
               duration: 4500,
             });
@@ -2171,7 +2166,7 @@ export function InboxLeadDetailsPanel({
       }
       const inserted = onInsertComposerDraft?.(text) ?? false;
       if (inserted) {
-        toast({ title: "Draft added to composer", duration: 2500 });
+        toast({ title: inboxText("inboxUi.draftAddedToComposer"), duration: 2500 });
       } else {
         console.warn("[Copilot] Failed to insert composer draft for action:", label);
       }
@@ -2188,6 +2183,7 @@ export function InboxLeadDetailsPanel({
 
     return contextualNextActions.map((action, i) => {
       const behavior = action.behavior;
+      const displayLabel = copilotActionLabel(action.label, inboxText);
       const id: NextBestActionRow["id"] =
         behavior === "composer"
           ? "qualify"
@@ -2208,14 +2204,14 @@ export function InboxLeadDetailsPanel({
       };
       return {
         id,
-        label: action.label,
+        label: displayLabel,
         priority: 100 - i,
         onClick,
-        title: action.label,
+        title: displayLabel,
         informational: behavior === "info",
       };
     });
-  }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, openCampaignPicker, runComposerAction]);
+  }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, openCampaignPicker, runComposerAction, inboxText]);
 
   return (
     <div
@@ -2264,7 +2260,7 @@ export function InboxLeadDetailsPanel({
             </div>
             {hasAIBrain && (
               <p className="text-[9px] text-gray-500 font-medium mt-1 ml-[22px] leading-tight">
-                {headerShowsSnoozed ? "AI paused for this conversation" : "AI Brain"}
+                {headerShowsSnoozed ? inboxText("inboxUi.aiPausedForThisConversation") : "AI Brain"}
               </p>
             )}
           </div>
@@ -2289,7 +2285,7 @@ export function InboxLeadDetailsPanel({
                 )}
                 data-testid="button-ai-toggle"
               >
-                {headerShowsSnoozed ? "Snoozed" : "Active"}
+                {headerShowsSnoozed ? inboxText("inboxUi.snoozed") : inboxText("inboxUi.active")}
               </button>
             ) : (
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
@@ -2299,7 +2295,7 @@ export function InboxLeadDetailsPanel({
               <ChevronDown
                 className={cn("w-[18px] h-[18px] transition-transform duration-200", copilotExpanded && "rotate-180")}
               />
-              <span className="text-[10px] font-medium">{copilotExpanded ? "Collapse" : "Expand"}</span>
+              <span className="text-[10px] font-medium">{copilotExpanded ? inboxText("inboxUi.collapse") : inboxText("inboxUi.expand")}</span>
             </div>
           </div>
         </div>
@@ -2315,7 +2311,7 @@ export function InboxLeadDetailsPanel({
             </p>
             {activeSuggestionCount > 0 && (
               <span className="text-[9px] text-gray-600 font-semibold shrink-0">
-                {activeSuggestionCount} suggestion{activeSuggestionCount !== 1 ? "s" : ""}
+                {inboxText("inboxUi.suggestionCount", { count: activeSuggestionCount })}
               </span>
             )}
           </div>
@@ -2335,33 +2331,33 @@ export function InboxLeadDetailsPanel({
                 data-testid="button-ai-book"
               >
                 <CalendarIcon className="w-3 h-3 text-gray-500" />
-                <span className="text-[9px] text-gray-500 font-medium">Book</span>
+                <span className="text-[9px] text-gray-500 font-medium">{inboxText("inboxUi.book")}</span>
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
-              <CopilotPopoverHeader title="Schedule appointment" onClose={() => setBookOpen(false)} />
+              <CopilotPopoverHeader title={inboxText("inboxUi.scheduleAppointment")} onClose={() => setBookOpen(false)} />
               {bookingConfirmed ? (
                 <div className="flex flex-col gap-1.5 py-2">
                   <div className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <p className="text-[12px] font-semibold text-emerald-700">Appointment saved</p>
+                    <p className="text-[12px] font-semibold text-emerald-700">{inboxText("inboxUi.appointmentSaved")}</p>
                   </div>
                   {contactAppointments.length > 0 && (
                     <div className="mt-1 space-y-1">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">All appointments</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">{inboxText("inboxUi.allAppointments")}</p>
                       {contactAppointments.map(a => (
                         <div key={a.id} className="flex items-center justify-between gap-1 text-[11px] text-gray-600">
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-gray-700 font-medium shrink-0">{a.appointmentType}</span>
                             <span className="text-gray-400">·</span>
-                            <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d · h:mm a')}</span>
+                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                           </div>
                           <button
                             onClick={() => void deleteContactAppointment(a.id).catch(() => {
-                              toast({ title: "Failed to remove appointment", variant: "destructive" });
+                              toast({ title: inboxText("inboxUi.failedToRemoveAppointment"), variant: "destructive" });
                             })}
                             className="shrink-0 text-gray-300 hover:text-red-400 transition-colors ml-1"
-                            title="Delete appointment"
+                            title={inboxText("inboxUi.deleteAppointment")}
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -2372,31 +2368,29 @@ export function InboxLeadDetailsPanel({
                   <button
                     className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 underline self-start"
                     onClick={() => { setBookingConfirmed(false); setBookingDate(undefined); }}
-                  >
-                    Schedule another
-                  </button>
+                  >{inboxText("inboxUi.scheduleAnother")}</button>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {contactAppointments.length > 0 && (
                     <div className="pb-2 border-b border-gray-100">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Upcoming</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">{inboxText("inboxUi.upcoming")}</p>
                       {contactAppointments.slice(0, 3).map(a => (
                         <div key={a.id} className="flex items-center justify-between gap-1 text-[11px] text-gray-600">
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-gray-700 font-medium shrink-0">{a.appointmentType}</span>
                             <span className="text-gray-300">·</span>
-                            <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d, h:mm a')}</span>
+                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                           </div>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               void deleteContactAppointment(a.id).catch(() => {
-                                toast({ title: "Failed to remove appointment", variant: "destructive" });
+                                toast({ title: inboxText("inboxUi.failedToRemoveAppointment"), variant: "destructive" });
                               });
                             }}
                             className="shrink-0 text-gray-300 hover:text-red-400 transition-colors ml-1"
-                            title="Delete appointment"
+                            title={inboxText("inboxUi.deleteAppointment")}
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -2405,7 +2399,7 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
                   <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Type</p>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">{inboxText("inboxUi.type")}</p>
                     <div className="flex gap-1 flex-wrap">
                       {['Viewing', 'Consultation', 'Call', 'Meeting'].map(t => (
                         <button
@@ -2422,7 +2416,7 @@ export function InboxLeadDetailsPanel({
                     </div>
                   </div>
                   <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">{inboxText("inboxUi.date")}</p>
                     <input
                       type="date"
                       min={format(new Date(), 'yyyy-MM-dd')}
@@ -2433,7 +2427,7 @@ export function InboxLeadDetailsPanel({
                     />
                   </div>
                   <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">{inboxText("inboxUi.time")}</p>
                     <div className="flex gap-1 flex-wrap">
                       {TIME_SLOTS.map(t => (
                         <button
@@ -2482,7 +2476,7 @@ export function InboxLeadDetailsPanel({
                       });
 
                       setBookingConfirmed(true);
-                      toast({ title: `${bookingType} booked`, description: `${contact.name} · ${dateStr}`, duration: 3500 });
+                      toast({ title: inboxText("inboxUi.scheduleType", { type: bookingType }), description: `${contact.name} · ${dateStr}`, duration: 3500 });
                     }
                   }}
                     className={cn(
@@ -2492,9 +2486,7 @@ export function InboxLeadDetailsPanel({
                         : "bg-gray-100 text-gray-400 cursor-not-allowed"
                     )}
                     data-testid="button-confirm-booking"
-                  >
-                    Confirm Appointment
-                  </button>
+                  >{inboxText("inboxUi.confirmAppointment")}</button>
                 </div>
               )}
             </PopoverContent>
@@ -2513,11 +2505,11 @@ export function InboxLeadDetailsPanel({
                     : "border-gray-200 bg-white hover:bg-gray-50"
                 )}
                 data-testid="button-ai-followup"
-                title="Schedule follow-up"
+                title={inboxText("inboxUi.scheduleFollowUp")}
               >
                 <Bell className={cn("w-3 h-3", contact.followUpDate ? "text-amber-600" : "text-gray-500")} />
                 <span className={cn("text-[9px] font-medium", contact.followUpDate ? "text-amber-700" : "text-gray-500")}>
-                  {contact.followUpDate ? "Set" : "Follow"}
+                  {contact.followUpDate ? inboxText("inboxUi.set") : inboxText("inboxUi.follow")}
                 </span>
               </button>
             </PopoverTrigger>
@@ -2529,23 +2521,19 @@ export function InboxLeadDetailsPanel({
               sideOffset={4}
             >
               <CopilotPopoverHeader
-                title={followView === "quick" ? "Follow-up" : "Custom follow-up"}
+                title={followView === "quick" ? inboxText("inboxUi.followUp") : inboxText("inboxUi.customFollowUp")}
                 onClose={() => setFollowOpen(false)}
               />
 
               {/* ─ QUICK OPTIONS VIEW ─ */}
               {followView === 'quick' && (
                 <>
-                  {[
-                    { label: '24h',    display: 'Tomorrow (24h)',  },
-                    { label: '3 days', display: '3 days'           },
-                    { label: '1 week', display: '1 week'           },
-                  ].map(({ label, display }) => (
+                  {quickFollowUpOptions(inboxText).map(({ value, display }) => (
                     <button
-                      key={label}
-                      onClick={() => { setQuickFollowUp(label); setFollowOpen(false); }}
+                      key={value}
+                      onClick={() => { setQuickFollowUp(value); setFollowOpen(false); }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                      data-testid={`followup-quick-${label.replace(' ', '-')}`}
+                      data-testid={`followup-quick-${value.replace(' ', '-')}`}
                     >
                       <Clock className="w-3 h-3 text-gray-400" />
                       {display}
@@ -2558,9 +2546,7 @@ export function InboxLeadDetailsPanel({
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
                     data-testid="followup-custom-open"
                   >
-                    <CalendarIcon className="w-3 h-3 text-gray-400" />
-                    Custom date &amp; time…
-                  </button>
+                    <CalendarIcon className="w-3 h-3 text-gray-400" />{inboxText("inboxUi.customDateTime")}</button>
 
                   {contact.followUpDate && (
                     <>
@@ -2570,9 +2556,7 @@ export function InboxLeadDetailsPanel({
                         className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                         data-testid="followup-quick-clear"
                       >
-                        <X className="w-3 h-3" />
-                        Clear follow-up
-                      </button>
+                        <X className="w-3 h-3" />{inboxText("inboxUi.clearFollowUp")}</button>
                     </>
                   )}
                 </>
@@ -2587,13 +2571,11 @@ export function InboxLeadDetailsPanel({
                     className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
                     data-testid="followup-custom-back"
                   >
-                    <ArrowLeft className="w-3 h-3" />
-                    Back
-                  </button>
+                    <ArrowLeft className="w-3 h-3" />{inboxText("inboxUi.back")}</button>
 
                   {/* Date picker */}
                   <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">{inboxText("inboxUi.date")}</p>
                     <input
                       type="date"
                       min={format(new Date(), 'yyyy-MM-dd')}
@@ -2606,7 +2588,7 @@ export function InboxLeadDetailsPanel({
 
                   {/* Time picker */}
                   <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">{inboxText("inboxUi.time")}</p>
                     <div className="flex flex-wrap gap-1">
                       {TIME_SLOTS.map(t => (
                         <button
@@ -2638,9 +2620,7 @@ export function InboxLeadDetailsPanel({
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       )}
                       data-testid="followup-custom-confirm"
-                    >
-                      Set Follow-up
-                    </button>
+                    >{inboxText("inboxUi.setFollowUp")}</button>
                   </div>
                 </div>
               )}
@@ -2658,7 +2638,7 @@ export function InboxLeadDetailsPanel({
                     : "border-gray-200 bg-white hover:bg-gray-50"
                 )}
                 data-testid="button-ai-pause"
-                title="Temporarily pause AI for this conversation"
+                title={inboxText("inboxUi.temporarilyPauseAiForThisConversation")}
               >
                 {headerShowsSnoozed
                   ? <PlayCircle className="w-3 h-3 text-gray-500" />
@@ -2669,7 +2649,7 @@ export function InboxLeadDetailsPanel({
             </PopoverTrigger>
             <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
               <CopilotPopoverHeader
-                title={headerShowsSnoozed ? "AI paused" : "Snooze AI"}
+                title={headerShowsSnoozed ? inboxText("inboxUi.aiPaused") : inboxText("inboxUi.snoozeAi")}
                 onClose={() => setSnoozeOpen(false)}
               />
               <button
@@ -2680,7 +2660,7 @@ export function InboxLeadDetailsPanel({
                 }}
                 className="w-full rounded-lg py-1.5 text-[11px] font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors"
               >
-                {headerShowsSnoozed ? "Resume AI" : "Pause for this conversation"}
+                {headerShowsSnoozed ? inboxText("inboxUi.resumeAi") : inboxText("inboxUi.pauseForThisConversation")}
               </button>
             </PopoverContent>
           </Popover>
@@ -2706,7 +2686,7 @@ export function InboxLeadDetailsPanel({
                 <AIUpgradePrompt
                   feature="Copilot"
                   requiredPlan={copilotUpgradeTo}
-                  reason="Reads conversations and auto-extracts budget, timeline, financing, and lead intent to help you qualify leads faster."
+                  reason={inboxText("inboxUi.copilotUpgradeReason")}
                   size="md"
                 />
               ) : (
@@ -2716,10 +2696,8 @@ export function InboxLeadDetailsPanel({
                       className="mb-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5"
                       data-testid="copilot-no-conversation-context"
                     >
-                      <p className="text-[12px] font-medium text-gray-700">No conversation context yet</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                        Conversation-based insights appear after the first message on this contact.
-                      </p>
+                      <p className="text-[12px] font-medium text-gray-700">{inboxText("inboxUi.noConversationContextYet")}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{inboxText("inboxUi.conversationBasedInsightsAppearAfterTheFirstMessage")}</p>
                     </div>
                   ) : null}
                   {/* A. Lead score + insights (action-oriented; criteria live in Buyer Preferences) */}
@@ -2727,20 +2705,14 @@ export function InboxLeadDetailsPanel({
                     {intel.leadScoreDetails && messages.length > 0 ? (
                       <div className="flex items-end justify-between gap-2">
                         <div className="space-y-0.5 min-w-0">
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                            Lead score
-                          </p>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{inboxText("inboxUi.leadScore")}</p>
                           <p className="text-[22px] font-bold text-gray-900 tabular-nums leading-none">
                             {intel.leadScoreDetails.score}
                           </p>
                           <div className="flex items-center gap-1.5 pt-0.5">
                             <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
                             <span className={cn("text-[11px] font-semibold truncate", intel.leadScore.color)}>
-                              {(intel.leadScoreDetails?.bucket === "unqualified"
-                                ? "Unqualified"
-                                : intel.leadScore.label)}{" "}
-                              Lead
-                            </span>
+                              {leadLabel}</span>
                           </div>
                         </div>
                       </div>
@@ -2748,16 +2720,13 @@ export function InboxLeadDetailsPanel({
                       <div className="flex items-center gap-2">
                         <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", intel.leadScore.dot)} />
                         <span className={cn("text-[13px] font-bold", intel.leadScore.color)}>
-                          {intel.leadScore.label} Lead
-                        </span>
+                          {leadLabel}</span>
                       </div>
                     ) : null}
 
                     {customerInsights.length > 0 ? (
                       <div className="space-y-1">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                          Customer insights
-                        </p>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{inboxText("inboxUi.customerInsights")}</p>
                         {customerInsights.length === 1 ? (
                           <p className="text-[12px] font-medium text-gray-800 leading-snug">
                             {customerInsights[0]}
@@ -2793,8 +2762,8 @@ export function InboxLeadDetailsPanel({
                                   return next;
                                 });
                               }}
-                              className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-70 transition-opacity"
-                              title={isAnswered ? "Mark as unanswered" : "Mark as answered"}
+                              className="flex items-center gap-1.5 min-w-0 text-start hover:opacity-70 transition-opacity"
+                              title={isAnswered ? inboxText("inboxUi.markAsUnanswered") : inboxText("inboxUi.markAsAnswered")}
                             >
                               {isAnswered
                                 ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
@@ -2821,14 +2790,12 @@ export function InboxLeadDetailsPanel({
                     return (
                       <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-md shadow-gray-900/[0.06] ring-1 ring-gray-100/80">
                         <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">
-                          {primary?.informational ? "Status" : "Primary recommendation"}
+                          {primary?.informational ? inboxText("inboxUi.status") : inboxText("inboxUi.primaryRecommendation")}
                         </p>
 
                         {handoffActive && (
                           <div className="mt-2 rounded-lg border border-amber-200/70 bg-amber-50/60 px-2.5 py-2">
-                            <p className="text-[11px] font-semibold text-gray-900 leading-snug">
-                              Customer requested human assistance
-                            </p>
+                            <p className="text-[11px] font-semibold text-gray-900 leading-snug">{inboxText("inboxUi.customerRequestedHumanAssistance")}</p>
                             {handoffMessage ? (
                               <p className="text-[10px] text-gray-600 mt-0.5 leading-snug">
                                 {handoffMessage}
@@ -2845,9 +2812,7 @@ export function InboxLeadDetailsPanel({
                             <p className="text-[12px] font-semibold text-gray-800 leading-snug">
                               {primary.label}
                             </p>
-                            <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">
-                              Automated or system notification — no lead follow-up needed.
-                            </p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{inboxText("inboxUi.automatedOrSystemNotificationNoLeadFollowUp")}</p>
                           </div>
                         ) : primary ? (
                           <button
@@ -2857,7 +2822,7 @@ export function InboxLeadDetailsPanel({
                               e.stopPropagation();
                               primary.onClick();
                             }}
-                            className="mt-2 w-full text-left rounded-lg border border-gray-200 bg-gray-50 hover:bg-white transition-colors px-2.5 py-2"
+                            className="mt-2 w-full text-start rounded-lg border border-gray-200 bg-gray-50 hover:bg-white transition-colors px-2.5 py-2"
                             data-testid={`next-best-action-primary-${primary.id}`}
                             title={primary.title ?? primary.label}
                           >
@@ -2870,9 +2835,7 @@ export function InboxLeadDetailsPanel({
 
                         {secondary.length > 0 ? (
                           <div className="mt-2">
-                            <p className="text-[9px] uppercase tracking-wide font-semibold text-gray-400">
-                              Also consider
-                            </p>
+                            <p className="text-[9px] uppercase tracking-wide font-semibold text-gray-400">{inboxText("inboxUi.alsoConsider")}</p>
                             <div className="mt-1 space-y-1">
                               {secondary.map((row) => (
                                 <button
@@ -2883,7 +2846,7 @@ export function InboxLeadDetailsPanel({
                                     e.stopPropagation();
                                     row.onClick();
                                   }}
-                                  className="w-full text-left text-[11px] text-gray-600 hover:text-gray-900 rounded-md px-1.5 py-1 hover:bg-gray-50 transition-colors"
+                                  className="w-full text-start text-[11px] text-gray-600 hover:text-gray-900 rounded-md px-1.5 py-1 hover:bg-gray-50 transition-colors"
                                   data-testid={`next-best-action-secondary-${row.id}`}
                                   title={row.title ?? row.label}
                                 >
@@ -2941,13 +2904,11 @@ export function InboxLeadDetailsPanel({
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
                   {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (
                     <div className="pt-2 border-t border-gray-100" data-testid="copilot-summary-section">
-                      <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">
-                        Summary
-                      </p>
+                      <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">{inboxText("inboxUi.summary")}</p>
                       {aiMemoryLoading ? (
                         <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                          <span className="text-[11px] text-gray-400 italic">Generating…</span>
+                          <span className="text-[11px] text-gray-400 italic">{inboxText("inboxUi.generating")}</span>
                         </div>
                       ) : customerSummaryBullets.length >= 2 ? (
                         <ul className="space-y-0.5">
@@ -2986,9 +2947,7 @@ export function InboxLeadDetailsPanel({
                   {stageSuggestion && !completedActions.has("stage") && (
                     <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
                       <div className="min-w-0">
-                        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                          Suggested stage
-                        </div>
+                        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{inboxText("inboxUi.suggestedStage")}</div>
                         <div className="text-[12px] font-semibold text-gray-800 truncate">
                           {stageSuggestion}
                         </div>
@@ -3000,10 +2959,8 @@ export function InboxLeadDetailsPanel({
                         }}
                         className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors"
                         data-testid="button-apply-stage-suggestion"
-                        title="Apply suggested stage"
-                      >
-                        Apply stage
-                      </button>
+                        title={inboxText("inboxUi.applySuggestedStage")}
+                      >{inboxText("inboxUi.applyStage")}</button>
                     </div>
                   )}
                 </>
@@ -3023,7 +2980,7 @@ export function InboxLeadDetailsPanel({
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <RowLabel>Contact</RowLabel>
+              <RowLabel>{inboxText("inboxUi.contact")}</RowLabel>
               {isSavedCrmContact ? (
                 <button
                   onClick={onEditContact}
@@ -3046,17 +3003,17 @@ export function InboxLeadDetailsPanel({
               {contact.phone && (
                 <div className="flex items-center gap-1.5 text-[12px] text-gray-600" data-testid="text-contact-phone">
                   <Phone className="w-3 h-3 text-gray-400 shrink-0" />
-                  {contact.phone}
+                  <bdi dir="ltr">{contact.phone}</bdi>
                 </div>
               )}
               {contact.email && (
                 <div className="flex items-center gap-1.5 text-[12px] text-gray-600" data-testid="text-contact-email">
                   <Mail className="w-3 h-3 text-gray-400 shrink-0" />
-                  <span className="truncate">{contact.email}</span>
+                  <bdi dir="ltr" className="truncate">{contact.email}</bdi>
                 </div>
               )}
               {!contact.phone && !contact.email && (
-                <span className="text-[11px] text-gray-400 italic">No contact info</span>
+                <span className="text-[11px] text-gray-400 italic">{inboxText("inboxUi.noContactInfo")}</span>
               )}
               {isWebsiteFormContact(contact) ? (
                 <>
@@ -3064,17 +3021,12 @@ export function InboxLeadDetailsPanel({
                     className="flex items-center gap-1.5 text-[11px] text-sky-800"
                     data-testid="text-lead-source-website-form"
                   >
-                    <TrendingUp className="w-3 h-3 shrink-0" />
-                    Lead Source: Website Form
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">
-                    via Email
-                  </div>
+                    <TrendingUp className="w-3 h-3 shrink-0" />{inboxText("inboxUi.leadSourceWebsiteForm")}</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">{inboxText("inboxUi.viaEmail")}</div>
                 </>
               ) : resolveContactSourceLabel(contact) ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">
-                  <TrendingUp className="w-3 h-3 shrink-0" />
-                  via {resolveContactSourceLabel(contact)}
+                  <TrendingUp className="w-3 h-3 shrink-0" />{inboxText("inboxUi.via") + " "}{resolveContactSourceLabel(contact)}
                 </div>
               ) : null}
             </div>
@@ -3083,7 +3035,7 @@ export function InboxLeadDetailsPanel({
           {/* ── STATUS + PIPELINE (side-by-side) ─────────────────────── */}
           {primaryConversation && (
             <div>
-              <RowLabel>Status · Stage</RowLabel>
+              <RowLabel>{inboxText("inboxUi.statusStage")}</RowLabel>
               <div className="flex gap-1.5 mt-1">
                 <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
                   <SelectTrigger
@@ -3118,7 +3070,7 @@ export function InboxLeadDetailsPanel({
                   onValueChange={val => onUpdateContact({ pipelineStage: val })}
                 >
                   <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
-                    <SelectValue placeholder="Stage" />
+                    <SelectValue placeholder={inboxText("inboxUi.stage")} />
                   </SelectTrigger>
                   <SelectContent>
                     {contactPipelineStageOptions.map(stage => (
@@ -3133,7 +3085,7 @@ export function InboxLeadDetailsPanel({
           {/* ── AUTOMATION (durable contact pause — not Copilot snooze / Manual) ─ */}
           {isSavedCrmContact ? (
           <div data-testid="section-contact-automation-pause">
-            <RowLabel>Automation</RowLabel>
+            <RowLabel>{inboxText("inboxUi.automation")}</RowLabel>
             <div className="mt-1 flex items-center justify-between gap-2">
               <span
                 className={cn(
@@ -3142,7 +3094,7 @@ export function InboxLeadDetailsPanel({
                 )}
                 data-testid="text-automation-pause-state"
               >
-                {contact.automationsPaused ? "Automation Paused" : "Automation Active"}
+                {contact.automationsPaused ? inboxText("inboxUi.automationPaused") : inboxText("inboxUi.automationActive")}
               </span>
               <button
                 type="button"
@@ -3154,9 +3106,9 @@ export function InboxLeadDetailsPanel({
                     : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
                 )}
                 data-testid="button-toggle-automations-pause"
-                title="Stops workflows, timers, campaigns, chatbot, and AI auto. Manual Inbox sends still work. Not Do Not Contact."
+                title={inboxText("inboxUi.stopsWorkflowsTimersCampaignsChatbotAndAiAuto")}
               >
-                {contact.automationsPaused ? "Resume Automations" : "Pause Automations"}
+                {contact.automationsPaused ? inboxText("inboxUi.resumeAutomations") : inboxText("inboxUi.pauseAutomations")}
               </button>
             </div>
           </div>
@@ -3175,8 +3127,8 @@ export function InboxLeadDetailsPanel({
                   data-testid="text-ai-control-state"
                 >
                   {primaryConversation.aiControl?.paused
-                    ? `AI paused${primaryConversation.aiControl.reason ? ` (${primaryConversation.aiControl.reason})` : ""}`
-                    : "AI automation available"}
+                    ? inboxText("inboxUi.aiPaused")
+                    : inboxText("inboxUi.aiAutomationAvailable")}
                 </span>
                 <button
                   type="button"
@@ -3199,7 +3151,7 @@ export function InboxLeadDetailsPanel({
                   )}
                   data-testid="button-toggle-ai-control"
                 >
-                  {primaryConversation.aiControl?.paused ? "Resume AI" : "Take over"}
+                  {primaryConversation.aiControl?.paused ? inboxText("inboxUi.resumeAi") : inboxText("inboxUi.takeOver")}
                 </button>
               </div>
             </div>
@@ -3214,7 +3166,7 @@ export function InboxLeadDetailsPanel({
               if (!text) return null;
               return (
                 <div className="mt-2 rounded-md border border-violet-100 bg-violet-50/70 p-2" data-testid="section-ai-suggestion">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-800">Suggested reply</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-800">{inboxText("inboxUi.suggestedReply")}</p>
                   <p className="mt-1 text-xs text-slate-800 whitespace-pre-wrap">{text}</p>
                   <button
                     type="button"
@@ -3224,9 +3176,7 @@ export function InboxLeadDetailsPanel({
                       navigator.clipboard.writeText(text);
                       window.dispatchEvent(new CustomEvent("inbox-use-ai-suggestion", { detail: { text } }));
                     }}
-                  >
-                    Use in composer
-                  </button>
+                  >{inboxText("inboxUi.useInComposer")}</button>
                 </div>
               );
             })()}
@@ -3247,9 +3197,9 @@ export function InboxLeadDetailsPanel({
                     }
                   >
                     {currentProspectOutcome === "won"
-                      ? "Won"
+                      ? inboxText("inboxUi.won")
                       : currentProspectOutcome === "lost"
-                        ? "Lost"
+                        ? inboxText("inboxUi.lost")
                         : currentProspectOutcome}
                   </Badge>
                   {(["won", "lost", "active"] as const).map((outcome) =>
@@ -3274,13 +3224,13 @@ export function InboxLeadDetailsPanel({
                                 toast({
                                   title:
                                     outcome === "lost"
-                                      ? "Outcome set to Lost"
-                                      : "Outcome set to Active",
+                                      ? inboxText("inboxUi.outcomeSetToLost")
+                                      : inboxText("inboxUi.outcomeSetToActive"),
                                 });
                               },
                               onError: (err: Error) =>
                                 toast({
-                                  title: "Update failed",
+                                  title: inboxText("inboxUi.updateFailed"),
                                   description: err.message,
                                   variant: "destructive",
                                 }),
@@ -3289,10 +3239,10 @@ export function InboxLeadDetailsPanel({
                         }}
                       >
                         {outcome === "won"
-                          ? "Mark Won"
+                          ? inboxText("inboxUi.markWon")
                           : outcome === "lost"
-                            ? "Mark Lost"
-                            : "Set Active"}
+                            ? inboxText("inboxUi.markLost")
+                            : inboxText("inboxUi.setActive")}
                       </Button>
                     ),
                   )}
@@ -3305,21 +3255,16 @@ export function InboxLeadDetailsPanel({
                   onClick={() => setMarkWonOpen(true)}
                   data-testid="prospect-ai-mark-won"
                 >
-                  <Trophy className="mr-1.5 h-3 w-3" />
-                  Mark as Won
-                </Button>
+                  <Trophy className="mr-1.5 h-3 w-3" />{inboxText("inboxUi.markAsWon")}</Button>
               )}
               <AlertDialog open={markWonOpen} onOpenChange={setMarkWonOpen}>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Mark as Won</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Mark this Prospect AI contact as a won customer? The conversation stays open in
-                      the inbox.
-                    </AlertDialogDescription>
+                    <AlertDialogTitle>{inboxText("inboxUi.markAsWon")}</AlertDialogTitle>
+                    <AlertDialogDescription>{inboxText("inboxUi.markThisProspectAiContactAsAWon")}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel disabled={markWon.isPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogCancel disabled={markWon.isPending}>{inboxText("inboxUi.cancel")}</AlertDialogCancel>
                     <AlertDialogAction
                       disabled={markWon.isPending}
                       className="bg-brand-green hover:bg-brand-green/90"
@@ -3329,18 +3274,18 @@ export function InboxLeadDetailsPanel({
                           onSuccess: () => {
                             setMarkWonOpen(false);
                             void prospectOutcomeQuery.refetch();
-                            toast({ title: "Marked as Won" });
+                            toast({ title: inboxText("inboxUi.markedAsWon") });
                           },
                           onError: (err: Error) =>
                             toast({
-                              title: "Could not mark as Won",
+                              title: inboxText("inboxUi.couldNotMarkAsWon"),
                               description: err.message,
                               variant: "destructive",
                             }),
                         });
                       }}
                     >
-                      {markWon.isPending ? "Saving…" : "Mark as Won"}
+                      {markWon.isPending ? inboxText("inboxUi.saving") : inboxText("inboxUi.markAsWon")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -3350,7 +3295,7 @@ export function InboxLeadDetailsPanel({
 
           {/* ── STATUS TAGS ──────────────────────────────────────────── */}
           <div>
-            <RowLabel>Tag</RowLabel>
+            <RowLabel>{inboxText("inboxUi.tag")}</RowLabel>
             <div className="flex flex-wrap gap-1 mt-1">
               {Object.keys(TAG_COLORS).map(tag => (
                 <button
@@ -3372,13 +3317,13 @@ export function InboxLeadDetailsPanel({
 
           {/* ── FOLLOW-UP: display only — click to reopen Follow popup ── */}
           <div>
-            <RowLabel>Follow-up</RowLabel>
+            <RowLabel>{inboxText("inboxUi.followUp")}</RowLabel>
             {contact.followUpDate ? (
               /* Clickable display chip — opens the Follow popover */
               <button
                 onClick={() => setFollowOpen(true)}
                 className={cn(
-                  "mt-1 w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium border text-left transition-opacity hover:opacity-80",
+                  "mt-1 w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium border text-start transition-opacity hover:opacity-80",
                   followUpSt === 'overdue' ? "bg-red-50 text-red-700 border-red-200" :
                   followUpSt === 'today'   ? "bg-amber-50 text-amber-700 border-amber-200" :
                                              "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -3387,8 +3332,8 @@ export function InboxLeadDetailsPanel({
               >
                 <CalendarIcon className="w-3 h-3 shrink-0" />
                 <span className="truncate">
-                  {followUpSt === 'overdue' && <span className="font-semibold">Overdue · </span>}
-                  {followUpSt === 'today'   && <span className="font-semibold">Today · </span>}
+                  {followUpSt === 'overdue' && <span className="font-semibold">{inboxText("inboxUi.overdue2") + " "}</span>}
+                  {followUpSt === 'today'   && <span className="font-semibold">{inboxText("inboxUi.today2") + " "}</span>}
                   {formatFollowUpDisplay(contact.followUpDate)}
                 </span>
               </button>
@@ -3396,15 +3341,15 @@ export function InboxLeadDetailsPanel({
               <button type="button" className="mt-1 text-xs font-medium text-brand-green hover:underline" onClick={() => {
                 setFollowView('custom');
                 setFollowOpen(true);
-              }}>Set Reminder</button>
+              }}>{inboxText("inboxUi.setReminder")}</button>
             ) : (
-              <p className="mt-1 text-[11px] text-gray-400 italic">Not set</p>
+              <p className="mt-1 text-[11px] text-gray-400 italic">{inboxText("inboxUi.notSet")}</p>
             )}
           </div>
 
           {contactAppointments.length > 0 && (
             <div>
-              <RowLabel>Booked meetings</RowLabel>
+              <RowLabel>{inboxText("inboxUi.bookedMeetings")}</RowLabel>
               <div className="mt-1 space-y-1.5">
                 {contactAppointments.slice(0, 3).map((a) => (
                   <div
@@ -3416,20 +3361,20 @@ export function InboxLeadDetailsPanel({
                       <CalendarIcon className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold text-emerald-900">
-                          {a.title || a.appointmentType || "Calendly meeting"}
+                          {a.title || a.appointmentType || inboxText("inboxUi.calendlyMeeting")}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {format(new Date(a.appointmentDate), "MMM d 'at' h:mm a")}
+                          {formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                           {a.status ? ` · ${a.status}` : ""}
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => void deleteContactAppointment(a.id).catch(() => {
-                          toast({ title: "Failed to remove appointment", variant: "destructive" });
+                          toast({ title: inboxText("inboxUi.failedToRemoveAppointment"), variant: "destructive" });
                         })}
                         className="shrink-0 text-emerald-300 hover:text-red-500 transition-colors"
-                        title="Remove booked meeting"
+                        title={inboxText("inboxUi.removeBookedMeeting")}
                         data-testid={`booked-meeting-clear-${a.id}`}
                       >
                         <X className="w-3 h-3" />
@@ -3442,9 +3387,9 @@ export function InboxLeadDetailsPanel({
           )}
 
           <div>
-            <RowLabel>Recent activity</RowLabel>
+            <RowLabel>{inboxText("inboxUi.recentActivity")}</RowLabel>
             {contactActivity.length === 0 ? (
-              <p className="mt-1 text-[11px] text-gray-400 italic">No recent activity yet.</p>
+              <p className="mt-1 text-[11px] text-gray-400 italic">{inboxText("inboxUi.noRecentActivityYet")}</p>
             ) : (
               <div className="mt-1 space-y-1.5">
                 {contactActivity.slice(0, 4).map((event) => {
@@ -3466,7 +3411,7 @@ export function InboxLeadDetailsPanel({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[11px] font-semibold text-gray-800">{formatted.title}</p>
                           <p className="line-clamp-2 text-[10px] leading-snug text-gray-500">{formatted.detail}</p>
-                          <p className="mt-0.5 text-[10px] text-gray-400">{formatRelativeTime(event.createdAt)}</p>
+                          <p className="mt-0.5 text-[10px] text-gray-400">{formatRelativeTime(event.createdAt, i18n.language)}</p>
                         </div>
                       </div>
                     </div>
@@ -3481,7 +3426,7 @@ export function InboxLeadDetailsPanel({
           {/* ── CAMPAIGNS (preset automation enrollments) ───────────────── */}
           <div className="mt-6 pt-4 border-t border-[#eee]">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Campaigns</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{inboxText("inboxUi.campaigns")}</p>
               {templateCampaignsEnabled ? (
                 <button
                   type="button"
@@ -3489,9 +3434,7 @@ export function InboxLeadDetailsPanel({
                   className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
                   data-testid="button-add-to-campaign"
                 >
-                  <Plus className="w-3 h-3" />
-                  Add Campaign
-                </button>
+                  <Plus className="w-3 h-3" />{inboxText("inboxUi.addCampaign")}</button>
               ) : (
                 <InAppProUpgradeButton
                   canStartInternalTrial={!!subscription?.subscription?.canStartInternalTrial}
@@ -3503,13 +3446,11 @@ export function InboxLeadDetailsPanel({
             </div>
             {campaignEnrollmentBuckets.primary.length === 0 &&
             campaignEnrollmentBuckets.history.length === 0 ? (
-              <p className="text-[11px] text-gray-400 italic">Not enrolled in any saved campaigns.</p>
+              <p className="text-[11px] text-gray-400 italic">{inboxText("inboxUi.notEnrolledInAnySavedCampaigns")}</p>
             ) : (
               <div className="space-y-2">
                 {campaignEnrollmentBuckets.primary.length === 0 ? (
-                  <p className="text-[11px] text-gray-400 italic">
-                    No enrollments in progress.
-                  </p>
+                  <p className="text-[11px] text-gray-400 italic">{inboxText("inboxUi.noEnrollmentsInProgress")}</p>
                 ) : (
                   <div className="max-h-[220px] space-y-2 overflow-y-auto pr-0.5">
                     {campaignEnrollmentBuckets.primary.slice(0, 12).map((e) => (
@@ -3531,27 +3472,21 @@ export function InboxLeadDetailsPanel({
                                 type="button"
                                 className="text-[10px] font-semibold text-amber-700 hover:underline"
                                 onClick={() => pauseEnrollmentMutation.mutate(e.id)}
-                              >
-                                Pause
-                              </button>
+                              >{inboxText("inboxUi.pause")}</button>
                             )}
                             {e.status === "paused" && (
                               <button
                                 type="button"
                                 className="text-[10px] font-semibold text-emerald-700 hover:underline"
                                 onClick={() => resumeEnrollmentMutation.mutate(e.id)}
-                              >
-                                Resume
-                              </button>
+                              >{inboxText("inboxUi.resume")}</button>
                             )}
                             {(e.status === "active" || e.status === "paused") && (
                               <button
                                 type="button"
                                 className="text-[10px] font-semibold text-red-600 hover:underline"
                                 onClick={() => cancelEnrollmentMutation.mutate(e.id)}
-                              >
-                                Cancel
-                              </button>
+                              >{inboxText("inboxUi.cancel")}</button>
                             )}
                           </div>
                         </div>
@@ -3565,11 +3500,11 @@ export function InboxLeadDetailsPanel({
                     <button
                       type="button"
                       onClick={() => setShowCampaignHistory((v) => !v)}
-                      className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-[10px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                      className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-start text-[10px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                       data-testid="button-toggle-campaign-history"
                     >
                       <span>
-                        View history ({campaignEnrollmentBuckets.history.length})
+                        {inboxText("inboxUi.historyCount", { count: campaignEnrollmentBuckets.history.length })}
                       </span>
                       <ChevronDown
                         className={cn(
@@ -3612,25 +3547,19 @@ export function InboxLeadDetailsPanel({
           >
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Add to campaign</DialogTitle>
-                <DialogDescription>
-                  Enrolls this contact in a saved preset campaign. Messages send when each step is due (channel rules
-                  apply).
-                </DialogDescription>
+                <DialogTitle>{inboxText("inboxUi.addToCampaign")}</DialogTitle>
+                <DialogDescription>{inboxText("inboxUi.enrollsThisContactInASavedPresetCampaign")}</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
                 {contactOutreachChannel ? (
-                  <p className="text-xs text-gray-500">
-                    Showing campaigns for{" "}
+                  <p className="text-xs text-gray-500">{inboxText("inboxUi.showingCampaignsFor")}{" "}
                     <span className="font-medium text-gray-700">
                       {campaignChannelLabel(contactOutreachChannel)}
-                    </span>
-                    . Incompatible campaigns are disabled.
-                  </p>
+                    </span>{inboxText("inboxUi.incompatibleCampaignsAreDisabled")}</p>
                 ) : null}
                 <Select value={pickedCampaignId} onValueChange={setPickedCampaignId}>
                   <SelectTrigger data-testid="select-campaign-enroll">
-                    <SelectValue placeholder="Choose a saved campaign" />
+                    <SelectValue placeholder={inboxText("inboxUi.chooseASavedCampaign")} />
                   </SelectTrigger>
                   <SelectContent>
                     {campaignPickOptions.map((c) => (
@@ -3649,18 +3578,12 @@ export function InboxLeadDetailsPanel({
                   </SelectContent>
                 </Select>
                 {campaignPickOptions.length === 0 && (
-                  <p className="text-xs text-gray-500">
-                    No saved campaigns yet. Create one under Templates, then return via Campaigns.
-                  </p>
+                  <p className="text-xs text-gray-500">{inboxText("inboxUi.noSavedCampaignsYetCreateOneUnderTemplates")}</p>
                 )}
                 {campaignPickOptions.length > 0 && compatibleCampaignOptions.length === 0 && (
-                  <p className="text-xs text-amber-700">
-                    No campaigns match this contact&apos;s channel
-                    {contactOutreachChannel
+                  <p className="text-xs text-amber-700">{inboxText("inboxUi.noCampaignsMatchThisContactSChannel")}{contactOutreachChannel
                       ? ` (${campaignChannelLabel(contactOutreachChannel)})`
-                      : ""}
-                    . Create or activate an matching campaign first.
-                  </p>
+                      : ""}{inboxText("inboxUi.createOrActivateAnMatchingCampaignFirst")}</p>
                 )}
                 {pickedCampaignId && (
                   (() => {
@@ -3682,13 +3605,9 @@ export function InboxLeadDetailsPanel({
                   onClick={() => setEnrollmentPreviewOpen(true)}
                   data-testid="button-preview-campaign-enroll"
                 >
-                  <Eye className="mr-1.5 h-4 w-4" />
-                  Preview
-                </Button>
+                  <Eye className="mr-1.5 h-4 w-4" />{inboxText("inboxUi.preview")}</Button>
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={() => setCampaignPickerOpen(false)}>
-                    Close
-                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setCampaignPickerOpen(false)}>{inboxText("inboxUi.close")}</Button>
                   <Button
                     type="button"
                     className="bg-gray-900 text-white hover:bg-gray-800"
@@ -3701,7 +3620,7 @@ export function InboxLeadDetailsPanel({
                     onClick={() => enrollContactCampaignMutation.mutate()}
                     data-testid="button-confirm-campaign-enroll"
                   >
-                    {enrollContactCampaignMutation.isPending ? "Enrolling…" : "Enroll"}
+                    {enrollContactCampaignMutation.isPending ? inboxText("inboxUi.enrolling") : inboxText("inboxUi.enroll")}
                   </Button>
                 </div>
               </DialogFooter>
@@ -3711,25 +3630,20 @@ export function InboxLeadDetailsPanel({
           <Dialog open={enrollmentPreviewOpen} onOpenChange={setEnrollmentPreviewOpen}>
             <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
               <DialogHeader>
-                <DialogTitle>Campaign preview</DialogTitle>
-                <DialogDescription>
-                  Final messages for {contact.name || "this contact"} using their fields and campaign defaults.
-                </DialogDescription>
+                <DialogTitle>{inboxText("inboxUi.campaignPreview")}</DialogTitle>
+                <DialogDescription>{inboxText("inboxUi.finalMessagesFor") + " "}{contact.name || "this contact"}{" " + inboxText("inboxUi.usingTheirFieldsAndCampaignDefaults")}</DialogDescription>
               </DialogHeader>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-1">
                 {enrollmentPreviewSteps.map((step, idx) => (
                   <div key={idx} className="rounded-lg border bg-gray-50 p-3">
-                    <p className="mb-1.5 text-xs text-gray-500">
-                      Step {idx + 1} · {step.delay === "0" ? "Immediate" : step.delay}
+                    <p className="mb-1.5 text-xs text-gray-500">{inboxText("inboxUi.step") + " "}{idx + 1} · {step.delay === "0" ? inboxText("inboxUi.immediate") : step.delay}
                     </p>
                     <p className="whitespace-pre-wrap text-sm text-gray-900">{step.rendered || "—"}</p>
                   </div>
                 ))}
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEnrollmentPreviewOpen(false)}>
-                  Back
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setEnrollmentPreviewOpen(false)}>{inboxText("inboxUi.back")}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -3738,7 +3652,7 @@ export function InboxLeadDetailsPanel({
           <div className="mt-6 pt-4 border-t border-[#eee]">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Team Notes</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">{inboxText("inboxUi.teamNotes")}</p>
                 {(() => {
                   const unread = notesViewedAt
                     ? contactNotesList.filter(n => n.createdAt && new Date(n.createdAt) > notesViewedAt).length
@@ -3760,15 +3674,13 @@ export function InboxLeadDetailsPanel({
                 className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
                 data-testid="button-add-note"
               >
-                <Plus className="w-3 h-3" />
-                Add
-              </button>
+                <Plus className="w-3 h-3" />{inboxText("inboxUi.add")}</button>
             </div>
 
             {notesLoading ? (
               <div className="flex items-center gap-1.5 py-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                <span className="text-[11px] text-gray-400">Loading…</span>
+                <span className="text-[11px] text-gray-400">{inboxText("inboxUi.loading")}</span>
               </div>
             ) : contactNotesList.length === 0 ? (
               <button
@@ -3777,11 +3689,11 @@ export function InboxLeadDetailsPanel({
                   setNotesViewedAt(null);
                   localStorage.setItem(`notes_viewed_${contact.id}`, new Date().toISOString());
                 }}
-                className="w-full text-left"
+                className="w-full text-start"
                 data-testid="button-empty-note"
               >
                 <div className="p-2.5 border border-dashed border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50/40 transition-all">
-                  <p className="text-[11px] text-gray-400">Add a team note…</p>
+                  <p className="text-[11px] text-gray-400">{inboxText("inboxUi.addATeamNote")}</p>
                 </div>
               </button>
             ) : (
@@ -3797,7 +3709,7 @@ export function InboxLeadDetailsPanel({
                     <div className="flex items-center gap-1 mb-1.5">
                       <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
                       <span className="text-[10px] text-gray-300">·</span>
-                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
+                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt, i18n.language)}</span>
                     </div>
                     <p
                       className="text-[12px] text-gray-800"
@@ -3841,9 +3753,7 @@ export function InboxLeadDetailsPanel({
               className="w-full flex items-center justify-center gap-1 py-1.5 text-[11px] text-red-400 hover:text-red-600 border border-red-100 hover:border-red-200 rounded-lg bg-white hover:bg-red-50 transition-colors"
               data-testid="button-delete-contact"
             >
-              <Trash2 className="w-3 h-3" />
-              Delete Contact
-            </button>
+              <Trash2 className="w-3 h-3" />{inboxText("inboxUi.deleteContact")}</button>
           </div>
           ) : null}
 

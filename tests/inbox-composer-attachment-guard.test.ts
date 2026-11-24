@@ -202,7 +202,7 @@ describe("Coexistence / Meta media path once validation passes", () => {
       src,
       /params\.content \|\| undefined/,
     );
-    assert.doesNotMatch(src, /Add listing details text/);
+    assert.doesNotMatch(src, /inboxUi\.addListingDetailsText|Add listing details text/);
     assert.doesNotMatch(src, /listing_recommendation/);
   });
 });

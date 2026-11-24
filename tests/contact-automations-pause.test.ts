@@ -272,7 +272,7 @@ function testKCopilotSuggestion() {
   assert.match(routes, /wantsAuto/);
   const panel = read("client/src/components/InboxLeadDetailsPanel.tsx");
   assert.match(panel, /button-ai-pause/);
-  assert.match(panel, /Temporarily pause AI for this conversation/);
+  assert.match(panel, /inboxUi\.temporarilyPauseAiForThisConversation/);
   assert.match(panel, /button-toggle-automations-pause/);
 }
 
@@ -340,16 +340,16 @@ function testOUiSameState() {
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const composer = read("client/src/components/AIComposer.tsx");
   assert.match(panel, /contact\.automationsPaused/);
-  assert.match(panel, /Automation Active/);
-  assert.match(panel, /Automation Paused/);
-  assert.match(panel, /Pause Automations/);
-  assert.match(panel, /Resume Automations/);
+  assert.match(panel, /inboxUi\.automationActive/);
+  assert.match(panel, /inboxUi\.automationPaused/);
+  assert.match(panel, /inboxUi\.pauseAutomations/);
+  assert.match(panel, /inboxUi\.resumeAutomations/);
   assert.match(panel, /onUpdateContact\(\{ automationsPaused:/);
   assert.match(inbox, /updateContact\(\{ automationsPaused:/);
   assert.match(inbox, /menu-toggle-automations-pause/);
   assert.match(inbox, /chip-automation-paused/);
-  assert.match(inbox, /Automation Paused/);
-  assert.match(composer, /does not pause workflows or follow-ups/);
+  assert.match(inbox, /inboxUi\.automationPaused/);
+  assert.match(composer, /inboxUi\.manualHelp/);
 }
 
 async function testPTenantIsolation() {

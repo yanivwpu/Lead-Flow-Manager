@@ -8,7 +8,7 @@ These are route families. A comma-separated row shares the same recorded status,
 
 | Route | EN | HE | ES | RTL | Remaining work |
 |---|---|---|---|---|---|
-| `/app/inbox/:contactId?` | ? | P | P | P | Inbox and Copilot/Composer copy, actions, details, activity, saved properties and populated message lanes |
+| `/app/inbox/:contactId?` | ? | P | P | P | Rare provider and CRM payload states remain unverified. Representative Inbox, Copilot and Composer flows were checked in all three languages. |
 | `/app/chats`, `/app/chats/:id` | — | — | — | — | Inbox redirects |
 | `/app/contacts` | P | P | P | P | Foundation keys, relative dates and LTR phone/email checked. Bulk feedback, channel labels, appointment and error coverage pending |
 | `/app/contacts/:id` | ? | M | M | ? | Customer detail and purchase history |
@@ -78,7 +78,7 @@ The audited 92 route families gained `/team-invitation`, `/shopify-growth-engine
 | PR 1. Dictionaries and shared surfaces | Added 13 Contacts/preset keys in all three dictionaries and removed the unused legacy `pricing.notices`/`pricing.faq` groups. Shared dialog, sheet, pagination, status/loading, toast, calendar controls and error recovery use the existing dictionaries. |
 | PR 1. Runtime foundation | Logical alignment for shared controls, direction-aware Radix positioning, and scoped legacy RTL rules. Format dates and numbers using explicit regions, with currency and timezone supplied independently. Serial account saves, trusted explicit cache isolated from URL sync, recoverable bundle failures and preserved in-session selection on failed saves. |
 | PR 1. Guardrails | `scripts/localization/check.mjs` checks dictionary and interpolation contracts, plural categories, common literal sources, and direct/constant-built key usages. Typed-map shape checks cover the homepage, marketing nav, pricing, and product/solution models. Unresolved dynamic expressions require an explicit reviewed mapping or a baseline entry. The legacy findings file records per-file counts by fingerprint. Reduce it as existing findings are fixed. |
-| PR 2. Core dashboard and Inbox | Pending. Complete shell and Inbox, with populated permission/error/loading states and mixed-script tests. Coordinate with #338 when it moves. |
+| PR 2. Core dashboard and Inbox | Implemented shell, Inbox, Copilot and Composer copy, including channel filters and health, message actions, notes, appointments, template preview, and the buyer shortlist. Verified representative mixed-script flows in EN, HE and ES. See Batch 2 evidence below. |
 | PR 3. CRM and automation | Pending. Include Contacts, tasks, calendars, builder chrome, widget settings, template UI and search. |
 | PR 4. Realtor | Pending. Include the newly discovered Neighborhood Pages, visual editor, verified sale/rent filters and saved shortlist. |
 | PR 5. Shopify | Pending. Verify installed merchant states in isolated fixtures. |
@@ -117,3 +117,12 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 - Live provider delivery, authenticated production SSR, active Shopify or MLS, and populated customer reply dispatch remain outside fixture coverage.
 - The flyer title assertion reported in Phase 1 passed on both `94f243d1` and this branch using a loopback-only initialization placeholder. No flyer or SEO logic was changed here.
 - Keep customer language fixtures synthetic and no-send. Calendar selection, schedules, business hours, currency codes, customer data, and template identifiers must retain their existing semantics.
+
+## Batch 2 evidence
+
+- Batch 1 merged in [#377](https://github.com/yanivwpu/Lead-Flow-Manager/pull/377) at `0614cc0a`. Railway production deployed that revision successfully. The subsequent production revision `fccecc8a` contains the merge and returned successful HTTP responses in Railway logs.
+- Batch 2 is based on `fccecc8a` on [localization/core-inbox](https://github.com/yanivwpu/Lead-Flow-Manager/compare/main...localization/core-inbox). The baseline declined from **7,059 → 6,606 findings**, a reduction of **453**. The baseline diff adds zero fingerprints and raises no counts. The two country-field labels introduced on main by #380 were localized so the baseline could stay shrink-only. The ISO example remains a literal code.
+- Copilot action display is localized separately from the labels used by click behavior. Composer request payloads, existing Auto dispatch gates, and the reply-language resolver are preserved. Message content uses its own direction. Hebrew mirrors the Inbox columns and message lanes while English and Spanish maintain LTR.
+- Synthetic Chromium at 1366 and 390 px exercised empty Inbox, channel filter, a populated mixed-script contact, composer placeholder, Manual mode, desktop Copilot, mobile contact details, conversation actions, and the direction and bounds of inbound/outbound bubbles in all three languages. Targeted tests cover Inbox routing, draft and Auto isolation, permissions, reply-language policy, templates, and navigation. The new locale test covers dashboard, composer and Copilot labels.
+- This batch retains the geometry and colors already on main. [#338](https://github.com/yanivwpu/Lead-Flow-Manager/pull/338) is the separate Inbox styling change. A test merge found overlap in the Copilot header, suggestion badge, quick actions, and details panel. At integration, retain the styling classes from #338 and the localized labels and plural handling from this batch.
+- Provider-supplied diagnostics, customer-authored text and generated replies keep their source language. Some uncommon provider/CRM payload states and residual legacy findings remain, so the Inbox route still carries partial coverage pending those checks. Real customer delivery and provider mutations were outside the synthetic test scope.

@@ -114,8 +114,8 @@ test("keyboard and mobile menu access remains on the existing three-dot trigger"
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const triggerIdx = inbox.indexOf('data-testid="button-contact-actions"');
   const triggerSlice = inbox.slice(triggerIdx - 280, triggerIdx + 420);
-  assert.match(triggerSlice, /aria-label="Conversation actions"/);
-  assert.match(triggerSlice, /title="Conversation actions"/);
+  assert.match(triggerSlice, /aria-label=\{inboxText\("inboxUi\.conversationActions"\)\}/);
+  assert.match(triggerSlice, /title=\{inboxText\("inboxUi\.conversationActions"\)\}/);
   assert.match(triggerSlice, /MoreVertical className="w-4 h-4" aria-hidden="true"/);
   assert.doesNotMatch(triggerSlice, /hidden md:/);
   assert.doesNotMatch(triggerSlice, /className="[^"]*hidden /);

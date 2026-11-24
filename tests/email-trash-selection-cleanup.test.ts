@@ -98,8 +98,8 @@ describe("UnifiedInbox wires cleanup helper", () => {
     assert.doesNotMatch(src, /button-confirm-delete-email/);
     assert.doesNotMatch(src, /Are you sure you want to move this email to Trash/);
     assert.doesNotMatch(src, /permanently deleted/i);
-    assert.match(src, /Email moved to Trash/);
-    assert.match(src, /Email could not be moved to Trash\. Please try again\./);
+    assert.match(src, /inboxUi\.emailMovedToTrash/);
+    assert.match(src, /inboxUi\.emailCouldNotBeMovedToTrashPlease/);
     // Failed trash restores previous inbox snapshot.
     assert.match(src, /onError:[\s\S]*previousInbox[\s\S]*setQueryData\(\["\/api\/inbox"\]/);
   });

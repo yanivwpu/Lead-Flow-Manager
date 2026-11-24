@@ -74,7 +74,7 @@ describe("Email document width — no chat-bubble constraint", () => {
     assert.match(inbox, /data-testid=\"inbox-email-compose-headers\"/);
     assert.match(inbox, /data-composer-layout=\"email\"/);
     assert.match(composer, /inbox-email-composer/);
-    assert.match(composer, /Write your email/);
+    assert.match(composer, /inboxUi\.writeYourEmail/);
     assert.match(composer, /data-composer-layout=\{isEmailComposer \? \"email\" : \"chat\"\}/);
   });
 });

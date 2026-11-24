@@ -22,6 +22,7 @@ import {
   sameNeighborhoodContent, writeNeighborhoodDrafts, type NeighborhoodDrafts,
 } from "@/lib/neighborhoodDrafts";
 
+const defaultCountryCode = "US";
 const endpoint = "/api/agent-page/neighborhoods";
 function browserDraftStorage(): Storage | undefined {
   try { return window.localStorage; } catch { return undefined; }
@@ -279,11 +280,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             ))}
           </div>
           <div className="max-w-xs">
-            <Label htmlFor="neighborhood-country">{t("rgeMap.country")}</Label>
+            <Label htmlFor="neighborhood-country">{t("inboxUi.neighborhoodCountryCode")}</Label>
             <Input id="neighborhood-country" value={values.country ?? "US"} maxLength={2}
-              disabled={save.isPending} readOnly={stale} placeholder={t("rgeMap.countryPlaceholder")}
+              disabled={save.isPending} readOnly={stale} placeholder={defaultCountryCode} dir="ltr"
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
-            <p className="mt-1 text-xs text-slate-500">{t("rgeMap.countryHelp")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t("inboxUi.neighborhoodCountryExamples")}</p>
           </div>
           <NeighborhoodBoundaryEditor key={active} boundary={values.customBoundary}
             name={values.name} city={values.city} state={values.state} country={values.country ?? "US"}

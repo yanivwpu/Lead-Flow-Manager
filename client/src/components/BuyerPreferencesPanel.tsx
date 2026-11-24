@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { hasVerifiedContactEligibilityResponse } from "@shared/inventoryContactEligibility";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +54,7 @@ function chipsFromRaw(raw: unknown): BuyerPreferenceChip[] {
 }
 
 function ChipBadge({ chip, valueOnly }: { chip: BuyerPreferenceChip; valueOnly?: boolean }) {
+  const { t: inboxText } = useTranslation();
   return (
     <span
       className={cn(
@@ -61,7 +63,7 @@ function ChipBadge({ chip, valueOnly }: { chip: BuyerPreferenceChip; valueOnly?:
           ? "bg-violet-50 text-violet-800 border-violet-200"
           : "bg-gray-50 text-gray-700 border-gray-200",
       )}
-      title={chip.source === "inferred" ? "Inferred from conversation" : "Saved explicitly"}
+      title={chip.source === "inferred" ? inboxText("inboxUi.inferredFromConversation") : inboxText("inboxUi.savedExplicitly")}
     >
       {valueOnly ? (
         <span className="truncate">{chip.value}</span>
@@ -83,6 +85,7 @@ export function BuyerPreferencesPanel({
   readOnly = false,
   manualSetupOnly = false,
 }: BuyerPreferencesPanelProps) {
+  const { t: inboxText } = useTranslation();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [areas, setAreas] = useState("");
@@ -224,7 +227,7 @@ export function BuyerPreferencesPanel({
     >
       {manualSetupOnly ? (
         <button type="button" className="text-xs text-gray-500 hover:text-violet-700" onClick={openEdit} data-testid="button-setup-property-matching">
-          Set up property matching…
+          {inboxText("inboxUi.setUpPropertyMatching")}
         </button>
       ) : <>
       <div className={cn("flex items-center justify-between", compact ? "mb-0.5" : "mb-1")}>
@@ -236,7 +239,7 @@ export function BuyerPreferencesPanel({
               : "text-[10px] text-gray-400",
           )}
         >
-          Buyer preferences
+          {inboxText("inboxUi.buyerPreferences")}
         </span>
         <div className="flex items-center gap-0.5">
           {showControls && showEligible && (
@@ -246,7 +249,7 @@ export function BuyerPreferencesPanel({
                 onClick={() => extractMutation.mutate()}
                 disabled={extractMutation.isPending}
                 className="p-0.5 text-gray-300 hover:text-gray-500 rounded"
-                title="Refresh from conversation"
+                title={inboxText("inboxUi.refreshFromConversation")}
                 data-testid="button-buyer-prefs-refresh"
               >
                 {extractMutation.isPending ? (
@@ -259,7 +262,7 @@ export function BuyerPreferencesPanel({
                 type="button"
                 onClick={openEdit}
                 className="p-0.5 text-gray-300 hover:text-gray-500 rounded"
-                title="Edit preferences"
+                title={inboxText("inboxUi.editPreferences")}
                 data-testid="button-buyer-prefs-edit"
               >
                 <Pencil className="w-3 h-3" />
@@ -270,7 +273,7 @@ export function BuyerPreferencesPanel({
       </div>
 
       {isLoading && !hasKnownChips ? (
-        <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
+        <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>{inboxText("inboxUi.loading")}</p>
       ) : hasKnownChips ? (
         <div
           className={cn("flex flex-wrap", compact ? "gap-0.5" : "gap-1")}
@@ -282,10 +285,10 @@ export function BuyerPreferencesPanel({
         </div>
       ) : showListening ? (
         <p className={cn("text-gray-400 italic leading-snug", compact ? "text-[10px]" : "text-[11px]")}>
-          Buyer preferences will appear here as the conversation develops.
+          {inboxText("inboxUi.buyerPreferencesWillAppearHereAsTheConversation")}
         </p>
       ) : !isFetched ? (
-        <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
+        <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>{inboxText("inboxUi.loading")}</p>
       ) : null}
 
       </>}
@@ -293,87 +296,87 @@ export function BuyerPreferencesPanel({
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-sm">{manualSetupOnly ? "Set up property matching" : "Edit buyer preferences"}</DialogTitle>
-            <p className="text-xs text-gray-500">Saving confirms this contact is seeking real estate and enables property matching for this contact.</p>
+            <DialogTitle className="text-sm">{manualSetupOnly ? inboxText("inboxUi.setUpPropertyMatching2") : inboxText("inboxUi.editBuyerPreferences")}</DialogTitle>
+            <p className="text-xs text-gray-500">{inboxText("inboxUi.savingConfirmsThisContactIsSeekingRealEstate")}</p>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div>
-              <Label className="text-xs">Areas (comma-separated)</Label>
+              <Label className="text-xs">{inboxText("inboxUi.areasCommaSeparated")}</Label>
               <Input className="h-8 text-xs mt-1" value={areas} onChange={(e) => setAreas(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Budget max ($)</Label>
+              <Label className="text-xs">{inboxText("inboxUi.budgetMax")}</Label>
               <Input className="h-8 text-xs mt-1" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">Beds min</Label>
+                <Label className="text-xs">{inboxText("inboxUi.bedsMin")}</Label>
                 <Input className="h-8 text-xs mt-1" value={beds} onChange={(e) => setBeds(e.target.value)} />
               </div>
               <div>
-                <Label className="text-xs">Property type</Label>
+                <Label className="text-xs">{inboxText("inboxUi.propertyType")}</Label>
                 <Select value={propertyType || "_"} onValueChange={(v) => setPropertyType(v === "_" ? "" : v)}>
                   <SelectTrigger className="h-8 text-xs mt-1">
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_">—</SelectItem>
-                    <SelectItem value="condo">Condo</SelectItem>
-                    <SelectItem value="house">House</SelectItem>
-                    <SelectItem value="townhouse">Townhouse</SelectItem>
-                    <SelectItem value="multi_family">Multi-family</SelectItem>
-                    <SelectItem value="land">Land</SelectItem>
+                    <SelectItem value="condo">{inboxText("inboxUi.condo")}</SelectItem>
+                    <SelectItem value="house">{inboxText("inboxUi.house")}</SelectItem>
+                    <SelectItem value="townhouse">{inboxText("inboxUi.townhouse")}</SelectItem>
+                    <SelectItem value="multi_family">{inboxText("inboxUi.multiFamily")}</SelectItem>
+                    <SelectItem value="land">{inboxText("inboxUi.land")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">Timeline</Label>
+                <Label className="text-xs">{inboxText("inboxUi.timeline")}</Label>
                 <Select value={timeline || "_"} onValueChange={(v) => setTimeline(v === "_" ? "" : v)}>
                   <SelectTrigger className="h-8 text-xs mt-1">
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_">—</SelectItem>
-                    <SelectItem value="asap">ASAP</SelectItem>
-                    <SelectItem value="30d">30 days</SelectItem>
-                    <SelectItem value="60_90d">60–90 days</SelectItem>
-                    <SelectItem value="browsing">Browsing</SelectItem>
+                    <SelectItem value="asap">{inboxText("inboxUi.asap")}</SelectItem>
+                    <SelectItem value="30d">{inboxText("inboxUi.label30Days")}</SelectItem>
+                    <SelectItem value="60_90d">{inboxText("inboxUi.label6090Days")}</SelectItem>
+                    <SelectItem value="browsing">{inboxText("inboxUi.browsing")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Financing</Label>
+                <Label className="text-xs">{inboxText("inboxUi.financing")}</Label>
                 <Select value={financing || "_"} onValueChange={(v) => setFinancing(v === "_" ? "" : v)}>
                   <SelectTrigger className="h-8 text-xs mt-1">
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_">—</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="pre_approved">Pre-approved</SelectItem>
-                    <SelectItem value="exploring">Exploring</SelectItem>
+                    <SelectItem value="cash">{inboxText("inboxUi.cash")}</SelectItem>
+                    <SelectItem value="pre_approved">{inboxText("inboxUi.preApproved")}</SelectItem>
+                    <SelectItem value="exploring">{inboxText("inboxUi.exploring")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div>
-              <Label className="text-xs">Must-haves (comma-separated)</Label>
+              <Label className="text-xs">{inboxText("inboxUi.mustHavesCommaSeparated")}</Label>
               <Input className="h-8 text-xs mt-1" value={mustHaves} onChange={(e) => setMustHaves(e.target.value)} />
             </div>
           </div>
           {saveMutation.error && <p role="alert" className="text-xs text-red-600">{saveMutation.error.message}</p>}
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>
-              Cancel
+              {inboxText("inboxUi.cancel")}
             </Button>
             <Button
               size="sm"
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
             >
-              {saveMutation.isPending ? "Saving…" : "Save and enable matching"}
+              {saveMutation.isPending ? inboxText("inboxUi.saving") : inboxText("inboxUi.saveAndEnableMatching")}
             </Button>
           </DialogFooter>
         </DialogContent>

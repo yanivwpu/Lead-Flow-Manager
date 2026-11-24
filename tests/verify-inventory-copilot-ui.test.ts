@@ -27,8 +27,10 @@ function main() {
     "utf8",
   );
 
+  const { inboxUi } = JSON.parse(readFileSync("client/src/locales/en.json", "utf8"));
   assert.ok(
-    unavailable.includes("Inventory connection status unavailable. Please retry."),
+    unavailable.includes('inboxText("inboxUi.inventoryConnectionStatusUnavailablePleaseRetry")') &&
+      inboxUi.inventoryConnectionStatusUnavailablePleaseRetry === "Inventory connection status unavailable. Please retry.",
     "unavailable message present",
   );
   assert.ok(
@@ -48,7 +50,8 @@ function main() {
     "matching panel when connected or loading, not on error",
   );
   assert.ok(
-    empty.includes("Connect inventory to enable matching listings"),
+    empty.includes('inboxText("inboxUi.connectInventoryToEnableMatchingListingsAndPrice")') &&
+      inboxUi.connectInventoryToEnableMatchingListingsAndPrice.startsWith("Connect inventory to enable matching listings"),
     "connect card copy unchanged",
   );
   assert.ok(

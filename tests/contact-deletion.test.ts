@@ -143,7 +143,7 @@ run("Inbox Delete Contact still hits DELETE /api/contacts/:id via shared backend
   assert.ok(inbox.includes("invalidateQueriesAfterContactDeletion"));
   assert.ok(inbox.includes("menu-delete-contact"));
   const panel = readFileSync(join(ROOT, "client/src/components/InboxLeadDetailsPanel.tsx"), "utf8");
-  assert.ok(panel.includes("Delete Contact"));
+  assert.ok(panel.includes("inboxUi.deleteContact"));
   assert.ok(panel.includes("onDeleteContact"));
 });
 

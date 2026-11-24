@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import {
   Send,
@@ -142,10 +143,6 @@ function autoSkipNoticeForReason(
   return null;
 }
 
-function autoModeHelperText(): string {
-  return "Auto sends when it’s safe. Otherwise, it drafts a reply for you to review.";
-}
-
 // Canned demo replies for when demoMode=true (no real API call)
 const DEMO_SUGGESTIONS = [
   "Got it — I'll pull up the best matches for your criteria. Are you flexible on location or is it a hard requirement?",
@@ -194,6 +191,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   forceManualMode = false,
   serverHeldDraft = null,
 }, ref) {
+  const { t: inboxText } = useTranslation();
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
   const effectiveCanSuggest = capabilities ? capabilities.canUseSuggest : aiEnabled;
@@ -958,12 +956,12 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     : Clock;
 
   const autoLabel = (() => {
-    if (autoPhase === "typing") return "Typing a reply…";
+    if (autoPhase === "typing") return inboxText("inboxUi.autoTyping");
     // Latest message from customer → we're not waiting on them (updates every time `messages` changes).
-    if (lastTurnIsInbound) return "Ready to respond";
-    if (autoPhase === "replied") return "⚡ Auto-replied — waiting for response";
-    if (lastTurnIsOutbound) return "Waiting for customer response…";
-    return "Ready to respond";
+    if (lastTurnIsInbound) return inboxText("inboxUi.autoReady");
+    if (autoPhase === "replied") return inboxText("inboxUi.autoReplied");
+    if (lastTurnIsOutbound) return inboxText("inboxUi.autoWaiting");
+    return inboxText("inboxUi.autoReady");
   })();
 
   return (
@@ -983,15 +981,15 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         {showAIModes && (
           <div className="flex items-center gap-1 flex-wrap" data-testid="ai-mode-selector">
             {(["manual", "suggest", "auto"] as AIMode[]).map((mode) => {
-              const label  = mode === "manual" ? "Manual" : mode === "suggest" ? "Suggest" : "Auto";
+              const label  = mode === "manual" ? inboxText("inboxUi.modeManual") : mode === "suggest" ? inboxText("inboxUi.modeSuggest") : inboxText("inboxUi.modeAuto");
               const Icon   = mode === "manual" ? User : mode === "suggest" ? Sparkles : Zap;
               const active = aiMode === mode;
               const modeHelp =
                 mode === "manual"
-                  ? "You type and send. This does not pause workflows or follow-ups — use Pause Automations on the contact."
+                  ? inboxText("inboxUi.manualHelp")
                   : mode === "suggest"
-                    ? "AI drafts a reply; you send."
-                    : "Eligible AI auto-reply. Pause Automations on the contact to stop all automated sends.";
+                    ? inboxText("inboxUi.suggestHelp")
+                    : inboxText("inboxUi.autoHelp");
 
               // Capability + business-settings gate (Full Auto only when business mode is auto)
               const modeEnabled =
@@ -1001,13 +999,13 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
 
               const lockReason =
                 !modeEnabled && mode === "suggest" && capabilities?.plan === "free"
-                  ? "Unlock Suggest to draft replies"
+                  ? inboxText("inboxUi.unlockSuggest")
                   : !modeEnabled && mode === "auto" && capabilities?.plan === "starter"
-                  ? "Unlock Autopilot to reply automatically"
+                  ? inboxText("inboxUi.unlockAuto")
                   : !modeEnabled && capabilities?.isExhausted
-                  ? "AI Assist is temporarily limited to protect deliverability"
+                  ? inboxText("inboxUi.aiLimited")
                   : !modeEnabled
-                  ? "Upgrade to unlock"
+                  ? inboxText("inboxUi.upgradeUnlock")
                   : null;
 
               return (
@@ -1040,7 +1038,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         )}
 
         {aiMode === "auto" && !autoOverride && (
-          <p className="text-[11px] text-slate-500 mt-1">{autoModeHelperText()}</p>
+          <p className="text-[11px] text-slate-500 mt-1">{inboxText("inboxUi.autoHelper")}</p>
         )}
 
         {/* Suggest mode: primary draft lives in the composer */}
@@ -1050,7 +1048,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             data-testid="composer-ai-draft-hint"
           >
             <span aria-hidden>✨</span>
-            <span className="font-medium">AI draft ready — edit or send</span>
+            <span className="font-medium">{inboxText("inboxUi.aiDraftReadyEditOrSend")}</span>
           </p>
         )}
 
@@ -1085,20 +1083,19 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             >
               {autoLabel}
             </span>
-            <span className="text-[10px] text-purple-400 not-italic font-medium whitespace-nowrap opacity-70">
-              Click to take over
-            </span>
+            <span className="text-[10px] text-purple-400 not-italic font-medium whitespace-nowrap opacity-70">{inboxText("inboxUi.clickToTakeOver")}</span>
           </div>
         ) : (
           <textarea
             ref={textareaRef}
+            dir="auto"
             rows={isEmailComposer ? 1 : 2}
             placeholder={
               isSuggestMode && isDrafting
-                ? "AI is drafting…"
+                ? inboxText("inboxUi.aiIsDrafting")
                 : isEmailComposer
-                  ? "Write your email…"
-                  : "Type a message…"
+                  ? inboxText("inboxUi.writeYourEmail")
+                  : inboxText("inboxUi.typeAMessage")
             }
             className={cn(
               "w-full border text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
@@ -1168,6 +1165,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="p-1.5 rounded-md hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                  aria-label={inboxText("inboxUi.attachFile")}
                   data-testid="button-attach-file"
                 >
                   <Paperclip className="h-4 w-4" />
@@ -1186,7 +1184,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
               <button
                 onClick={onTemplate}
                 className="p-1.5 rounded-md hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                title="Send a WhatsApp template"
+                title={inboxText("inboxUi.sendAWhatsappTemplate")}
                 data-testid="button-use-template"
               >
                 <LayoutTemplate className="h-4 w-4" />
@@ -1204,9 +1202,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
                   className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-purple-500 transition-colors disabled:opacity-30"
                   data-testid="button-regenerate-ai"
                 >
-                  <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
-                  Regenerate
-                </button>
+                  <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />{inboxText("inboxUi.regenerate")}</button>
               )}
               <button
                 type="button"
@@ -1220,9 +1216,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
                 )}
                 data-testid="button-send-message"
               >
-                <Send className="h-3 w-3" />
-                Send
-              </button>
+                <Send className="h-3 w-3" />{inboxText("inboxUi.send")}</button>
             </div>
           )}
         </div>

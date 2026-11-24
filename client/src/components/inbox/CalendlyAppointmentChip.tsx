@@ -1,4 +1,6 @@
-import { format } from "date-fns";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { Calendar } from "lucide-react";
 
 export type CalendlyEventMessage = {
@@ -44,68 +46,35 @@ export function findExpandedCalendlyMessageIndex(messages: CalendlyMessageLike[]
   return null;
 }
 
-function formatChipTime(iso?: string | null, fallback?: string): string {
-  if (iso) {
-    try {
-      return format(new Date(iso), "MMM d, h:mm a");
-    } catch {
-      // fall through
-    }
-  }
-  if (fallback) {
-    try {
-      return format(new Date(fallback), "MMM d, h:mm a");
-    } catch {
-      return fallback;
-    }
-  }
-  return "Time TBD";
+function formatChipTime(iso: string | null | undefined, language: string): string | undefined {
+  if (!iso) return;
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return;
+  return formatRegionalDate(date, language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function formatEventTime(event: CalendlyEventMessage): string {
-  if (event.startTime) {
-    try {
-      return format(new Date(event.startTime), "MMM d, h:mm a");
-    } catch {
-      // fall through
-    }
-  }
-  if (event.timeLabel) return event.timeLabel;
-  return event.cardTimeLabel || "Time TBD";
-}
-
-function formatDurationMinutes(event: CalendlyEventMessage): string | null {
+function formatDurationMinutes(event: CalendlyEventMessage): number | null {
   if (event.startTime && event.endTime) {
     const mins = Math.round(
       (new Date(event.endTime).getTime() - new Date(event.startTime).getTime()) / 60_000,
     );
-    if (mins > 0) return `${mins} min`;
+    if (mins > 0) return mins;
   }
   const fromName = event.eventName?.match(/(\d+)\s*[- ]?\s*minute/i);
-  if (fromName) return `${fromName[1]} min`;
-  return null;
+  return fromName ? Number(fromName[1]) : null;
 }
 
-function expandedHeadline(event: CalendlyEventMessage): string {
-  if (event.kind === "rescheduled") return "Meeting booked";
-  if (event.kind === "booked") return "Meeting booked";
-  return event.title || "Calendly activity";
-}
-
-function compactHeadline(event: CalendlyEventMessage): string {
-  const time = formatEventTime(event);
-
+function compactHeadline(event: CalendlyEventMessage, time: string, language: string, t: TFunction): string {
   if (event.kind === "rescheduled" || event.isRescheduleCancellation) {
-    const prev =
-      event.previousTimeLabel ||
-      (event.previousStartTime ? formatChipTime(event.previousStartTime) : null);
-    if (prev) return `Meeting rescheduled · ${prev} → ${time}`;
-    return `Meeting rescheduled · ${time}`;
+    const previous = formatChipTime(event.previousStartTime, language) ?? event.previousTimeLabel;
+    return previous
+      ? t("inboxUi.meetingRescheduledFrom", { from: previous, to: time })
+      : t("inboxUi.meetingRescheduled", { time });
   }
-  if (event.kind === "canceled") return `Meeting canceled · ${time}`;
-  if (event.kind === "no_show") return `No-show · ${time}`;
-  if (event.kind === "booked") return `Previous appointment booking · ${time}`;
-  return `Calendly activity · ${time}`;
+  if (event.kind === "canceled") return t("inboxUi.meetingCanceled", { time });
+  if (event.kind === "no_show") return t("inboxUi.meetingNoShow", { time });
+  if (event.kind === "booked") return t("inboxUi.previousAppointment", { time });
+  return t("inboxUi.calendlyActivityAt", { time });
 }
 
 type CalendlyAppointmentChipProps = {
@@ -114,9 +83,10 @@ type CalendlyAppointmentChipProps = {
 };
 
 export function CalendlyAppointmentChip({ event, expanded }: CalendlyAppointmentChipProps) {
-  const time = formatEventTime(event);
+  const { t, i18n } = useTranslation();
+  const time = formatChipTime(event.startTime, i18n.language) ?? event.timeLabel ?? event.cardTimeLabel ?? t("inboxUi.timeTbd");
   const duration = formatDurationMinutes(event);
-  const metaLine = duration ? `${time} · ${duration}` : time;
+  const metaLine = duration ? `${time} · ${t("inboxUi.minutes", { minutes: duration })}` : time;
 
   if (!expanded) {
     return (
@@ -126,7 +96,7 @@ export function CalendlyAppointmentChip({ event, expanded }: CalendlyAppointment
           title={event.eventName || undefined}
         >
           <Calendar className="h-2.5 w-2.5 shrink-0 text-gray-400" aria-hidden />
-          <span className="min-w-0 [overflow-wrap:anywhere] break-words">{compactHeadline(event)}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere] break-words">{compactHeadline(event, time, i18n.language, t)}</span>
         </div>
       </div>
     );
@@ -140,9 +110,9 @@ export function CalendlyAppointmentChip({ event, expanded }: CalendlyAppointment
       >
         <div className="flex items-center gap-1">
           <Calendar className="h-2.5 w-2.5 shrink-0 text-emerald-600" aria-hidden />
-          <span className="text-[11px] font-medium leading-tight text-gray-800">{expandedHeadline(event)}</span>
+          <span className="text-[11px] font-medium leading-tight text-gray-800">{event.kind === "booked" || event.kind === "rescheduled" ? t("inboxUi.meetingBooked") : event.title || t("inboxUi.calendlyActivity")}</span>
         </div>
-        <p className="pl-[calc(0.625rem+0.25rem)] text-[10px] leading-tight text-gray-500">{metaLine}</p>
+        <p className="ps-[calc(0.625rem+0.25rem)] text-[10px] leading-tight text-gray-500">{metaLine}</p>
       </div>
     </div>
   );
