@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  boundaryBounds, selectExactNamedNeighborhood, type NeighborhoodBoundary,
+  boundaryBounds, normalizeNeighborhoodName, readBoundaryGeometry, selectExactNamedNeighborhood, type NeighborhoodBoundary,
 } from "../shared/agent/neighborhoodListingGeo";
 import {
   resolveNeighborhoodBoundary, isSupportedOfficialNeighborhoodSource,
@@ -84,4 +84,24 @@ test("municipal source retrieval is allowlisted, source-separated and cached", a
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("international neighborhood names are preserved without broadening exact matching", () => {
+  assert.equal(normalizeNeighborhoodName("נווה צדק"), "נווה צדק");
+  assert.equal(normalizeNeighborhoodName("El Raval"), "el raval");
+  assert.equal(normalizeNeighborhoodName("São João"), "são joão");
+  const feature = { type: "Feature", properties: { neighborhood: "נווה צדק" }, geometry: polygon(32.06, 34.76) };
+  assert.deepEqual(selectExactNamedNeighborhood([feature], "נווה צדק", ["neighborhood"]), feature.geometry);
+  assert.equal(selectExactNamedNeighborhood([feature], "נווה", ["neighborhood"]), null);
+  assert.equal(selectExactNamedNeighborhood([feature, feature], "נווה צדק", ["neighborhood"]), null);
+});
+
+test("zero-area or malformed polygon rings never verify a neighborhood", () => {
+  assert.equal(readBoundaryGeometry({ type: "Polygon", coordinates: [[
+    [34.76, 32.06], [34.76, 32.06], [34.76, 32.06], [34.76, 32.06],
+  ]] }), null);
+  assert.equal(readBoundaryGeometry({ type: "Polygon", coordinates: [[
+    [34.76, 32.06], [34.77, 32.06], [34.78, 32.06], [34.76, 32.06],
+  ]] }), null);
+  assert.deepEqual(readBoundaryGeometry(polygon(32.06, 34.76)), polygon(32.06, 34.76));
 });
