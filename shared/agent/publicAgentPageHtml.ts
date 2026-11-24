@@ -296,7 +296,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   // arbitrary article Markdown or HTML from injecting external image URLs.
   const inlineGuidePhotoMarkers = new Set<string>();
   const guideEditorialHtml = guideParagraphs.map((text) => {
-    const photo = guidePhotos.slice(1).find((candidate) => neighborhoodPhotoMarker(candidate.url) === text);
+    const photo = guidePhotos.find((candidate) => neighborhoodPhotoMarker(candidate.url) === text);
     if (photo) {
       inlineGuidePhotoMarkers.add(text);
       return `<figure class="neighborhood-guide-inline-photo"><img src="${escapeHtml(photo.url)}"
