@@ -168,7 +168,7 @@ export function NeighborhoodBoundaryMap(props: {
         onPointerUp={() => { dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }}>
         {map.tiles.map((tile) => (
           <img key={tile.key} src={tile.src} alt="" draggable={false}
-            decoding="async" loading="lazy" referrerPolicy="no-referrer"
+            decoding="async" loading="lazy" referrerPolicy="strict-origin-when-cross-origin"
             style={{ position: "absolute", left: tile.left / WIDTH * 100 + "%",
               top: tile.top / HEIGHT * 100 + "%", width: TILE / WIDTH * 100 + "%",
               height: TILE / HEIGHT * 100 + "%", pointerEvents: "none" }} />
