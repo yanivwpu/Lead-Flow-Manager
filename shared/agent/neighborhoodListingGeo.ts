@@ -88,20 +88,41 @@ export function coordinateWithinNeighborhood(
     !holes.some((hole) => insideRing(longitude, latitude, hole)));
 }
 
-export function selectExactOfficialNeighborhood(
+
+/**
+ * Match a named boundary only when exactly one geometry matches. The provider
+ * controls which feature fields are genuine names, never substring/ZIP matches.
+ * Optional city fields must match the requested city on the same feature.
+ */
+export function selectExactNamedNeighborhood(
   features: unknown, requestedName: string,
+  nameFields: readonly string[],
+  expectedCity?: { name: string; fields: readonly string[] },
 ): NeighborhoodBoundary | null {
   if (!Array.isArray(features)) return null;
   const normalized = normalizeNeighborhoodName(requestedName);
-  if (!normalized || normalized.length < 3) return null;
-  const matching = features.filter((feature) => {
+  if (!normalized || normalized.length < 3 || !nameFields.length) return null;
+  const matches = features.filter((feature) => {
     if (!feature || typeof feature !== "object") return false;
     const properties = (feature as { properties?: Record<string, unknown> }).properties;
     if (!properties) return false;
-    return [properties.OFFICIALNAME, properties.UNOFFICIALNAME].some((name) =>
-      typeof name === "string" && normalizeNeighborhoodName(name) === normalized);
+    if (expectedCity) {
+      const city = expectedCity.fields.some((field) =>
+        typeof properties[field] === "string" &&
+        normalizeNeighborhoodName(properties[field] as string) === normalizeNeighborhoodName(expectedCity.name));
+      if (!city) return false;
+    }
+    return nameFields.some((field) =>
+      typeof properties[field] === "string" &&
+      normalizeNeighborhoodName(properties[field] as string) === normalized);
   });
-  // Ambiguity must fail closed, never select the first guess.
-  if (matching.length !== 1) return null;
-  return readBoundaryGeometry((matching[0] as { geometry?: unknown }).geometry);
+  // Do not silently choose one geometry if the provider has duplicates.
+  if (matches.length !== 1) return null;
+  return readBoundaryGeometry((matches[0] as { geometry?: unknown }).geometry);
+}
+
+export function selectExactOfficialNeighborhood(
+  features: unknown, requestedName: string,
+): NeighborhoodBoundary | null {
+  return selectExactNamedNeighborhood(features, requestedName, ["OFFICIALNAME", "UNOFFICIALNAME"]);
 }
