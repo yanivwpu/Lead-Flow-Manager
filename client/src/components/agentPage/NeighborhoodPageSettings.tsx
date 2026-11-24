@@ -281,7 +281,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             ))}
           </div>
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
-            disabled={stale || save.isPending} uploading={photoUploading}
+            disabled={stale || save.isPending || photoUploading} uploading={photoUploading}
             canUpload={Boolean(page && !stale && !save.isPending && !photoUploading &&
               (values.photos?.length ?? 0) < NEIGHBORHOOD_GUIDE_MAX_PHOTOS)}
             onChange={(content) => editField("content", content)}
