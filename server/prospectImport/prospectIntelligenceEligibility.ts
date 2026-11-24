@@ -1,4 +1,5 @@
 import type { Contact } from "@shared/schema";
+import { isShopifyCustomerContact } from "@shared/shopifyProspectCustomerGuard";
 import type { ProspectImportGhlMetadata } from "@shared/prospectImport";
 
 export function readProspectImportMetadata(contact: Contact): ProspectImportGhlMetadata | null {
@@ -21,6 +22,9 @@ export function isInternalImportedProspect(contact: Contact): boolean {
 }
 
 export function assertInternalImportedProspect(contact: Contact): void {
+  if (isShopifyCustomerContact(contact)) {
+    throw new Error("Shopify customers imported for merchant review are not authorized for Prospect AI analysis.");
+  }
   if (!isInternalImportedProspect(contact)) {
     throw new Error("Prospect AI Intelligence is only available for internal imported prospects.");
   }
