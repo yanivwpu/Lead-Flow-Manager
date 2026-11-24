@@ -37,7 +37,7 @@ export type NeighborhoodListingResult = {
 
 export async function findNeighborhoodListings(input: {
   userId: string;
-  neighborhood: { name: string; city: string; state: string };
+  neighborhood: { name: string; city: string; state: string; country?: string };
   appOrigin: string;
   /** Allows historic examples only in private, authenticated owner previews. */
   ownerPreview?: boolean;
