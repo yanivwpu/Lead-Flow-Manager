@@ -74,6 +74,7 @@ import {
 } from "@shared/prospectImport";
 import { ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
 import { CsvProspectImport } from "./CsvProspectImport";
+import { ShopifyCustomerProspectImport } from "./ShopifyCustomerProspectImport";
 import { ProspectOutreachQueuePanel } from "./ProspectOutreachQueuePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -581,7 +582,7 @@ export function GhlProspectImport({
         </div>
       </div>
 
-      {provider !== "csv" ? <div className="mb-8 flex flex-wrap gap-2">
+      {provider !== "csv" && provider !== "shopify" ? <div className="mb-8 flex flex-wrap gap-2">
         {STEPS.map((s) => (
           <div
             key={s.n}
@@ -622,9 +623,9 @@ export function GhlProspectImport({
               </SelectTrigger>
               <SelectContent>
                 {PROSPECT_IMPORT_PROVIDERS.map((p) => (
-                  <SelectItem key={p} value={p} disabled={p !== "gohighlevel" && p !== "csv"}>
+                  <SelectItem key={p} value={p} disabled={p !== "gohighlevel" && p !== "csv" && p !== "shopify"}>
                     {PROSPECT_IMPORT_PROVIDER_LABELS[p]}
-                    {p !== "gohighlevel" && p !== "csv" ? " (coming soon)" : ""}
+                    {p !== "gohighlevel" && p !== "csv" && p !== "shopify" ? " (coming soon)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -632,6 +633,7 @@ export function GhlProspectImport({
           </div>
 
           {provider === "csv" ? <CsvProspectImport /> : null}
+          {provider === "shopify" ? <ShopifyCustomerProspectImport /> : null}
 
           {provider === "gohighlevel" ? (
             <>
