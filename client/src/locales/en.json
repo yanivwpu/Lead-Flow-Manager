@@ -2313,6 +2313,7 @@
     "follow": "Follow",
     "followUp": "Follow-up",
     "customFollowUp": "Custom follow-up",
+    "tomorrow24Hours": "Tomorrow (24h)",
     "label3Days": "3 days",
     "label1Week": "1 week",
     "customDateTime": "Custom date & time…",

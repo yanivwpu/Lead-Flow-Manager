@@ -4,7 +4,7 @@ import { createInstance } from "i18next";
 import en from "../client/src/locales/en.json";
 import he from "../client/src/locales/he.json";
 import es from "../client/src/locales/es.json";
-import { copilotActionLabel } from "../client/src/lib/inboxCopilotPresentation";
+import { copilotActionLabel, quickFollowUpDate, quickFollowUpOptions } from "../client/src/lib/inboxCopilotPresentation";
 import { isSchedulingComposerAction } from "../shared/customerInsights";
 
 test("Inbox shell, channel picker, composer and Copilot resolve in each interface locale", async () => {
@@ -27,5 +27,30 @@ test("Inbox shell, channel picker, composer and Copilot resolve in each interfac
     assert.equal(i18n.t("inboxUi.typeAMessage"), composer);
     assert.equal(copilotActionLabel(schedulingAction, i18n.t), action);
     assert.equal(isSchedulingComposerAction(schedulingAction), true);
+  }
+});
+
+test("quick follow-up localizes labels and schedules canonical offsets at 9 AM", async () => {
+  const i18n = createInstance();
+  await i18n.init({
+    lng: "en",
+    resources: { en: { translation: en }, he: { translation: he }, es: { translation: es } },
+  });
+  const now = new Date(2026, 0, 29, 16, 30);
+  const expectedDates = [
+    new Date(2026, 0, 30, 9).toISOString(),
+    new Date(2026, 1, 1, 9).toISOString(),
+    new Date(2026, 1, 5, 9).toISOString(),
+  ];
+  for (const [locale, labels] of [
+    ["en", ["Tomorrow (24h)", "3 days", "1 week"]],
+    ["he", ["מחר (24 שעות)", "3 ימים", "שבוע אחד"]],
+    ["es", ["Mañana (24 h)", "3 días", "1 semana"]],
+  ] as const) {
+    await i18n.changeLanguage(locale);
+    const options = quickFollowUpOptions(i18n.t);
+    assert.deepEqual(options.map(({ display }) => display), labels, locale);
+    assert.deepEqual(options.map(({ value }) => value), ["24h", "3 days", "1 week"], locale);
+    assert.deepEqual(options.map(({ value }) => quickFollowUpDate(value, now)), expectedDates, locale);
   }
 });

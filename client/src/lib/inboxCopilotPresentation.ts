@@ -41,3 +41,22 @@ export function copilotActionLabel(label: string, t: TFunction): string {
         : label;
   }
 }
+
+const quickFollowUpDays = { "24h": 1, "3 days": 3, "1 week": 7 } as const;
+
+export type QuickFollowUpValue = keyof typeof quickFollowUpDays;
+
+export function quickFollowUpOptions(t: TFunction): { value: QuickFollowUpValue; display: string }[] {
+  return [
+    { value: "24h", display: t("inboxUi.tomorrow24Hours") },
+    { value: "3 days", display: t("inboxUi.label3Days") },
+    { value: "1 week", display: t("inboxUi.label1Week") },
+  ];
+}
+
+export function quickFollowUpDate(value: QuickFollowUpValue, now = new Date()): string {
+  const date = new Date(now);
+  date.setDate(date.getDate() + quickFollowUpDays[value]);
+  date.setHours(9, 0, 0, 0);
+  return date.toISOString();
+}

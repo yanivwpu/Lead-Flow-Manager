@@ -1,4 +1,4 @@
-import { copilotActionLabel } from "@/lib/inboxCopilotPresentation";
+import { copilotActionLabel, quickFollowUpDate, quickFollowUpOptions, type QuickFollowUpValue } from "@/lib/inboxCopilotPresentation";
 import i18n from "@/lib/i18n";
 import { useTranslation } from "react-i18next";
 import { InboxAssignmentControl } from "@/components/InboxAssignmentControl";
@@ -1436,15 +1436,11 @@ export function InboxLeadDetailsPanel({
     return d.toISOString();
   };
 
-  // Quick follow-up: sets 9am on the target day
-  const setQuickFollowUp = (label: string) => {
-    const now = new Date();
-    const d   = new Date(now);
-    if      (label === '24h')    d.setDate(d.getDate() + 1);
-    else if (label === '3 days') d.setDate(d.getDate() + 3);
-    else if (label === '1 week') d.setDate(d.getDate() + 7);
-    d.setHours(9, 0, 0, 0);
-    onUpdateContact({ followUp: agentInquiryRecommendation(contact) || label, followUpDate: d.toISOString() });
+  const setQuickFollowUp = (value: QuickFollowUpValue) => {
+    onUpdateContact({
+      followUp: agentInquiryRecommendation(contact) || value,
+      followUpDate: quickFollowUpDate(value),
+    });
   };
 
   const confirmCustomFollowUp = () => {
@@ -2532,16 +2528,12 @@ export function InboxLeadDetailsPanel({
               {/* ─ QUICK OPTIONS VIEW ─ */}
               {followView === 'quick' && (
                 <>
-                  {[
-                    { label: '24h',    display: 'Tomorrow (24h)',  },
-                    { label: inboxText("inboxUi.label3Days"), display: '3 days'           },
-                    { label: inboxText("inboxUi.label1Week"), display: '1 week'           },
-                  ].map(({ label, display }) => (
+                  {quickFollowUpOptions(inboxText).map(({ value, display }) => (
                     <button
-                      key={label}
-                      onClick={() => { setQuickFollowUp(label); setFollowOpen(false); }}
+                      key={value}
+                      onClick={() => { setQuickFollowUp(value); setFollowOpen(false); }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                      data-testid={`followup-quick-${label.replace(' ', '-')}`}
+                      data-testid={`followup-quick-${value.replace(' ', '-')}`}
                     >
                       <Clock className="w-3 h-3 text-gray-400" />
                       {display}
