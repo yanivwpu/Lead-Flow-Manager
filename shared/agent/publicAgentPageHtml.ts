@@ -230,6 +230,7 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       <a href="#homes-rent">Homes for Rent</a>
     </div>
     <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
+    ${customArea ? '<p class="neighborhood-property-status">Area drawn by this agent; it is not an official municipal neighborhood boundary.</p>' : ""}
     ${filtersHtml}
     ${listings?.candidateLimitReached ? '<p class="neighborhood-property-cap-note">Search results are limited to currently scanned inventory; counts may be incomplete. Ask the agent for more options.</p>' : ""}
     <div id="listings-grid" class="neighborhood-property-sections"${neighborhood.preview ? " inert" : ""}>
