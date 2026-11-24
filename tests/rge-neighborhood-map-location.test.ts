@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { findNeighborhoodMapLocation } from "../server/agentPage/neighborhoodMapLocation";
 import {
-  neighborhoodMapSessionKey, readNeighborhoodMapSession, writeNeighborhoodMapSession,
+  clearNeighborhoodMapSession, neighborhoodMapSessionKey, readNeighborhoodMapSession, writeNeighborhoodMapSession,
 } from "../client/src/lib/neighborhoodMapSession";
 import {
   EMPTY_NEIGHBORHOOD, mergeNeighborhoodDraftsPreservingActive,
@@ -86,6 +87,7 @@ test("Map viewport and un-applied corners round trip per user, page and browser 
   const storage = {
     getItem: (key: string) => data.get(key) ?? null,
     setItem: (key: string, value: string) => { data.set(key, value); },
+    removeItem: (key: string) => { data.delete(key); },
   };
   const a = neighborhoodMapSessionKey("agent-a", "new");
   const b = neighborhoodMapSessionKey("agent-b", "new");
@@ -98,6 +100,15 @@ test("Map viewport and un-applied corners round trip per user, page and browser 
   assert.equal(readNeighborhoodMapSession(storage, edit), null);
   data.set(a, '{"open":true,"center":{"lat":100,"lon":0},"zoom":14,"vertices":[],"boundaryKey":"null"}');
   assert.equal(readNeighborhoodMapSession(storage, a), null, "invalid browser state is ignored");
+  writeNeighborhoodMapSession(storage, a, state);
+  clearNeighborhoodMapSession(storage, a);
+  assert.equal(readNeighborhoodMapSession(storage, a), null,
+    "discarding clears stale corners before starting a different new neighborhood");
+  assert.equal(readNeighborhoodMapSession(storage, b), null, "discard is scoped to the active owner");
+  const ownerUi = readFileSync("client/src/components/agentPage/NeighborhoodPageSettings.tsx", "utf8");
+  assert.ok(ownerUi.includes("clearNeighborhoodMapSession(window.sessionStorage"));
+  assert.ok(ownerUi.includes("setMapEditorRevision((revision) => revision + 1)"),
+    "discard remounts map with the saved boundary, not stale local vertices");
 });
 
 test("Unrelated-tab writes must not erase active unsaved guide text", () => {
