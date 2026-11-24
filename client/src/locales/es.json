@@ -2467,6 +2467,7 @@
     "locationUnavailable": "Ubicación no disponible",
     "locationFailed": "No se pudo ubicar el mapa",
     "located": "Ubicación encontrada. Arrastra para revisar las calles y haz clic o toca para delimitar el vecindario.",
+    "locatedApproximate": "Se encontró el centro de la ciudad, pero no el vecindario exacto. Arrastra el mapa hasta las calles correctas antes de dibujar el área.",
     "zoomRequired": "Acerca el mapa antes de delimitar el vecindario.",
     "editUnavailable": "Edición no disponible.",
     "tooMany": "El área tiene demasiadas esquinas.",
