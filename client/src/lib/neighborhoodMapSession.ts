@@ -31,7 +31,7 @@ export function readNeighborhoodMapSession(storage: Pick<Storage, "getItem"> | u
       typeof data.center.lat !== "number" || typeof data.center.lon !== "number" ||
       !Number.isFinite(data.center.lat) || !Number.isFinite(data.center.lon) ||
       Math.abs(data.center.lat) > 85 || Math.abs(data.center.lon) > 180 ||
-      !Number.isInteger(data.zoom) || data.zoom! < 2 || data.zoom! > 17 ||
+      typeof data.zoom !== "number" || !Number.isInteger(data.zoom) || data.zoom < 2 || data.zoom > 17 ||
       !Array.isArray(data.vertices) || data.vertices.length > 128 ||
       !data.vertices.every(validPosition)) return null;
     return data as NeighborhoodMapSession;
