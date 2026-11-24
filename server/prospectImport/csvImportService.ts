@@ -2,7 +2,7 @@
  * Reuses GHL's audited dedup, job history, and undo without provider credentials.
  */
 import crypto from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { prospectImportJobs, prospectImportPreviewJobs } from "@shared/schema";
 import type { ProspectImportContactFilter, ProspectImportOptions, ProspectImportPreviewResult, ProspectImportJobSummary, ProspectImportMatchedSnapshot } from "@shared/prospectImport";
@@ -24,6 +24,11 @@ export async function previewCsvProspects(input: {
   initiatedByUserId:string;
 }):Promise<ProspectImportPreviewResult> {
   const rows=parseProspectCsv(input.csvText);
+  // Opportunistically remove expired CSV previews; never touch GHL previews.
+  await db.delete(prospectImportPreviewJobs).where(and(
+    eq(prospectImportPreviewJobs.integrationId,CSV_PROVIDER),
+    lt(prospectImportPreviewJobs.createdAt,new Date(Date.now()-CSV_PREVIEW_TTL))
+  ));
   const filters:ProspectImportContactFilter={
     search:String(input.filters?.search||"").slice(0,120),
     hasEmail:input.filters?.hasEmail===true,
@@ -98,6 +103,11 @@ export async function startCsvProspectImport(input:{
       previewJobId:preview.id,progressTotal:snapshots.length,
       resultDetails:{previewSnapshots:snapshots},
     }).returning({id:prospectImportJobs.id});
+    // The durable import job owns selected rows now; drop upload snapshots so
+    // they do not remain duplicated in preview storage.
+    await tx.update(prospectImportPreviewJobs).set({
+      matchedSnapshots:[],allMatchedExternalIds:[],previewResult:null
+    }).where(eq(prospectImportPreviewJobs.id,preview.id));
     return created;
   });
   setImmediate(()=>{void runProspectImportJob(row.id).catch(()=>console.error("[ProspectImport] CSV job failed"));});
