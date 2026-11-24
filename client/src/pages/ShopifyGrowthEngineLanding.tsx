@@ -17,7 +17,7 @@ export const SHOPIFY_GROWTH_LANDING = {
     eyebrow: "E-commerce Growth Engine · Included with eligible Pro plans",
     h1: "Turn Shopify conversations into better customer experiences",
     intro: "Bring your Shopify products, orders and shopper questions into one WhachatCRM workspace. Recommend real products with AI, support customers and configure consent-based WhatsApp updates without building your own API integration.",
-    primary: "Install from Shopify", secondary: "Open Growth Engine setup", pricing: "See plans and pricing",
+    primary: "Install from Shopify", secondary: "See how it works", pricing: "See plans and pricing",
     featuresTitle: "Everything starts with your Shopify store",
     features: [
       { name: "Catalog-backed AI Shopping", detail: "Sync Shopify products, variants, prices and inventory. AI Shopping uses verified catalog data, not invented product details." },
@@ -39,7 +39,7 @@ export const SHOPIFY_GROWTH_LANDING = {
     eyebrow: "Motor de crecimiento e-commerce · Incluido en planes Pro elegibles",
     h1: "Convierte conversaciones de Shopify en mejores experiencias",
     intro: "Reúne productos, pedidos y preguntas de compradores en un solo espacio de WhachatCRM. Recomienda productos reales con IA, atiende clientes y configura WhatsApp con consentimiento sin desarrollar APIs.",
-    primary: "Instalar desde Shopify", secondary: "Abrir configuración del motor", pricing: "Ver planes y precios",
+    primary: "Instalar desde Shopify", secondary: "Ver cómo funciona", pricing: "Ver planes y precios",
     featuresTitle: "Todo comienza con tu tienda Shopify",
     features: [
       { name: "Compras con IA basadas en catálogo", detail: "Sincroniza productos, variantes, precios e inventario. La IA usa datos reales verificados y no inventa detalles." },
@@ -61,7 +61,7 @@ export const SHOPIFY_GROWTH_LANDING = {
     eyebrow: "מנוע צמיחה למסחר מקוון · כלול בתוכניות Pro מתאימות",
     h1: "הופכים שיחות מחנות Shopify לחוויית לקוח טובה יותר",
     intro: "מרכזים מוצרים, הזמנות ושאלות לקוחות של Shopify בסביבת עבודה אחת ב-WhachatCRM. ממליצים על מוצרים אמיתיים באמצעות AI, נותנים שירות ומגדירים הודעות WhatsApp בהסכמה — בלי פיתוח API.",
-    primary: "התקנה דרך Shopify", secondary: "פתיחת הגדרות מנוע הצמיחה", pricing: "תוכניות ומחירים",
+    primary: "התקנה דרך Shopify", secondary: "איך זה עובד?", pricing: "תוכניות ומחירים",
     featuresTitle: "הכול מתחיל בחנות Shopify שלכם",
     features: [
       { name: "קניות AI לפי קטלוג", detail: "מסנכרנים מוצרים, גרסאות, מחירים ומלאי. ה-AI משתמש בנתונים מאומתים ולא ממציא פרטי מוצרים." },
@@ -108,7 +108,7 @@ export function ShopifyGrowthEngineLanding() {
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-gray-600">{copy.intro}</p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <a href={SHOPIFY_APP} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full bg-emerald-700 px-6 py-3 font-semibold text-white hover:bg-emerald-800">{copy.primary}<ArrowRight className={rtl ? "h-4 w-4 rotate-180" : "h-4 w-4"} /></a>
-                <a href="/app/ecommerce-growth-engine?view=setup" className="rounded-full border border-gray-300 bg-white px-6 py-3 font-semibold hover:border-emerald-500">{copy.secondary}</a>
+                <a href="#how-it-works" className="rounded-full border border-gray-300 bg-white px-6 py-3 font-semibold hover:border-emerald-500">{copy.secondary}</a>
               </div>
             </div>
             <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-xl">
@@ -126,7 +126,7 @@ export function ShopifyGrowthEngineLanding() {
             <div className="mt-8 grid gap-5 md:grid-cols-3">{copy.features.map(f => <article key={f.name} className="rounded-2xl border border-gray-200 p-6 shadow-sm"><CheckCircle2 className="mb-4 h-6 w-6 text-emerald-600" /><h3 className="text-lg font-bold">{f.name}</h3><p className="mt-3 leading-relaxed text-gray-600">{f.detail}</p></article>)}</div>
           </div>
         </section>
-        <section className="bg-gray-50 px-5 py-16 md:py-20">
+        <section id="how-it-works" className="scroll-mt-20 bg-gray-50 px-5 py-16 md:py-20">
           <div className="mx-auto max-w-5xl">
             <h2 className="font-display text-3xl font-bold">{copy.stepsTitle}</h2>
             <ol className="mt-8 grid gap-4 sm:grid-cols-2">{copy.steps.map((step, i) => <li key={step} className="flex gap-4 rounded-2xl bg-white p-5 ring-1 ring-gray-200"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">{i + 1}</span><p className="leading-relaxed text-gray-700">{step}</p></li>)}</ol>
