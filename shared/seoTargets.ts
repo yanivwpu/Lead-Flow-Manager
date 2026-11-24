@@ -13,6 +13,7 @@ const routeTargets: Partial<Record<(typeof PHASE2_LOCALIZED_PATHS)[number], read
   "/chatbot-builder": ["whatsapp chatbot builder"],
   "/prospect-ai": ["ai prospecting"],
   "/realtor-growth-engine": ["real estate lead follow up"],
+  "/shopify-growth-engine": ["shopify whatsapp crm", "shopify ai shopping"],
   "/real-estate-crm": ["whatsapp crm for real estate"],
 };
 

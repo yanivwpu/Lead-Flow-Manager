@@ -57,6 +57,14 @@ export function getLocalizedPageMeta(
     const seo = RGE_LANDING_LOCALES[locale].seo;
     return { title: seo.title, description: seo.description };
   }
+  if (englishPath === "/shopify-growth-engine") {
+    const meta = {
+      en: { title: "Shopify Growth Engine | AI Shopping & WhatsApp CRM | WhachatCRM", description: "Connect Shopify to verified AI product recommendations, order context and consent-based WhatsApp customer journeys. Included with eligible WhachatCRM plans." },
+      es: { title: "Motor de crecimiento Shopify | Compras con IA y WhatsApp | WhachatCRM", description: "Conecta Shopify con recomendaciones de productos mediante IA, pedidos y recorridos de WhatsApp basados en el consentimiento del cliente." },
+      he: { title: "מנוע הצמיחה ל-Shopify | קניות AI ו-WhatsApp | WhachatCRM", description: "חיבור Shopify להמלצות מוצרים מבוססות AI, הזמנות ומסעות לקוח ב-WhatsApp עם הסכמה מאומתת." },
+    };
+    return meta[locale];
+  }
   const product = getProductByPath(englishPath);
   if (product) {
     const localized = getLocalizedProductPage(product, locale);

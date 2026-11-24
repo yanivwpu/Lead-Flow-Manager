@@ -25,6 +25,7 @@ const PHASE2 = [
   "/chatbot-builder",
   "/campaigns",
   "/realtor-growth-engine",
+  "/shopify-growth-engine",
   "/integrations",
   "/shared-team-inbox",
   "/real-estate-crm",

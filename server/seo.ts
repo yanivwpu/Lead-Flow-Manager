@@ -429,6 +429,11 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: "How to unsubscribe from marketing emails from WhachatCRM.",
     canonical: `${BASE_URL}/unsubscribe`
   },
+  "/shopify-growth-engine": {
+    title: "Shopify Growth Engine | AI Shopping & WhatsApp CRM | WhachatCRM",
+    description: "Connect Shopify to verified AI product recommendations, order context and consent-based WhatsApp customer journeys. Included with eligible WhachatCRM plans.",
+    canonical: `${BASE_URL}/shopify-growth-engine`,
+  },
   "/realtor-growth-engine": {
     title: "Realtor Growth Engine – Turn Real Estate Leads Into Showings | WhachatCRM",
     description: "AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents.",
@@ -582,6 +587,18 @@ type MarketingSsrPage = {
 };
 
 const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
+  "/shopify-growth-engine": {
+    h1: "Turn Shopify conversations into better customer experiences",
+    lead: "WhachatCRM Shopify Growth Engine connects catalog-backed AI Shopping, products, orders, Unified Inbox and consent-based WhatsApp customer journeys. Cart Recovery delivery remains subject to Shopify's protected customer data approval. AI Checkout Assistance is not broadly enabled.",
+    bullets: [
+      "Sync Shopify products, variants, prices and inventory",
+      "Help shoppers with verified AI recommendations",
+      "Manage Shopify order context in Unified Inbox",
+      "Configure approved Meta WhatsApp templates and customer consent",
+      "Explicitly activate eligible Post-Purchase journeys",
+    ],
+    linksHtml: '<a href="/solutions/ecommerce">E-commerce CRM overview</a> · <a href="/pricing">View pricing</a> · <a href="/auth">Start free</a>',
+  },
   "/realtor-growth-engine": {
     h1: "Realtor Growth Engine",
     lead:

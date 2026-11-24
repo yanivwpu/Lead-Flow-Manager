@@ -113,7 +113,7 @@ test("Shopify card Install and View details stay inside the authenticated dashbo
   const engine = getGrowthEngineBySlug("ecommerce-growth-engine");
   assert.equal(engine?.ctaLabel, "Install Growth Engine");
   assert.equal(engine?.detailHref, "/app/templates/ecommerce-growth-engine");
-  assert.equal(engine?.marketingHref, "/solutions/ecommerce");
+  assert.equal(engine?.marketingHref, "/shopify-growth-engine");
   const gallery = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   assert.ok(gallery.includes('"/app/ecommerce-growth-engine?view=setup"'));
   assert.ok(gallery.includes('"/app/ecommerce-growth-engine?view=about"'));

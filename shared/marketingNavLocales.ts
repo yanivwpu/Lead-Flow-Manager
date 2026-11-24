@@ -74,6 +74,11 @@ export const MARKETING_NAV_LOCALES: Record<
               href: "/realtor-growth-engine",
               description: "Growth Engine en vivo para equipos inmobiliarios",
             },
+            {
+              label: "Shopify Growth Engine",
+              href: "/shopify-growth-engine",
+              description: "Compras con IA, pedidos y WhatsApp con consentimiento",
+            },
           ],
         },
         {
@@ -253,6 +258,11 @@ export const MARKETING_NAV_LOCALES: Record<
               label: "Realtor Growth Engine",
               href: "/realtor-growth-engine",
               description: "Growth Engine חי לצוותי נדל״ן",
+            },
+            {
+              label: "Shopify Growth Engine",
+              href: "/shopify-growth-engine",
+              description: "קניות AI, הזמנות והודעות WhatsApp בהסכמה",
             },
           ],
         },

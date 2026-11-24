@@ -22,6 +22,7 @@ export const PHASE2_LOCALIZED_PATHS = [
   "/chatbot-builder",
   "/campaigns",
   "/realtor-growth-engine",
+  "/shopify-growth-engine",
   "/integrations",
   "/shared-team-inbox",
   "/real-estate-crm",
