@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateMarketingEmailAudience as decide, hasLegacyEmailMarketingOptOut } from "../shared/marketingEmailAudienceEligibility";
@@ -37,4 +38,25 @@ test("Legacy bounce, unsubscribe, DNC, and opt-out flags cannot be bypassed",()=
     assert.equal(hasLegacyEmailMarketingOptOut({[flag]:true}),true);
   assert.equal(hasLegacyEmailMarketingOptOut({marketingOptIn:false}),true);
   assert.equal(hasLegacyEmailMarketingOptOut({marketingOptIn:true}),false);
+});
+
+test("The new audience route is read-only and scopes opt-out writes to owner identity",()=>{
+  const routes=readFileSync("server/marketingCompliance/routes.ts","utf8");
+  const preview=readFileSync("server/marketingCompliance/audiencePreview.ts","utf8");
+  const widget=readFileSync("client/src/components/settings/MarketingEmailAudienceReview.tsx","utf8");
+  const source=routes.slice(routes.indexOf("// Read-only source-specific audience classification."),routes.indexOf('app.get("/api/marketing/sender-profiles"'));
+  assert.match(source,/requireProspectImportAccess/);
+  assert.match(source,/workspaceUserId:req\.user\.id/);
+  assert.match(source,/contact\.userId !== req\.user\.id/);
+  assert.match(source,/scope:"email"/);
+  assert.match(source,/suppressMarketingIdentity/);
+  assert.doesNotMatch(source,/sendEmail\(|withCompliantMarketingEmail\(|enqueueCampaign\(/);
+  assert.match(preview,/batchSuppressedContactIds\(input\.workspaceUserId,page,"email"\)/);
+  assert.match(preview,/contactSuppressionState\(contact,"email"\)/);
+  assert.match(preview,/shopifyConsentState:source==="shopify"/);
+  assert.match(preview,/ownerConfirmedUsOptOutBasis:false/);
+  assert.match(preview,/sendingEnabled:false/);
+  assert.match(widget,/Mark email opted out/);
+  assert.match(widget,/Confirm opt-out/);
+  assert.match(widget,/this screen cannot start a campaign/);
 });
