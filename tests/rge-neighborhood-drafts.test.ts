@@ -60,3 +60,18 @@ test("RGE Agent Page controls use labeled compact icons without changing destina
   assert(main.includes('aria-label="Copy Agent Page link"'), "Agent Page retains link copying");
   assert(main.includes('href={agentDisplayUrl}'), "Agent Page View opens the existing public URL");
 });
+
+test("international neighborhood page drafts keep ISO country without changing legacy US defaults", () => {
+  const key = neighborhoodDraftKey("international-agent");
+  const saved = { values: { ...EMPTY_NEIGHBORHOOD, name: "נווה צדק", city: "תל אביב", state: "Tel Aviv", country: "IL" }, baseVersion: null };
+  const store = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => { store.set(k, v); },
+    removeItem: (k: string) => { store.delete(k); },
+  };
+  assert.equal(writeNeighborhoodDrafts(storage, key, { active: "new", entries: { new: saved } }), true);
+  assert.deepEqual(readNeighborhoodDrafts(storage, key).entries.new.values, saved.values);
+  assert.equal(sameNeighborhoodContent(saved.values, { ...saved.values, country: "US" }), false);
+  assert.equal(sameNeighborhoodContent({ ...saved.values, country: undefined }, { ...saved.values, country: "US" }), true);
+});
