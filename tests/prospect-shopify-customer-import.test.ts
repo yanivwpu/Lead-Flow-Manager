@@ -35,6 +35,7 @@ test("Merchant scope, privacy locks, preview TTL and no-send behavior are hard s
   const analysis=readFileSync("server/prospectImport/prospectBulkAnalysisService.ts","utf8");
   const eligibility=readFileSync("server/prospectImport/prospectIntelligenceEligibility.ts","utf8");
   const ui=readFileSync("client/src/components/settings/GhlProspectImport.tsx","utf8");
+  const undo=readFileSync("server/prospectImport/prospectImportUndo.ts","utf8");
   assert.match(src,/isShopifyContactInstallationActive/);
   assert.match(src,/eq\(integrations\.userId,userId\)/);
   assert.match(src,/customerPrivacyLocked/);
@@ -53,4 +54,12 @@ test("Merchant scope, privacy locks, preview TTL and no-send behavior are hard s
   assert.match(analysis,/selectedCustomers\.some\(isShopifyCustomerContact\)/);
   assert.match(eligibility,/isShopifyCustomerContact/);
   assert.match(ui,/disabled=\{p !== "gohighlevel" && p !== "csv" && p !== "shopify"\}/);
+  assert.match(undo,/executeShopifyReviewUnlink/);
+  assert.match(undo,/shopifyReviewContactIds/);
+  assert.match(undo,/createdByImportJob===false/);
+  const unlink=undo.slice(undo.indexOf("async function executeShopifyReviewUnlink"),undo.indexOf("async function contactHasMessages"));
+  assert.match(unlink,/tx\.delete\(prospectIntelligence\)/);
+  assert.match(unlink,/tx\.update\(contacts\)/);
+  assert.doesNotMatch(unlink,/deleteContact\(|deleteContactRecords\(/);
+
 });
