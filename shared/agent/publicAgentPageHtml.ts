@@ -178,17 +178,47 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       : !publicMode && listings.hasOlderMatchingInventory
         ? "Private test: these are previously synced listings, not verified current availability. Do not share as active properties."
         : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
-  const group = (groupTitle: string, category: string, cards: AgentPageListingCard[]) =>
-    `<section class="neighborhood-property-group" id="homes-${category}" aria-labelledby="neighborhood-${category}-heading">
+  const filtersHtml = matched && publicMode ? `<form id="neighborhood-filters" class="neighborhood-filters" aria-label="Filter neighborhood homes">
+      <label>Property type
+        <select name="propertyType"><option value="">All types</option><option value="house">House</option><option value="condo">Condo</option><option value="townhouse">Townhouse</option><option value="multi_family">Multi-family</option><option value="land">Land</option><option value="other">Other</option></select>
+      </label>
+      <label>Bedrooms
+        <select name="minBeds"><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option><option value="5">5+</option></select>
+      </label>
+      <label>Bathrooms
+        <select name="minBaths"><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select>
+      </label>
+      <label>Min price
+        <input type="number" name="minPrice" min="0" step="100" placeholder="Any" inputmode="numeric" />
+      </label>
+      <label>Max price
+        <input type="number" name="maxPrice" min="0" step="100" placeholder="Any" inputmode="numeric" />
+      </label>
+      <label>Sort by
+        <select name="sort"><option value="newest">Newest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></select>
+      </label>
+      <div class="neighborhood-filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary">Apply filters</button>
+        <button type="button" id="neighborhood-filters-reset" class="btn btn-sm btn-outline">Reset</button>
+      </div>
+    </form>` : "";
+  const group = (groupTitle: string, category: "sale" | "rent", cards: AgentPageListingCard[]) => {
+    const total = category === "sale" ? listings?.totalSale ?? cards.length : listings?.totalRent ?? cards.length;
+    const more = category === "sale" ? listings?.hasMoreSale : listings?.hasMoreRent;
+    const summary = total > 0 ? formatBrowseResultsSummary(cards.length, total) : "0 listings";
+    return `<section class="neighborhood-property-group" id="homes-${category}" aria-labelledby="neighborhood-${category}-heading"
+        data-loaded="${cards.length}" data-total="${total}">
       <div class="neighborhood-property-group-header">
         <h3 id="neighborhood-${category}-heading">${groupTitle}</h3>
-        <span class="neighborhood-property-number">${cards.length} shown</span>
+        <span class="neighborhood-property-number" id="neighborhood-${category}-count" aria-live="polite">${escapeHtml(summary)}</span>
       </div>
-      <div class="listings-grid neighborhood-property-grid">
+      <div class="listings-grid neighborhood-property-grid" id="neighborhood-${category}-grid">
         ${cards.length ? renderAgentPageListingCards(cards) :
           `<div class="neighborhood-property-empty">No verified ${category === "sale" ? "for-sale" : "rental"} listings are available to show. Ask the agent about the latest options.</div>`}
       </div>
+      ${matched && publicMode ? `<button type="button" class="btn btn-sm btn-outline neighborhood-load-more" id="neighborhood-${category}-more"${more ? "" : " hidden"}>Load more ${category === "sale" ? "homes for sale" : "rentals"}</button>` : ""}
     </section>`;
+  };
   return `<section id="neighborhood-properties" class="neighborhood-properties" aria-labelledby="neighborhood-property-title">
     <div class="neighborhood-guide-section-label">EXPLORE THE NEIGHBORHOOD</div>
     <h2 id="neighborhood-property-title">Homes in ${title}</h2>
@@ -197,6 +227,8 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       <a href="#homes-rent">Homes for Rent</a>
     </div>
     <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
+    ${filtersHtml}
+    ${listings?.candidateLimitReached ? '<p class="neighborhood-property-cap-note">Search results are limited to currently scanned inventory; counts may be incomplete. Ask the agent for more options.</p>' : ""}
     <div id="listings-grid" class="neighborhood-property-sections"${neighborhood.preview ? " inert" : ""}>
       ${group("Homes for Sale", "sale", sales)}
       ${group("Homes for Rent", "rent", rentals)}
@@ -747,6 +779,18 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-property-group-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
     .neighborhood-property-group h3 { font-size: 1.25rem; margin: 0; color: #0f172a; }
     .neighborhood-property-number { color: #64748b; font-size: .83rem; }
+    .neighborhood-filters { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px;
+      padding: 16px; margin: 16px 0 22px; background: #f8faf9; border: 1px solid #dce9e4; border-radius: 14px; }
+    .neighborhood-filters label { font-size: .8rem; font-weight: 600; color: #334155; display: flex; flex-direction: column; gap: 5px; }
+    .neighborhood-filters select, .neighborhood-filters input { box-sizing: border-box; min-width: 0; width: 100%;
+      min-height: 40px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; padding: 8px; font: inherit; color: #0f172a; }
+    .neighborhood-filters select:focus-visible, .neighborhood-filters input:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
+    .neighborhood-filter-actions { display: flex; align-items: end; gap: 9px; flex-wrap: wrap; grid-column: 1/-1; }
+    .neighborhood-load-more { margin: 16px 0 6px; }
+    .neighborhood-load-more[hidden] { display: none; }
+    .neighborhood-property-cap-note { color: #92400e; font-size: .82rem; }
+    @media (max-width: 700px) { .neighborhood-filters { grid-template-columns: repeat(2, minmax(0,1fr)); padding: 12px; gap: 10px; }
+      .neighborhood-filter-actions .btn { flex: 1 1 120px; } }
     .neighborhood-property-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
     .neighborhood-property-grid .listing-card { min-width: 0; }
     .neighborhood-property-empty { grid-column: 1/-1; border: 1px dashed #dbe5e7;
@@ -969,6 +1013,139 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         toast.classList.add("show");
         setTimeout(function () { toast.classList.remove("show"); }, 2600);
       }
+      function initNeighborhoodBrowse() {
+        var filterForm = document.getElementById("neighborhood-filters");
+        if (!filterForm || !config.neighborhood) return;
+        var sequence = 0;
+        var pageSize = 9;
+        var categoryNames = { sale: "for-sale", rent: "rental" };
+        function formValue(name) {
+          var control = filterForm.elements.namedItem(name);
+          return control ? String(control.value || "").trim() : "";
+        }
+        function buildNeighborhoodParams(kind, offset) {
+          var params = new URLSearchParams();
+          params.set("listingType", kind);
+          params.set("offset", String(offset));
+          params.set("limit", String(pageSize));
+          ["propertyType", "minBeds", "minBaths", "minPrice", "maxPrice", "sort"].forEach(function (name) {
+            var value = formValue(name);
+            if (value) params.set(name, value);
+          });
+          return params;
+        }
+        function groupFor(kind) {
+          return document.getElementById("homes-" + kind);
+        }
+        function setBusy(kind, busy) {
+          var group = groupFor(kind);
+          if (group) group.setAttribute("aria-busy", busy ? "true" : "false");
+          var button = document.getElementById("neighborhood-" + kind + "-more");
+          if (button) button.disabled = busy;
+        }
+        function displayGroup(kind, data, append) {
+          var group = groupFor(kind);
+          var gridEl = document.getElementById("neighborhood-" + kind + "-grid");
+          var countEl = document.getElementById("neighborhood-" + kind + "-count");
+          var button = document.getElementById("neighborhood-" + kind + "-more");
+          if (!group || !gridEl) return;
+          if (data.boundaryStatus !== "verified") {
+            gridEl.innerHTML = "";
+            var msg = document.createElement("div");
+            msg.className = "neighborhood-property-empty";
+            msg.textContent = "Verified neighborhood boundaries are temporarily unavailable. Contact the agent for current options.";
+            gridEl.appendChild(msg);
+            group.dataset.loaded = "0";
+            group.dataset.total = "0";
+            if (countEl) countEl.textContent = "Listings unavailable";
+            if (button) button.hidden = true;
+            return;
+          }
+          if (append) {
+            var oldEmpty = gridEl.querySelector(".neighborhood-property-empty");
+            if (oldEmpty) oldEmpty.remove();
+            if (data.html) gridEl.insertAdjacentHTML("beforeend", data.html);
+          } else {
+            gridEl.innerHTML = data.html || "";
+          }
+          var loaded = (append ? Number(group.dataset.loaded || 0) : 0) + (data.listings || []).length;
+          var total = Number(data.total || 0);
+          group.dataset.loaded = String(loaded);
+          group.dataset.total = String(total);
+          if (!loaded) {
+            var empty = document.createElement("div");
+            empty.className = "neighborhood-property-empty";
+            empty.textContent = "No verified " + categoryNames[kind] + " homes match these filters. Ask the agent for other options.";
+            gridEl.appendChild(empty);
+          }
+          if (countEl) {
+            countEl.textContent = data.candidateLimitReached
+              ? "Showing " + loaded + " of at least " + total + " scanned matches"
+              : total === 0 ? "0 listings" : loaded < total
+                ? "Showing " + loaded + " of " + total + " listings"
+                : total + (total === 1 ? " listing" : " listings") + " found";
+          }
+          if (button) button.hidden = !data.hasMore || data.candidateLimitReached && loaded >= total;
+          var notice = document.querySelector(".neighborhood-property-status");
+          if (notice && data.hasOlderMatchingInventory) {
+            notice.textContent = "Older MLS inventory is excluded until the feed is refreshed. Ask the agent for current options.";
+          }
+        }
+        function request(kind, append) {
+          var group = groupFor(kind);
+          var offset = append && group ? Number(group.dataset.loaded || 0) : 0;
+          var url = "/api/public/agents/" + encodeURIComponent(config.slug)
+            + "/neighborhoods/" + encodeURIComponent(config.neighborhood) + "/listings?"
+            + buildNeighborhoodParams(kind, offset).toString();
+          return fetch(url).then(function (response) {
+            return response.json().then(function (body) {
+              if (!response.ok) throw new Error(body.error || "Could not load neighborhood homes");
+              return { kind: kind, data: body, append: append };
+            });
+          });
+        }
+        function run(appendKind) {
+          var min = formValue("minPrice");
+          var max = formValue("maxPrice");
+          if (min && max && Number(min) > Number(max)) {
+            showToast("Minimum price must not exceed maximum price");
+            return;
+          }
+          var seq = ++sequence;
+          var categories = appendKind ? [appendKind] : ["sale", "rent"];
+          // A newer filter request invalidates the older one. Clear both old busy states first.
+          ["sale", "rent"].forEach(function (kind) { setBusy(kind, false); });
+          categories.forEach(function (kind) { setBusy(kind, true); });
+          Promise.all(categories.map(function (kind) { return request(kind, Boolean(appendKind)); }))
+            .then(function (results) {
+              if (seq !== sequence) return;
+              results.forEach(function (result) {
+                displayGroup(result.kind, result.data, result.append);
+              });
+            })
+            .catch(function (error) {
+              if (seq === sequence) showToast(error.message || "Neighborhood listings unavailable");
+            })
+            .finally(function () {
+              if (seq === sequence) categories.forEach(function (kind) { setBusy(kind, false); });
+            });
+        }
+        filterForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          run(null);
+        });
+        var reset = document.getElementById("neighborhood-filters-reset");
+        if (reset) reset.addEventListener("click", function () {
+          filterForm.reset();
+          run(null);
+        });
+        ["sale", "rent"].forEach(function (kind) {
+          var button = document.getElementById("neighborhood-" + kind + "-more");
+          if (button) button.addEventListener("click", function () { run(kind); });
+        });
+      }
+      initNeighborhoodBrowse();
+
       function track(event, listingId) {
         fetch("/api/public/agents/" + encodeURIComponent(config.slug) + "/analytics", {
           method: "POST",

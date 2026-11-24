@@ -85,6 +85,58 @@ export function registerPublicAgentPageRoutes(app: Express): void {
     }
   });
 
+  // Separate public endpoint: never use city/ZIP substring matching for neighborhoods.
+  app.get("/api/public/agents/:slug/neighborhoods/:neighborhood/listings", requirePublicListingSchemaReady,
+    async (req: Request, res: Response) => {
+      res.setHeader("Cache-Control", "no-store");
+      try {
+        const slug = req.params.slug?.trim() ?? "";
+        const neighborhoodSlug = req.params.neighborhood?.trim() ?? "";
+        if (!slug || !/^[a-z0-9-]{1,80}$/.test(neighborhoodSlug)) {
+          return res.status(404).json({ error: "Neighborhood not found" });
+        }
+        const parsed = publicAgentBrowseQuerySchema.safeParse(req.query ?? {});
+        if (!parsed.success || (parsed.data.listingType !== "sale" && parsed.data.listingType !== "rent")) {
+          return res.status(400).json({ error: "Invalid neighborhood browse filters" });
+        }
+        const agent = await resolveAgentPageBySlug(slug);
+        if (!agent) return res.status(404).json({ error: "Agent not found" });
+        const pages = await publishedNeighborhoods(agent.userId);
+        const neighborhood = pages.find((page) => page.slug === neighborhoodSlug);
+        if (!neighborhood) return res.status(404).json({ error: "Neighborhood not found" });
+
+        const filters = { ...browseQueryToFilters(parsed.data), location: null };
+        const result = await findNeighborhoodListings({
+          userId: agent.userId,
+          neighborhood,
+          appOrigin: getAppOrigin(),
+          filters,
+          offset: parsed.data.offset,
+          limit: parsed.data.limit,
+        });
+        const sale = parsed.data.listingType === "sale";
+        const cards = sale ? result.sale : result.rent;
+        const total = sale ? result.totalSale : result.totalRent;
+        const hasMore = sale ? result.hasMoreSale : result.hasMoreRent;
+        res.json({
+          listings: cards,
+          html: result.boundaryStatus === "verified"
+            ? renderAgentPageListingCards(cards, parsed.data.offset) : "",
+          total, offset: parsed.data.offset, limit: parsed.data.limit, hasMore,
+          boundaryStatus: result.boundaryStatus,
+          boundarySource: result.boundarySource,
+          hasOlderMatchingInventory: result.hasOlderMatchingInventory,
+          candidateLimitReached: result.candidateLimitReached,
+        });
+      } catch (error) {
+        console.error("[public-agent-page] neighborhood browse failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        res.status(500).json({ error: "Neighborhood listings are temporarily unavailable" });
+      }
+    },
+  );
+
   app.get("/api/public/agents/:slug/listings", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     try {
       const slug = req.params.slug?.trim() ?? "";
