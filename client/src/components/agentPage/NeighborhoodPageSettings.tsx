@@ -233,6 +233,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                 clearNeighborhoodMapSession(window.sessionStorage,
                   neighborhoodMapSessionKey(userId, NEW_NEIGHBORHOOD));
               } catch { /* browser storage may be unavailable */ }
+              setMapEditorRevision((revision) => revision + 1);
             }
             updateDrafts((current) => ({ ...current, active: NEW_NEIGHBORHOOD }));
           }}>{drafts.entries[NEW_NEIGHBORHOOD] ? "Resume draft" : "+ Add"}</Button>
