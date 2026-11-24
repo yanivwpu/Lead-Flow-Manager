@@ -298,7 +298,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   // Match the editor's small inline formatting vocabulary while escaping every
   // character supplied by the agent. Never render arbitrary HTML from content.
   function guideInlineHtml(value: string): string {
-    return value.split(/(\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*)/g).map((part) => {
+    return value.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part) => {
       if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
         return `<strong>${escapeHtml(part.slice(2, -2))}</strong>`;
       if (part.startsWith("*") && part.endsWith("*") && part.length > 2)
