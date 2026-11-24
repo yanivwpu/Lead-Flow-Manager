@@ -32,10 +32,10 @@ export function ShopifyCustomerProspectImport(){
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   useEffect(()=>{setStep("source");},[]);
-  async function load(){
+  async function load(offset=0){
     setBusy(true);setError("");setResult(null);setMerchantConfirm(false);setReviewConfirm(false);
     try{
-      const {preview:p}=await request<{preview:ShopifyProspectCustomerPreview}>(`${BASE}/shopify/preview`);
+      const {preview:p}=await request<{preview:ShopifyProspectCustomerPreview}>(`${BASE}/shopify/preview?offset=${offset}`);
       setPreview(p);setSelected(new Set(p.rows.filter(r=>!r.alreadyInReview).map(r=>r.contactId)));
       setStep("review");
     }catch(e){setError(e instanceof Error?e.message:"Could not load customers");}
@@ -92,7 +92,7 @@ export function ShopifyCustomerProspectImport(){
           ["Already in Review",preview.alreadyInReview],["Available",preview.available],
         ] as const).map(([label,n])=><div key={label} className="rounded-lg border bg-white p-3 text-center"><p className="text-lg font-semibold">{n}</p><p className="text-xs text-gray-600">{label}</p></div>)}
       </div>
-      {preview.syncedTotal>preview.shown&&<p className="text-sm text-amber-700">The first 250 synced customer records are shown. Additional customers require a separate preview batch.</p>}
+      {preview.nextOffset!==null&&<p className="text-sm text-amber-700">Showing batch {Math.floor(preview.offset/250)+1}. Import or skip these customers, then choose Next 250 to preview another batch.</p>}
       <p className="text-xs text-gray-600">Consent statuses are informational. “Subscribed” to email or SMS is not WhatsApp consent and does not authorize Prospect AI campaigns.</p>
       <label className="flex items-center gap-2 text-sm">
         <Checkbox checked={selected.size>0&&selected.size===preview.rows.filter(r=>!r.alreadyInReview).length}
@@ -111,7 +111,11 @@ export function ShopifyCustomerProspectImport(){
       </div>
       <div className="flex justify-between gap-2">
         <Button variant="outline" type="button" onClick={()=>setStep("source")}>Back</Button>
-        <Button type="button" disabled={!selected.size} onClick={()=>setStep("confirm")}>Review import options</Button>
+        <div className="flex flex-wrap gap-2">
+          {preview.offset>0&&<Button variant="outline" type="button" onClick={()=>void load(preview.offset-250)}>Previous 250</Button>}
+          {preview.nextOffset!==null&&<Button variant="outline" type="button" onClick={()=>void load(preview.nextOffset!)}>Next 250</Button>}
+          <Button type="button" disabled={!selected.size} onClick={()=>setStep("confirm")}>Review import options</Button>
+        </div>
       </div>
     </>}
     {step==="confirm"&&preview&&<>
