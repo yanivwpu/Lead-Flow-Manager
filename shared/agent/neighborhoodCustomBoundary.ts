@@ -49,5 +49,6 @@ export function readCustomNeighborhoodBoundary(raw: unknown): PolygonBoundary | 
       if (intersect(a, b, ring[j], ring[j + 1])) return null;
     }
   }
-  return geometry;
+  // Persist only canonical geometry; strip all untrusted extra JSON properties.
+  return { type: "Polygon", coordinates: [ring.map(([lon, lat]) => [lon, lat] as Position)] };
 }
