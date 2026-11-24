@@ -18,9 +18,12 @@ test("real article editor visibly inserts an image at the chosen heading and per
     'const photo = { url: ' + JSON.stringify(photoUrl) + ', alt: "Victoria Park street view" };',
     'function Harness() {',
     ' const [value, setValue] = React.useState("Victoria Park has an inviting mix of homes near downtown.\\n\\n## Around the block");',
-    ' return <NeighborhoodGuideVisualEditor content={value} photos={[photo]} disabled={false} canUpload={true} uploading={false}',
+    ' const [visible, setVisible] = React.useState(true);',
+    ' window.__switchArticleTab = () => setVisible((previous) => !previous);',
+    ' return visible ? <NeighborhoodGuideVisualEditor content={value} photos={[photo]} disabled={false} canUpload={true} uploading={false}',
     ' onChange={(next) => { window.__guideContent = next; setValue(next); }}',
-    ' onPhotoAltChange={() => {}} onUploadPhoto={async () => null} />;',
+    ' onPhotoAltChange={() => {}} onUploadPhoto={async () => null} />',
+    ' : <p id="alternative-page">Another dashboard tab</p>;',
     '}',
     'createRoot(document.getElementById("root")).render(<Harness />);',
   ].join("\n");
@@ -76,4 +79,15 @@ test("real article editor visibly inserts an image at the chosen heading and per
   await editor.focus();
   await editor.locator("figure[data-photo-id]").waitFor();
   assert.equal(await editor.locator("h3").count(), 1, "focus also recovers an unexpectedly blank editor");
+
+  await page.evaluate(() => (window as any).__switchArticleTab());
+  assert.equal(await page.locator("#alternative-page").count(), 1, "editor unmounts on dashboard tab change");
+  await page.evaluate(() => (window as any).__switchArticleTab());
+  await editor.locator("h3").waitFor();
+  await editor.locator("figure[data-photo-id]").waitFor();
+  assert.equal(await editor.locator("h3").count(), 1, "article heading is restored after switching back");
+  assert.equal(await editor.locator("figure[data-photo-id]").evaluate((node) => (node as HTMLElement).style.width),
+    "60%", "the edited image width survives unmount/remount");
+  assert.ok((await page.evaluate(() => (window as any).__guideContent)).includes("[[photo:" + photoId + "|60]]"),
+    "the React draft content is not lost on tab switching");
 });
