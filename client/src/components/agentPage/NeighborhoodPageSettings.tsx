@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Copy, Eye, ImagePlus, Pencil, Trash2 } from "lucide-react";
 import {
-  neighborhoodTitle, neighborhoodContentComplete, NEIGHBORHOOD_GUIDE_MAX_PHOTOS, NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES,
+  neighborhoodTitle, neighborhoodContentComplete, neighborhoodPhotoMarker, NEIGHBORHOOD_GUIDE_MAX_PHOTOS, NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES,
   type NeighborhoodContent, type NeighborhoodPhoto, type NeighborhoodPageSettings,
 } from "@shared/agent/neighborhoodPages";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const client = useQueryClient();
   const storageKey = neighborhoodDraftKey(userId);
   const photoInput = useRef<HTMLInputElement>(null);
+  const guideTextInput = useRef<HTMLTextAreaElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [drafts, setDrafts] = useState<NeighborhoodDrafts>(() => {
     const storage = browserDraftStorage();
@@ -93,12 +94,39 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     if (!active) return;
     updateDrafts((current) => {
       const previous = current.entries[active];
-      const next = { ...(previous?.values ?? values), photos };
+      const previousValues = previous?.values ?? values;
+      const removed = (previousValues.photos ?? []).filter((oldPhoto) =>
+        !photos.some((nextPhoto) => nextPhoto.url === oldPhoto.url));
+      let content = previousValues.content;
+      for (const oldPhoto of removed) {
+        const marker = neighborhoodPhotoMarker(oldPhoto.url);
+        if (marker) content = content.split(marker).join("");
+      }
+      if (removed.length) content = content.replace(/\n{3,}/g, "\n\n");
+      const next = { ...previousValues, content, photos };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
       else entries[active] = { values: next, baseVersion: previous?.baseVersion ?? page?.updatedAt ?? null };
       return { active, entries };
     });
+  }
+
+
+  function insertPhotoInArticle(photo: NeighborhoodPhoto) {
+    const marker = neighborhoodPhotoMarker(photo.url);
+    if (!marker || !active || values.content.includes(marker)) return;
+    const cursor = guideTextInput.current;
+    const start = cursor?.selectionStart ?? values.content.length;
+    const end = cursor?.selectionEnd ?? start;
+    const before = values.content.slice(0, start).trimEnd();
+    const after = values.content.slice(end).trimStart();
+    const updated = `${before}\n\n${marker}\n\n${after}`.trim();
+    if (updated.length > 5000) {
+      toast({ title: "Article is too long", description: "Shorten the guide before inserting this photo.", variant: "destructive" });
+      return;
+    }
+    editField("content", updated);
+    toast({ title: "Photo inserted", description: "Preview the guide to see it between your paragraphs." });
   }
 
   async function uploadPhoto(file: File | undefined) {
@@ -258,11 +286,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               + Section heading
             </Button>
           </div>
-          <Textarea id="neighborhood-content" rows={10} maxLength={5000} disabled={save.isPending} readOnly={stale}
+          <Textarea ref={guideTextInput} id="neighborhood-content" rows={10} maxLength={5000} disabled={save.isPending} readOnly={stale}
             value={values.content} onChange={(event) => editField("content", event.target.value)} />
           <p className="text-xs text-muted-foreground">
             Write at least two distinct paragraphs with useful local information, totaling 240 characters or more.
-            Add optional headings on their own lines, such as ## Parks &amp; Recreation, to organize your guide.\n            Changing the neighborhood name can change its URL.
+            Add optional headings on their own lines, such as ## Parks &amp; Recreation, to organize your guide.\n            To place an uploaded photo between paragraphs, click in the article where you want it, then choose Insert in article below. Preview shows the photo in place.\n            Changing the neighborhood name can change its URL.
           </p>
 
           <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -317,6 +345,14 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                           </Button>
                         </div>
                       </div>
+                      {index > 0 && (
+                        <Button type="button" size="sm" variant="outline" className="w-full"
+                          disabled={save.isPending || stale || values.content.includes(neighborhoodPhotoMarker(photo.url) ?? "")}
+                          onClick={() => insertPhotoInArticle(photo)}>
+                          <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                          {values.content.includes(neighborhoodPhotoMarker(photo.url) ?? "") ? "Placed in article" : "Insert in article"}
+                        </Button>
+                      )}
                       <Label htmlFor={`guide-photo-alt-${index}`}>Image description</Label>
                       <Input id={`guide-photo-alt-${index}`} value={photo.alt} maxLength={140}
                         disabled={save.isPending || stale}
