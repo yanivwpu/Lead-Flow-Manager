@@ -52,3 +52,8 @@ jobs:
           npx tsx tests/seo-planner-snapshot-postgres.test.ts
           npx tsx tests/seo-snapshot-postgres.test.ts
           npx tsx tests/seo-execution-lease-concurrency.test.ts
+      - name: Verify localized Shopify public page and existing marketing routing
+        run: |
+          npx tsx tests/shopify-growth-engine-public.test.ts
+          npx tsx tests/marketing-nav.test.ts
+          npx tsx tests/marketing-chat-page-coverage.test.ts
