@@ -116,7 +116,7 @@ export async function importShopifyCustomers(input:{
   const name=str(input.batchName).trim();
   if(!name||name.length>120)throw new ShopifyProspectImportError("Enter a batch name up to 120 characters.");
   const chosen=[...new Set(input.selectedContactIds)];
-  if(!chosen.length||chosen.length>MAX_PREVIEW||chosen.some(id=>!/^[-0-9a-f]{36}$/i.test(id)))
+  if(!chosen.length||chosen.length>MAX_PREVIEW||chosen.some(id=>typeof id!=="string"||!/^[-0-9a-f]{36}$/i.test(id)))
     throw new ShopifyProspectImportError("Select 1–250 customers from the preview.");
   const shop=await ownedShop(input.workspaceUserId);
   return db.transaction(async tx=>{
@@ -124,6 +124,11 @@ export async function importShopifyCustomers(input:{
     const [owner]=await tx.select().from(users).where(eq(users.id,input.workspaceUserId)).for("update").limit(1);
     if(!owner||!isShopifyContactInstallationActive(owner)||normalizeShopifyShopDomain(owner.shopifyShop)!==shop)
       throw new ShopifyProspectImportError("Shopify installation changed. Preview again.",403);
+    const [installed]=await tx.select().from(integrations).where(and(
+      eq(integrations.userId,input.workspaceUserId),eq(integrations.type,"shopify"),eq(integrations.isActive,true)
+    )).for("share").limit(1);
+    if(!installed || (obj(installed.config).shop!=null && normalizeShopifyShopDomain(obj(installed.config).shop)!==shop))
+      throw new ShopifyProspectImportError("Shopify connection changed. Preview again.",403);
     const [preview]=await tx.select().from(prospectImportPreviewJobs).where(and(
       eq(prospectImportPreviewJobs.id,input.previewJobId),
       eq(prospectImportPreviewJobs.integrationId,SOURCE),
@@ -145,7 +150,7 @@ export async function importShopifyCustomers(input:{
       destinationUserId:input.workspaceUserId,initiatedByUserId:input.initiatedByUserId,
       provider:"shopify",batchName:name,importReason:"Merchant customer review only",
       sourceLocationId:shop,status:"running",
-      filters:{reviewOnly:true},importOptions:{batchName:name,internalTag:"Imported-Shopify",
+      filters:{reviewOnly:true},importOptions:{batchName:name,
         skipDuplicates:true,updateMissingFieldsOnly:false},
       selectedExternalIds:chosen,previewTotal:allowed.size,previewJobId:preview.id,
       progressTotal:chosen.length,
