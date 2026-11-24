@@ -78,12 +78,12 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const stale = Boolean(active && active !== NEW_NEIGHBORHOOD && (!page || (draft && draft.baseVersion !== page.updatedAt)));
   const values = draft?.values ?? page ?? EMPTY_NEIGHBORHOOD;
   const dirty = Boolean(draft);
-  function editField(field: "name" | "city" | "state" | "content", value: string) {
+  function editField(field: "name" | "city" | "state" | "country" | "content", value: string) {
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const { name, city, state, content, photos } = prior?.values ?? values;
-      const next = { name, city, state, content, photos: photos ?? [], [field]: value };
+      const { name, city, state, country, content, photos } = prior?.values ?? values;
+      const next = { name, city, state, country: country ?? "US", content, photos: photos ?? [], [field]: value };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
       else entries[active] = { values: next, baseVersion: prior?.baseVersion ?? page?.updatedAt ?? null };
@@ -192,7 +192,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   if (data === null) return null;
   const photosValid = (values.photos ?? []).length <= NEIGHBORHOOD_GUIDE_MAX_PHOTOS &&
     (values.photos ?? []).every((photo) => photo.alt.trim().length >= 3);
-  const canSave = Boolean(active && !stale && data && values.name.trim() && values.city.trim() && values.state.trim() && photosValid);
+  const canSave = Boolean(active && !stale && data && values.name.trim() && values.city.trim() && values.state.trim() && /^[A-Z]{2}$/.test((values.country ?? "US").toUpperCase()) && photosValid);
   const canPublish = Boolean(data?.canPublish && canSave && neighborhoodContentComplete(values.content));
 
   return (
@@ -251,7 +251,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
           {stale && <p role="alert" className="text-sm text-amber-900">
             This page changed or was deleted elsewhere. Copy any text you want to keep, then discard these edits to return to the latest saved version.
           </p>}
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             {([{ field: "name", label: "Neighborhood", max: 80 }, { field: "city", label: "City", max: 80 },
               { field: "state", label: "State", max: 60 }] as const).map(({ field, label, max }) => (
               <div key={field}>
@@ -260,6 +260,13 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                   onChange={(event) => editField(field, event.target.value)} />
               </div>
             ))}
+          </div>
+          <div className="max-w-xs">
+            <Label htmlFor="neighborhood-country">Country (2-letter code)</Label>
+            <Input id="neighborhood-country" value={values.country ?? "US"} maxLength={2}
+              disabled={save.isPending} readOnly={stale} placeholder="US"
+              onChange={(event) => editField("country", event.target.value.toUpperCase())} />
+            <p className="mt-1 text-xs text-slate-500">Examples: US, CA, GB, IL. Existing U.S. guides stay unchanged.</p>
           </div>
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
             disabled={stale || save.isPending || photoUploading} uploading={photoUploading}
