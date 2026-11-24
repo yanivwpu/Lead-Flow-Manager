@@ -40,3 +40,14 @@ test("Shopify chatbot uses exact page-aware content without enabling merchant se
   assert.match(landing, /getHreflangLinks/);
   assert.ok(!landing.includes("CHECKOUT_ROLLOUT_APPROVED = true"));
 });
+
+
+test("public Shopify setup CTA never deep-links unauthenticated visitors into private /app routes", () => {
+  const landing = read("client/src/pages/ShopifyGrowthEngineLanding.tsx");
+  assert.match(landing, /href="#how-it-works"/);
+  assert.match(landing, /id="how-it-works"/);
+  assert.doesNotMatch(landing, /href="\/app\/ecommerce-growth-engine/);
+  assert.match(landing, /secondary: "See how it works"/);
+  assert.match(landing, /secondary: "Ver cómo funciona"/);
+  assert.match(landing, /secondary: "איך זה עובד\?"/);
+});
