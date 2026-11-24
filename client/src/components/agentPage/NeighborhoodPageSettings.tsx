@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NeighborhoodGuideVisualEditor } from "./NeighborhoodGuideVisualEditor";
-import { parseNeighborhoodGuideBlocks, serializeNeighborhoodGuideBlocks, neighborhoodGuidePhotoId } from "@shared/agent/neighborhoodGuideBlocks";
+
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { parseAgentPageApiError } from "@/lib/agentPageApi";
@@ -111,15 +111,15 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     });
   }
 
-  async function uploadPhoto(file: File | undefined, afterIndex?: number): Promise<boolean> {
-    if (!file || !page || !active || stale || photoUploading) return false;
+  async function uploadPhoto(file: File | undefined): Promise<NeighborhoodPhoto | null> {
+    if (!file || !page || !active || stale || photoUploading) return null;
     if (file.size > NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES) {
-      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return false;
+      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return null;
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return false;
+      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return null;
     }
-    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return false;
+    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return null;
     const editingId = active;
     setPhotoUploading(true);
     try {
@@ -132,33 +132,17 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       if (!response.ok || typeof result.url !== "string") {
         throw new Error(result.error || "Photo upload failed.");
       }
-      if (draftRef.current.active !== editingId) return false;
-      const uploadedId = neighborhoodGuidePhotoId(result.url);
-      updateDrafts((draftState) => {
-        const previous = draftState.entries[editingId];
-        const current = previous?.values ?? values;
-        const nextPhoto = {
-          url: result.url, alt: `Photo of ${current.name || "the neighborhood"} in ${current.city || "the local area"}`,
-        };
-        let content = current.content;
-        if (typeof afterIndex === "number" && uploadedId) {
-          const blocks = parseNeighborhoodGuideBlocks(content);
-          blocks.splice(Math.max(0, Math.min(blocks.length, afterIndex + 1)), 0, { type: "photo", id: uploadedId });
-          const updatedContent = serializeNeighborhoodGuideBlocks(blocks);
-          if (updatedContent.length <= 5000) content = updatedContent;
-          else toast({ title: "Image uploaded to library", description: "Article is too long to place it automatically; shorten a paragraph to insert it." });
-        }
-        const next = { ...current, photos: [...(current.photos ?? []), nextPhoto], content };
-        const entries = { ...draftState.entries };
-        if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[editingId];
-        else entries[editingId] = { values: next, baseVersion: previous?.baseVersion ?? page?.updatedAt ?? null };
-        return { active: editingId, entries };
-      });
-      toast({ title: typeof afterIndex === "number" ? "Image added to your guide" : "Photo uploaded", description: "Save or update the page to publish your changes." });
-      return true;
+      if (draftRef.current.active !== editingId) return null;
+      const current = draftRef.current.entries[editingId]?.values ?? values;
+      const photo: NeighborhoodPhoto = {
+        url: result.url, alt: `Photo of ${current.name || "the neighborhood"} in ${current.city || "the local area"}`,
+      };
+      editPhotos([...(current.photos ?? []), photo]);
+      toast({ title: "Photo uploaded", description: "Use Save or Update to publish the image." });
+      return photo;
     } catch (error) {
       toast({ title: "Photo upload failed", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
-      return false;
+      return null;
     } finally {
       setPhotoUploading(false);
       if (photoInput.current) photoInput.current.value = "";
@@ -287,74 +271,71 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             onChange={(content) => editField("content", content)}
             onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
               photo.url === url ? { ...photo, alt } : photo))}
-            onUploadPhoto={(file, afterIndex) => uploadPhoto(file, afterIndex)} />
-          <p className="text-xs text-slate-600">Write at least two distinct paragraphs with useful local information (240+ characters) before publishing.
+            onUploadPhoto={(file) => uploadPhoto(file)} />
+          <p className="text-xs text-slate-600">Write 240+ characters of useful local information across two distinct paragraphs, or one detailed paragraph with a section heading.
             Changing the neighborhood name may change its URL.</p>
 
-          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h5 className="text-sm font-semibold text-slate-900">Local guide photos</h5>
-                <p className="text-xs text-muted-foreground">The first photo is your cover. Use the Image button inside your guide to insert photos in the article. Up to six images in your library.</p>
-              </div>
+
+          <details className="rounded-lg border border-slate-200 bg-white p-3">
+            <summary className="cursor-pointer text-sm font-medium text-slate-700">
+              Cover photo &amp; media library ({(values.photos ?? []).length} of {NEIGHBORHOOD_GUIDE_MAX_PHOTOS})
+              <span className="ml-2 text-xs font-normal text-slate-500">Manage photos and descriptions</span>
+            </summary>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button type="button" size="sm" variant="outline" disabled={!page || stale || photoUploading || save.isPending ||
-                (values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS}
-                onClick={() => photoInput.current?.click()}>
-                <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                {photoUploading ? "Uploading…" : "Add photos"}
+                (values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS} onClick={() => photoInput.current?.click()}>
+                <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />{photoUploading ? "Uploading…" : "Upload to library"}
               </Button>
               <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
                 aria-label="Upload neighborhood photo" disabled={photoUploading}
                 onChange={(event) => void uploadPhoto(event.target.files?.[0])} />
+              {!page && <span className="text-xs text-slate-600">Save as a draft first to upload.</span>}
+              <span className="text-xs text-slate-500">JPG, PNG, WebP · up to 5 MB each</span>
             </div>
-            {!page && <p className="text-xs text-slate-600">Save your neighborhood draft first to enable photo uploads.</p>}
-            <p className="text-xs text-slate-600">JPG, PNG, or WebP · max 5 MB each. Only upload photos you own or have permission to use.
-              Photos are publicly visible only after you save or update a published page.</p>
-            {Boolean(values.photos?.length) && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(values.photos ?? []).map((photo, index) => (
-                  <div key={photo.url} className="min-w-0 overflow-hidden rounded-lg border border-slate-200">
-                    <img src={photo.url} alt={photo.alt} loading="lazy" className="h-36 w-full bg-slate-100 object-cover" />
-                    <div className="space-y-2 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-slate-700">{index === 0 ? "Cover image" : `Gallery photo ${index + 1}`}</span>
-                        <div className="flex items-center gap-1">
-                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
-                            aria-label={`Move photo ${index + 1} left`} title="Move earlier"
-                            disabled={index === 0 || save.isPending || stale}
-                            onClick={() => {
-                              const photos = [...(values.photos ?? [])];
-                              [photos[index - 1], photos[index]] = [photos[index], photos[index - 1]];
-                              editPhotos(photos);
-                            }}><ArrowLeft className="h-4 w-4" /></Button>
-                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
-                            aria-label={`Move photo ${index + 1} right`} title="Move later"
-                            disabled={index === (values.photos?.length ?? 0) - 1 || save.isPending || stale}
-                            onClick={() => {
-                              const photos = [...(values.photos ?? [])];
-                              [photos[index + 1], photos[index]] = [photos[index], photos[index + 1]];
-                              editPhotos(photos);
-                            }}><ArrowRight className="h-4 w-4" /></Button>
-                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-red-600"
-                            aria-label={`Remove photo ${index + 1}`} title="Remove photo"
-                            disabled={save.isPending || stale}
-                            onClick={() => editPhotos((values.photos ?? []).filter((_, i) => i !== index))}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <Label htmlFor={`guide-photo-alt-${index}`}>Image description</Label>
-                      <Input id={`guide-photo-alt-${index}`} value={photo.alt} maxLength={140}
-                        disabled={save.isPending || stale}
-                        onChange={(event) => editPhotos((values.photos ?? []).map((current, i) =>
-                          i === index ? { ...current, alt: event.target.value } : current))} />
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {(values.photos ?? []).map((photo, index) => (
+                <div key={photo.url} className="min-w-0 rounded-lg border border-slate-200 p-2">
+                  <img src={photo.url} alt={photo.alt} loading="lazy" className="h-32 w-full rounded object-cover" />
+                  <div className="mt-2 flex items-center justify-between gap-1">
+                    <span className="text-xs font-medium text-slate-600">{index === 0 ? "Cover photo" : "Library photo"}</span>
+                    <div className="flex gap-1">
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
+                        disabled={index === 0 || stale || save.isPending} aria-label="Move photo earlier"
+                        onClick={() => {
+                          const next = [...(values.photos ?? [])];
+                          [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                          editPhotos(next);
+                        }}><ArrowLeft className="h-4 w-4" /></Button>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
+                        disabled={index === (values.photos?.length ?? 0) - 1 || stale || save.isPending}
+                        aria-label="Move photo later" onClick={() => {
+                          const next = [...(values.photos ?? [])];
+                          [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                          editPhotos(next);
+                        }}><ArrowRight className="h-4 w-4" /></Button>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-red-600"
+                        disabled={stale || save.isPending} aria-label="Remove photo from library"
+                        onClick={() => editPhotos((values.photos ?? []).filter((_, i) => i !== index))}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <Label htmlFor={`guide-photo-alt-${index}`} className="text-xs">Image description</Label>
+                  <Input id={`guide-photo-alt-${index}`} value={photo.alt} maxLength={140}
+                    disabled={stale || save.isPending}
+                    onChange={(event) => editPhotos((values.photos ?? []).map((item, i) => i === index ? { ...item, alt: event.target.value } : item))} />
+                </div>
+              ))}
+            </div>
+          </details>
           {data && !data.canPublish && <p className="text-xs text-muted-foreground">Enable your public Agent Page before publishing.</p>}
+          {dirty && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
+            <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Add more guide text before updating: use two informative paragraphs (240+ characters total),
+              or one detailed paragraph (240+ characters) followed by a section heading.
+              Your browser keeps these edits until you publish or discard them.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {!page?.published && <Button type="button" size="sm" variant="outline" disabled={!dirty || !canSave || save.isPending || photoUploading}
               onClick={() => save.mutate({ page, values, published: false })}>Save draft</Button>}
