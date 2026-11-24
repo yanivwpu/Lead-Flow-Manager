@@ -347,7 +347,7 @@ export function NeighborhoodBoundaryEditor({
             </Button>
             <div className="border-t border-slate-200" />
             <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
-              aria-label={t(expanded ? "rgeMap.collapse" : "rgeMap.expand")}
+              aria-label={expanded ? t("rgeMap.collapse") : t("rgeMap.expand")}
               onClick={() => setExpanded((value) => !value)}>
               {expanded ? <Minimize2 className="h-5 w-5" aria-hidden="true" />
                 : <Maximize2 className="h-5 w-5" aria-hidden="true" />}
