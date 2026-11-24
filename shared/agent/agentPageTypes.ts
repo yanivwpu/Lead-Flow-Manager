@@ -30,6 +30,13 @@ export type NeighborhoodListingRenderData = {
   sale: AgentPageListingCard[];
   rent: AgentPageListingCard[];
   hasOlderMatchingInventory: boolean;
+  /** Optional to preserve existing preview fixture and older serialized render data. */
+  totalSale?: number;
+  totalRent?: number;
+  hasMoreSale?: boolean;
+  hasMoreRent?: boolean;
+  /** A bounded DB candidate scan may not include every matching property. */
+  candidateLimitReached?: boolean;
 };
 
 export type PublicAgentPageSocialLinks = {
