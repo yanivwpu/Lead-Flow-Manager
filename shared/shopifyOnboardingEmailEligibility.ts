@@ -18,6 +18,8 @@ export { isShopifyLinkedAccount };
 
 export const SHOPIFY_ONBOARDING_DAY5_THRESHOLD = 5;
 export const SHOPIFY_ONBOARDING_DAY10_THRESHOLD = 10;
+// Do not start sending newly tailored reminders to dormant historical installations.
+export const SHOPIFY_ONBOARDING_ACTIVE_FOLLOWUP_MAX_DAYS = 14;
 
 export type ShopifyOnboardingUser = {
   email?: string | null;
@@ -72,8 +74,8 @@ export function shopifyOnboardingStartAt(user: {
 
 export type ShopifyOnboardingSequenceAction =
   | { action: "welcome" }
-  | { action: "day5" }
-  | { action: "day10"; alsoCompleteDay5: boolean }
+  | { action: "day5"; setupStep?: "activate_engine" | "sync_products" }
+  | { action: "day10"; alsoCompleteDay5: boolean; setupStep?: "activate_engine" | "sync_products" }
   | { action: "mark_complete" }
   | { action: "none" };
 
@@ -88,19 +90,30 @@ export function chooseShopifyOnboardingSequenceAction(opts: {
   daysSinceInstall: number;
   hasQualifyingChannel: boolean;
   hasUsableOwnerEmail: boolean;
+  /** Only pass these when a scoped, successful read confirms the current installation. */
+  engineActivated?: boolean;
+  catalogSynced?: boolean;
 }): ShopifyOnboardingSequenceAction {
-  if (!opts.welcomeSent && opts.hasUsableOwnerEmail) {
-    return { action: "welcome" };
-  }
-  if (opts.hasQualifyingChannel) {
+  if (!opts.welcomeSent && opts.hasUsableOwnerEmail) return { action: "welcome" };
+  const incomplete = opts.hasQualifyingChannel &&
+    (opts.engineActivated === false || opts.catalogSynced === false);
+  // An unknown read is not evidence that a merchant needs another email.
+  if (opts.hasQualifyingChannel && !incomplete) {
     return opts.day5Sent && opts.day10Sent ? { action: "none" } : { action: "mark_complete" };
   }
+  if (opts.hasQualifyingChannel && incomplete &&
+      opts.daysSinceInstall > SHOPIFY_ONBOARDING_ACTIVE_FOLLOWUP_MAX_DAYS) {
+    return { action: "mark_complete" };
+  }
   if (!opts.hasUsableOwnerEmail) return { action: "none" };
+  const setupStep = incomplete
+    ? (opts.engineActivated === false ? "activate_engine" : "sync_products")
+    : undefined;
   if (opts.daysSinceInstall >= SHOPIFY_ONBOARDING_DAY10_THRESHOLD && !opts.day10Sent) {
-    return { action: "day10", alsoCompleteDay5: !opts.day5Sent };
+    return { action: "day10", alsoCompleteDay5: !opts.day5Sent, ...(setupStep ? { setupStep } : {}) };
   }
   if (opts.daysSinceInstall >= SHOPIFY_ONBOARDING_DAY5_THRESHOLD && !opts.day5Sent) {
-    return { action: "day5" };
+    return { action: "day5", ...(setupStep ? { setupStep } : {}) };
   }
   return { action: "none" };
 }
