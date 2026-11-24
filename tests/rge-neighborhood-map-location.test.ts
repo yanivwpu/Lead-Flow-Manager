@@ -44,6 +44,9 @@ test("Find neighborhood falls back to Google Places geography when Geocoding is 
   assert.equal(calls.length, 2, "one geocode and one minimal Places query");
   assert.ok(calls[1].mask?.includes("places.location"));
   assert.ok(!calls[1].mask?.includes("nationalPhoneNumber"));
+  const route = readFileSync("server/routes/agentNeighborhoodPages.ts", "utf8");
+  assert.ok(route.includes("precision: cached.precision"),
+    "the cached response must preserve neighborhood vs approximate city status");
 });
 
 test("Find neighborhood discloses an approximate city center rather than inventing a neighborhood", async () => {
