@@ -138,7 +138,17 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   const page = await browser.newPage({ viewport: { width: 960, height: 800 } });
   t.after(() => page.close());
   await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
-  await page.setContent('<!doctype html><html><body><div id="root"></div></body></html>');
+  // The production dashboard supplies Tailwind. This isolated esbuild harness
+  // intentionally loads no CSS, so supply the small positioning rules needed
+  // to exercise real map overlays and the expanded view in Chromium.
+  const mapCss = [
+    "div[aria-label='rgeMap.map'] { position: relative; width: 100%; overflow: hidden; box-sizing: border-box; }",
+    "svg.cursor-crosshair { position: absolute; inset: 0; z-index: 1; }",
+    "div[role='group'][aria-label='rgeMap.mapControls'] { position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; gap: 4px; }",
+    "div[aria-label='rgeMap.map'][class*='fixed'] { position: fixed; inset: 16px; width: auto; z-index: 80; }",
+  ].join("\n");
+  await page.setContent('<!doctype html><html><head><style>' + mapCss +
+    '</style></head><body><div id="root"></div></body></html>');
   await page.addScriptTag({ content: js.text });
   await page.locator("summary").click();
   const map = page.locator("svg.cursor-crosshair");
@@ -159,4 +169,50 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   await page.evaluate((previousBoundary) => (window as any).__replaceBoundary(previousBoundary), square);
   await page.waitForFunction(() => document.querySelectorAll("svg.cursor-crosshair circle").length === 4);
   assert.equal(await circles.count(), 4, "discarding again restores the exact saved area");
+
+  // Navigation must feel like a modern map, without creating fake polygon corners.
+  const bounds = await map.boundingBox();
+  assert.ok(bounds, "map drawing surface is visible");
+  const midX = bounds!.x + bounds!.width / 2;
+  const midY = bounds!.y + bounds!.height / 2;
+  const initialLatitude = await page.locator('input').first().inputValue();
+  await page.mouse.move(midX, midY);
+  await page.mouse.down();
+  await page.mouse.move(midX + 120, midY + 75, { steps: 8 });
+  await page.mouse.up();
+  assert.equal(await circles.count(), 4, "dragging pans the map, never adding a boundary corner");
+  assert.notEqual(await page.locator('input').first().inputValue(), initialLatitude,
+    "dragging changes the map center");
+  await map.click({ position: { x: 220, y: 140 } });
+  assert.equal(await circles.count(), 5, "a stationary click still adds a corner");
+  await page.getByRole("button", { name: "rgeMap.undo" }).click();
+  assert.equal(await circles.count(), 4, "Undo corner still works after drag");
+
+  const tile = page.locator('img[src*="tile.openstreetmap.org"]').first();
+  const tileBefore = await tile.getAttribute("src");
+  const beforeZoom = tileBefore ? Number(new URL(tileBefore).pathname.split("/")[1]) : NaN;
+  assert.ok(beforeZoom >= 10);
+  await page.mouse.move(midX, midY);
+  await page.mouse.wheel(0, -500);
+  await page.waitForFunction((prior) => {
+    const image = document.querySelector('img[src*="tile.openstreetmap.org"]');
+    const src = image?.getAttribute("src");
+    const zoom = src ? Number(new URL(src).pathname.split("/")[1]) : NaN;
+    return zoom > prior;
+  }, beforeZoom);
+  assert.equal(await circles.count(), 4, "wheel zoom does not change the boundary");
+
+  await page.locator('button[aria-label="rgeMap.expand"]').click();
+  const expanded = await page.locator('div[aria-label="rgeMap.map"]').boundingBox();
+  assert.ok(expanded && expanded.width > 850 && expanded.height > 650,
+    "expanded view uses most of the viewport");
+  await page.waitForFunction(() => {
+    const mapRoot = document.querySelector('div[aria-label="rgeMap.map"]');
+    const tile = mapRoot?.querySelector('img[src*="tile.openstreetmap.org"]');
+    return Boolean(tile && (mapRoot as HTMLElement).getBoundingClientRect().height > 650);
+  });
+  await page.keyboard.press("Escape");
+  const collapsed = await page.locator('div[aria-label="rgeMap.map"]').boundingBox();
+  assert.ok(collapsed && collapsed.height < 400, "Escape closes expanded view");
+  assert.equal(await circles.count(), 4, "expanding and collapsing preserves existing boundary");
 });
