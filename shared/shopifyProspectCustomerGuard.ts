@@ -33,6 +33,7 @@ export type ShopifyProspectCustomerPreviewRow = {
 export type ShopifyProspectCustomerPreview = {
   previewJobId:string;fingerprint:string;shop:string;
   syncedTotal:number;shown:number;alreadyInReview:number;available:number;
+  offset:number;nextOffset:number|null;
   rows:ShopifyProspectCustomerPreviewRow[];expiresInMinutes:number;
 };
 export type ShopifyProspectReviewImportResult = {
