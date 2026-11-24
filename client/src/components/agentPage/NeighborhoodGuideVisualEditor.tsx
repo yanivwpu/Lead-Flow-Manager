@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bold, Heading2, ImagePlus, Italic, Pilcrow, Trash2, Upload, X } from "lucide-react";
-import { neighborhoodGuidePhotoId, parseNeighborhoodGuideBlocks } from "@shared/agent/neighborhoodGuideBlocks";
+import { neighborhoodGuidePhotoId, normalizeNeighborhoodPhotoWidth, parseNeighborhoodGuideBlocks } from "@shared/agent/neighborhoodGuideBlocks";
 import type { NeighborhoodPhoto } from "@shared/agent/neighborhoodPages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,8 +56,12 @@ function articleToText(editor: HTMLElement): string {
   for (const child of Array.from(editor.children)) {
     if (!(child instanceof HTMLElement)) continue;
     const id = child.dataset.photoId;
+    if (child.dataset.inlinePhotoPicker === "true") continue;
     if (child.tagName === "FIGURE") {
-      if (id && PHOTO_ID.test(id)) sections.push("[[photo:" + id.toLowerCase() + "]]");
+      if (id && PHOTO_ID.test(id)) {
+        const width = normalizeNeighborhoodPhotoWidth(Number(child.dataset.photoWidth || "100"));
+        sections.push("[[photo:" + id.toLowerCase() + (width === 100 ? "" : "|" + width) + "]]");
+      }
       continue;
     }
     const text = Array.from(child.childNodes).map(inlineMarkdown).join("").trim();
@@ -66,13 +71,16 @@ function articleToText(editor: HTMLElement): string {
   return sections.join("\n\n");
 }
 
-function createPhotoNode(photo: NeighborhoodPhoto): HTMLElement | null {
+function createPhotoNode(photo: NeighborhoodPhoto, width = 100): HTMLElement | null {
   const id = neighborhoodGuidePhotoId(photo.url);
   if (!id) return null;
   const figure = document.createElement("figure");
   figure.contentEditable = "false";
   figure.dataset.photoId = id;
-  figure.className = "group relative my-6 cursor-pointer";
+  figure.dataset.photoWidth = String(normalizeNeighborhoodPhotoWidth(width));
+  figure.style.width = figure.dataset.photoWidth + "%";
+  figure.style.maxWidth = "100%";
+  figure.className = "group relative my-6 mx-auto cursor-pointer";
   const img = document.createElement("img");
   img.src = photo.url;
   img.alt = photo.alt;
@@ -92,7 +100,7 @@ function restoreEditor(editor: HTMLElement, text: string, photos: NeighborhoodPh
     if (block.type === "photo") {
       const photo = photos.find((item) => neighborhoodGuidePhotoId(item.url) === block.id);
       if (photo) {
-        const node = createPhotoNode(photo);
+        const node = createPhotoNode(photo, block.width);
         if (node) editor.append(node);
       }
       continue;
@@ -109,10 +117,12 @@ export function NeighborhoodGuideVisualEditor({
 }: EditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pickerAnchorRef = useRef<HTMLDivElement | null>(null);
   const rangeRef = useRef<Range | null>(null);
   const lastAuthored = useRef<string | null>(null);
   const photosRef = useRef(photos);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerHost, setPickerHost] = useState<HTMLDivElement | null>(null);
+  const [selectedWidth, setSelectedWidth] = useState(100);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   photosRef.current = photos;
@@ -122,6 +132,8 @@ export function NeighborhoodGuideVisualEditor({
     if (!editor || content === lastAuthored.current) return;
     restoreEditor(editor, content, photosRef.current);
     lastAuthored.current = content;
+    pickerAnchorRef.current = null;
+    setPickerHost(null);
     setSelectedId(null);
   }, [content]);
 
@@ -180,24 +192,69 @@ export function NeighborhoodGuideVisualEditor({
     rememberCursor();
   }
 
-  function insertPhoto(photo: NeighborhoodPhoto) {
+
+  function closePicker() {
+    pickerAnchorRef.current?.remove();
+    pickerAnchorRef.current = null;
+    setPickerHost(null);
+  }
+
+  function openPickerAtCursor() {
     const editor = editorRef.current;
-    const figure = createPhotoNode(photo);
-    if (!editor || !figure || disabled) return;
-    const id = neighborhoodGuidePhotoId(photo.url);
-    if (!id || editor.querySelector('figure[data-photo-id="' + id + '"]')) {
-      setPickerOpen(false);
+    if (!editor || disabled) return;
+    rememberCursor();
+    if (pickerAnchorRef.current) {
+      closePicker();
       return;
     }
     const range = rangeRef.current;
     let node: Node | null = range && editor.contains(range.startContainer) ? range.startContainer : null;
     if (node?.nodeType === Node.TEXT_NODE) node = node.parentNode;
     while (node?.parentNode && node.parentNode !== editor) node = node.parentNode;
-    if (node && node.parentNode === editor) editor.insertBefore(figure, node.nextSibling);
-    else editor.append(figure);
-    if (!figure.nextElementSibling) editor.append(document.createElement("p"));
+    const anchor = document.createElement("div");
+    anchor.contentEditable = "false";
+    anchor.dataset.inlinePhotoPicker = "true";
+    anchor.className = "my-4 rounded-lg border-2 border-dashed border-emerald-400 bg-emerald-50/60";
+    if (node && node.parentNode === editor) editor.insertBefore(anchor, node.nextSibling);
+    else editor.append(anchor);
+    pickerAnchorRef.current = anchor;
+    setPickerHost(anchor);
+    anchor.scrollIntoView({ block: "nearest" });
+  }
+
+  function insertPhoto(photo: NeighborhoodPhoto) {
+    const editor = editorRef.current;
+    const anchor = pickerAnchorRef.current;
+    const figure = createPhotoNode(photo, 100);
+    if (!editor || !figure || disabled || !anchor || !editor.contains(anchor)) return;
+    const id = neighborhoodGuidePhotoId(photo.url);
+    if (!id) return;
+    if (editor.querySelector('figure[data-photo-id="' + id + '"]')) {
+      toast({ title: "Photo already in this article", description: "Click the existing photo to adjust its size." });
+      closePicker();
+      return;
+    }
+    anchor.replaceWith(figure);
+    pickerAnchorRef.current = null;
+    setPickerHost(null);
     setSelectedId(id);
-    setPickerOpen(false);
+    setSelectedWidth(100);
+    if (!figure.nextElementSibling) editor.append(document.createElement("p"));
+    syncEditor();
+    figure.scrollIntoView({ block: "nearest" });
+    toast({ title: "Image inserted", description: "You can see the image here. Adjust its width below, then update the page." });
+  }
+
+  function resizePhoto(width: number) {
+    const editor = editorRef.current;
+    if (!editor || !selectedId || disabled) return;
+    const figure = Array.from(editor.querySelectorAll<HTMLElement>("figure[data-photo-id]"))
+      .find((node) => node.dataset.photoId === selectedId);
+    if (!figure) return;
+    const normalized = normalizeNeighborhoodPhotoWidth(width);
+    figure.dataset.photoWidth = String(normalized);
+    figure.style.width = normalized + "%";
+    setSelectedWidth(normalized);
     syncEditor();
   }
 
@@ -206,6 +263,7 @@ export function NeighborhoodGuideVisualEditor({
     if (!editor || !selectedId || disabled) return;
     editor.querySelector('figure[data-photo-id="' + selectedId + '"]')?.remove();
     setSelectedId(null);
+    setSelectedWidth(100);
     syncEditor();
   }
 
@@ -237,16 +295,16 @@ export function NeighborhoodGuideVisualEditor({
           {toolbarButton("Heading", <Heading2 className="h-4 w-4" />, () => format("formatBlock", "h3"))}
           {toolbarButton("Normal paragraph", <Pilcrow className="h-4 w-4" />, () => format("formatBlock", "p"))}
           <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
-          {toolbarButton("Insert image", <ImagePlus className="h-4 w-4" />, () => { rememberCursor(); setPickerOpen((open) => !open); })}
+          {toolbarButton("Insert image", <ImagePlus className="h-4 w-4" />, openPickerAtCursor)}
         </div>
         <span className="text-xs tabular-nums text-slate-500">{content.length.toLocaleString()} / 5,000</span>
       </div>
-      {pickerOpen && (
-        <div className="border-b border-slate-200 bg-white p-3" role="region" aria-label="Choose article image">
+      {pickerHost && createPortal(
+        <div className="rounded-lg bg-white p-3" role="region" aria-label="Choose article image">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-900">Insert an image</p>
+            <p className="text-sm font-medium text-slate-900">Choose a photo for this spot</p>
             <Button type="button" size="icon" variant="ghost" aria-label="Close photo picker" className="h-8 w-8"
-              onClick={() => setPickerOpen(false)}><X className="h-4 w-4" /></Button>
+              onClick={closePicker}><X className="h-4 w-4" /></Button>
           </div>
           {available.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -275,8 +333,7 @@ export function NeighborhoodGuideVisualEditor({
               if (uploaded) insertPhoto(uploaded);
               if (fileRef.current) fileRef.current.value = "";
             }} />
-        </div>
-      )}
+        </div>, pickerHost)}
       <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning
         role="textbox" aria-label="Your local guide article" aria-multiline="true"
         data-placeholder="Start writing your neighborhood guide…"
@@ -294,21 +351,38 @@ export function NeighborhoodGuideVisualEditor({
         onClick={(event) => {
           const figure = (event.target as HTMLElement).closest("figure[data-photo-id]");
           setSelectedId(figure instanceof HTMLElement ? figure.dataset.photoId ?? null : null);
+          setSelectedWidth(figure instanceof HTMLElement ? normalizeNeighborhoodPhotoWidth(Number(figure.dataset.photoWidth || "100")) : 100);
         }} />
+
       {selectedPhoto && (
-        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="min-w-[200px] flex-1">
-            <Label htmlFor="inline-guide-image-caption" className="text-xs text-slate-600">Image caption</Label>
-            <Input id="inline-guide-image-caption" maxLength={140} disabled={disabled} value={selectedPhoto.alt}
-              onChange={(event) => onPhotoAltChange(selectedPhoto.url, event.target.value)} className="mt-1 h-9" />
+        <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Label htmlFor="neighborhood-inline-image-width" className="text-sm font-medium text-slate-700">
+              Image width
+            </Label>
+            <input id="neighborhood-inline-image-width" type="range" min={40} max={100} step={5}
+              disabled={disabled} value={selectedWidth} onChange={(event) => resizePhoto(Number(event.target.value))}
+              className="h-2 min-w-[140px] flex-1 cursor-pointer accent-emerald-600"
+              aria-label="Resize selected article image" />
+            <span className="w-12 text-right text-sm tabular-nums text-slate-700">{selectedWidth}%</span>
+            <Button type="button" size="sm" variant="outline" disabled={disabled || selectedWidth === 100}
+              onClick={() => resizePhoto(100)}>Full width</Button>
           </div>
-          <Button type="button" variant="ghost" size="sm" className="text-red-600" disabled={disabled} onClick={removeImage}>
-            <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" /> Remove from article
-          </Button>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[200px] flex-1">
+              <Label htmlFor="inline-guide-image-caption" className="text-xs text-slate-600">Image caption</Label>
+              <Input id="inline-guide-image-caption" maxLength={140} disabled={disabled} value={selectedPhoto.alt}
+                onChange={(event) => onPhotoAltChange(selectedPhoto.url, event.target.value)} className="mt-1 h-9" />
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="text-red-600" disabled={disabled} onClick={removeImage}>
+              <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" /> Remove from article
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">Drag the width slider to enlarge or shrink the selected picture. The published guide will use the same width.</p>
         </div>
       )}
       <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-        Click anywhere to type. Press Enter for a new paragraph. Use the image icon in the toolbar to insert photos where you are writing.
+        Click inside a paragraph or below a heading, then select the image icon. The photo chooser opens at that spot in your article.
       </p>
     </section>
   );
