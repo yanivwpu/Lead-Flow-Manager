@@ -1,5 +1,6 @@
 /** Read-only queue-entry evaluation. Review and preview consume the same batch result. */
 import type { Contact, prospectIntelligence } from "@shared/schema";
+import { isShopifyCustomerContact, SHOPIFY_CUSTOMER_PROSPECT_OUTREACH_BLOCK } from "@shared/shopifyProspectCustomerGuard";
 import {
   buildQueueDedupKey,
   normalizeRecipientIdentity,
@@ -44,6 +45,7 @@ export function buildProspectOutreachEligibilityInput(params: {
   messageWillBeGenerated?: boolean;
 }): ProspectOutreachEligibilityInput {
   const { contact, intelligence: pi, priorOutreach, connections, suppression } = params;
+  const shopifyCustomer = isShopifyCustomerContact(contact);
   return {
     reviewStatus: pi?.reviewStatus,
     approvedAt: pi?.approvedAt,
@@ -72,9 +74,11 @@ export function buildProspectOutreachEligibilityInput(params: {
     instagramConnected: connections.instagramConnected,
     smsConsent: false,
     whatsappConsent: false,
-    suppressed: suppression.suppressed,
+    suppressed: suppression.suppressed || shopifyCustomer,
     optedOut: suppression.optedOut,
-    suppressionDetail: suppression.detail || suppression.reason || null,
+    suppressionDetail: shopifyCustomer
+      ? SHOPIFY_CUSTOMER_PROSPECT_OUTREACH_BLOCK
+      : suppression.detail || suppression.reason || null,
     automationsPaused: contact.automationsPaused === true,
     alreadyQueued: params.alreadyQueued,
     preferredChannel: params.preferredChannel || "auto",
