@@ -120,11 +120,12 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         const hasMore = sale ? result.hasMoreSale : result.hasMoreRent;
         res.json({
           listings: cards,
-          html: result.boundaryStatus === "verified"
+          html: (result.boundaryStatus === "verified" || result.boundaryStatus === "custom_area" || result.boundaryStatus === "community_area")
             ? renderAgentPageListingCards(cards, parsed.data.offset) : "",
           total, offset: parsed.data.offset, limit: parsed.data.limit, hasMore,
           boundaryStatus: result.boundaryStatus,
           boundarySource: result.boundarySource,
+          boundaryAttribution: result.boundaryAttribution,
           hasOlderMatchingInventory: result.hasOlderMatchingInventory,
           candidateLimitReached: result.candidateLimitReached,
         });

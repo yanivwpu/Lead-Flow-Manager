@@ -3,6 +3,7 @@ import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean,
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { uuid } from "drizzle-orm/pg-core";
+import type { NeighborhoodBoundary } from "./agent/neighborhoodListingGeo";
 
 // Subscription plan types
 export type SubscriptionPlan = 'free' | 'starter' | 'pro';
@@ -1736,6 +1737,11 @@ export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
   name: text("name").notNull(),
   city: text("city").notNull(),
   state: text("state").notNull(),
+  country: varchar("country", { length: 2 }).notNull().default("US"),
+  // Tenant-owned, explicitly agent-defined service area; never an official map.
+  customBoundary: jsonb("custom_boundary").$type<{
+    type: "Polygon"; coordinates: [number, number][][];
+  } | null>(),
   content: text("content").notNull(),
   photos: jsonb("photos").$type<Array<{ url: string; alt: string }>>().notNull().default(sql`'[]'::jsonb`),
   published: boolean("published").notNull().default(false),
@@ -1744,6 +1750,33 @@ export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
 }, (table) => [
   unique("agent_neighborhood_pages_owner_slug_unique").on(table.userId, table.slug),
   index("agent_neighborhood_pages_published_idx").on(table.id).where(sql`${table.published}`),
+]);
+
+/**
+ * Shared, ownerless and review-gated boundary records. Never permit agents to
+ * update these GIS polygons through their neighborhood page editor.
+ */
+export const neighborhoodCuratedBoundaries = pgTable("neighborhood_curated_boundaries", {
+  id: varchar("id").primaryKey(),
+  country: varchar("country", { length: 2 }).notNull(),
+  state: text("state").notNull(),
+  city: text("city").notNull(),
+  name: text("name").notNull(),
+  stateKey: text("state_key").notNull(),
+  cityKey: text("city_key").notNull(),
+  nameKey: text("name_key").notNull(),
+  sourceKind: text("source_kind").notNull().default("overture"),
+  sourceId: text("source_id").notNull(),
+  sourceVersion: text("source_version").notNull(),
+  subtype: text("subtype").notNull(),
+  license: text("license").notNull(),
+  attribution: text("attribution").notNull(),
+  geometry: jsonb("geometry").$type<NeighborhoodBoundary>().notNull(),
+  reviewed: boolean("reviewed").notNull().default(false),
+  retrievedAt: timestamp("retrieved_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  index("neighborhood_curated_identity_idx").on(table.country, table.stateKey, table.cityKey, table.nameKey),
+  unique("neighborhood_curated_source_unique").on(table.sourceKind, table.sourceId),
 ]);
 
 export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {

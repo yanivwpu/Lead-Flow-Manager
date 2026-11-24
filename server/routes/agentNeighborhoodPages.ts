@@ -2,6 +2,8 @@ import { Router, type Express, type NextFunction, type Request, type RequestHand
 import multer from "multer";
 import { z } from "zod";
 import { buildPublicAgentPageHtml } from "@shared/agent/publicAgentPageHtml";
+import { validateAgentDefinedArea } from "@shared/agent/neighborhoodCustomArea";
+import { normalizeBoundaryCountry } from "@shared/agent/neighborhoodBoundaryIdentity";
 import {
   buildNeighborhoodUrl, neighborhoodContentComplete,
   isOwnedNeighborhoodGuidePhotoUrl, NEIGHBORHOOD_GUIDE_MAX_PHOTOS,
@@ -26,6 +28,9 @@ const fields = z.object({
   name: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   city: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   state: z.string().trim().min(1).max(60).regex(/[\p{L}\p{N}]/u),
+  country: z.string().trim().toUpperCase().refine((value) => normalizeBoundaryCountry(value) === value).optional(),
+  customBoundary: z.unknown().nullable().optional().refine((value) => value === undefined || value === null || Boolean(validateAgentDefinedArea(value)),
+    { message: "Draw a valid local service area before saving." }),
   content: z.string().trim().max(5000),
   photos: z.array(z.object({
     url: z.string().url().max(600),
@@ -34,8 +39,8 @@ const fields = z.object({
 });
 
 function settings(page: NeighborhoodPage, agentSlug: string | null) {
-  const { id, name, city, state, content, photos, slug, published, updatedAt } = page;
-  return { id, name, city, state, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
+  const { id, name, city, state, country, customBoundary, content, photos, slug, published, updatedAt } = page;
+  return { id, name, city, state, country, customBoundary, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
     ? buildNeighborhoodUrl(agentSlug, slug, getAppOrigin()) : null };
 }
 
@@ -90,7 +95,11 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       return res.status(400).json({ error: "Choose photos uploaded to your own Neighborhood Page." });
     }
     if (parsed.data.photos?.length) return res.status(400).json({ error: "Save the new neighborhood before uploading photos." });
-    const page = await createNeighborhoodPage(userId, parsed.data);
+    const { customBoundary, ...content } = parsed.data;
+    const page = await createNeighborhoodPage(userId, {
+      ...content, country: content.country ?? "US",
+      customBoundary: customBoundary ? validateAgentDefinedArea(customBoundary) : null,
+    });
     res.status(201).json(settings(page, null));
   }));
 
@@ -108,8 +117,18 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       liveSlug = agent.agentPageSlug;
     }
     const id = String(req.params.id);
-    const { expectedUpdatedAt, ...content } = parsed.data;
-    const page = await updateNeighborhoodPage(userId, id, content, expectedUpdatedAt);
+    const { expectedUpdatedAt, customBoundary, ...content } = parsed.data;
+    const current = await getNeighborhoodPage(userId, id);
+    if (!current) return res.sendStatus(404);
+    const identityChanged = current.name !== content.name || current.city !== content.city ||
+      current.state !== content.state || current.country !== (content.country ?? current.country);
+    // A polygon drawn for an old identity cannot silently follow the page into another city.
+    if (identityChanged && customBoundary === undefined && current.customBoundary) {
+      return res.status(400).json({ error: "Neighborhood location changed. Clear or redraw the agent-defined service area before saving." });
+    }
+    const area = customBoundary === undefined ? undefined
+      : customBoundary === null ? null : validateAgentDefinedArea(customBoundary);
+    const page = await updateNeighborhoodPage(userId, id, { ...content, customBoundary: area }, expectedUpdatedAt);
     if (!page) {
       if (expectedUpdatedAt && await getNeighborhoodPage(userId, id)) {
         return res.status(409).json({ error: "This page changed since you opened it. Review the saved version before editing again." });

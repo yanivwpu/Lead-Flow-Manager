@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NeighborhoodGuideVisualEditor } from "./NeighborhoodGuideVisualEditor";
+import { NeighborhoodBoundaryMap } from "./NeighborhoodBoundaryMap";
+import { normalizeBoundaryCountry } from "@shared/agent/neighborhoodBoundaryIdentity";
+import type { PolygonBoundary } from "@shared/agent/neighborhoodListingGeo";
 import { removeNeighborhoodPhotoFromArticle } from "@shared/agent/neighborhoodGuideBlocks";
 
 import { useAuth } from "@/lib/auth-context";
@@ -78,12 +81,26 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const stale = Boolean(active && active !== NEW_NEIGHBORHOOD && (!page || (draft && draft.baseVersion !== page.updatedAt)));
   const values = draft?.values ?? page ?? EMPTY_NEIGHBORHOOD;
   const dirty = Boolean(draft);
-  function editField(field: "name" | "city" | "state" | "content", value: string) {
+  function editField(field: "name" | "city" | "state" | "country" | "content", value: string) {
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const { name, city, state, content, photos } = prior?.values ?? values;
-      const next = { name, city, state, content, photos: photos ?? [], [field]: value };
+      const previousValues = prior?.values ?? values;
+      const locationChanged = field !== "content" && previousValues[field] !== value;
+      const next = { ...previousValues, country: previousValues.country ?? "US", photos: previousValues.photos ?? [],
+        [field]: value, ...(locationChanged ? { customBoundary: null } : {}) };
+      const entries = { ...current.entries };
+      if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
+      else entries[active] = { values: next, baseVersion: prior?.baseVersion ?? page?.updatedAt ?? null };
+      return { active, entries };
+    });
+  }
+
+  function editBoundary(customBoundary: PolygonBoundary | null) {
+    if (!active) return;
+    updateDrafts((current) => {
+      const prior = current.entries[active];
+      const next = { ...(prior?.values ?? values), customBoundary };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
       else entries[active] = { values: next, baseVersion: prior?.baseVersion ?? page?.updatedAt ?? null };
@@ -192,7 +209,8 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   if (data === null) return null;
   const photosValid = (values.photos ?? []).length <= NEIGHBORHOOD_GUIDE_MAX_PHOTOS &&
     (values.photos ?? []).every((photo) => photo.alt.trim().length >= 3);
-  const canSave = Boolean(active && !stale && data && values.name.trim() && values.city.trim() && values.state.trim() && photosValid);
+  const canSave = Boolean(active && !stale && data && values.name.trim() && values.city.trim() && values.state.trim() &&
+    normalizeBoundaryCountry(values.country) === (values.country ?? "US") && photosValid);
   const canPublish = Boolean(data?.canPublish && canSave && neighborhoodContentComplete(values.content));
 
   return (
@@ -251,16 +269,31 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
           {stale && <p role="alert" className="text-sm text-amber-900">
             This page changed or was deleted elsewhere. Copy any text you want to keep, then discard these edits to return to the latest saved version.
           </p>}
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             {([{ field: "name", label: "Neighborhood", max: 80 }, { field: "city", label: "City", max: 80 },
-              { field: "state", label: "State", max: 60 }] as const).map(({ field, label, max }) => (
+              { field: "state", label: "State / region", max: 60 }, { field: "country", label: "Country (2-letter code)", max: 2 }] as const).map(({ field, label, max }) => (
               <div key={field}>
                 <Label htmlFor={`neighborhood-${field}`}>{label}</Label>
-                <Input id={`neighborhood-${field}`} value={values[field]} maxLength={max} disabled={save.isPending} readOnly={stale}
-                  onChange={(event) => editField(field, event.target.value)} />
+                <Input id={`neighborhood-${field}`} value={values[field] ?? "US"} maxLength={max} disabled={save.isPending} readOnly={stale}
+                  onChange={(event) => editField(field, field === "country" ? event.target.value.toUpperCase() : event.target.value)} />
               </div>
             ))}
           </div>
+          <div className="text-xs text-slate-600">
+            Country examples: US (United States), CA (Canada), GB (United Kingdom), IL (Israel), ES (Spain).
+            For existing Florida pages, US is kept automatically.
+          </div>
+          <details className="rounded-lg border border-slate-200 bg-white p-3">
+            <summary className="cursor-pointer text-sm font-medium text-slate-800">
+              Optional: Draw your own service area
+              <span className="ml-2 text-xs font-normal text-slate-500">Not an official city boundary</span>
+            </summary>
+            <div className="mt-3">
+              <NeighborhoodBoundaryMap key={active + "-" + (values.country ?? "US")}
+                country={values.country ?? "US"} boundary={values.customBoundary}
+                disabled={stale || save.isPending} onChange={editBoundary} />
+            </div>
+          </details>
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
             disabled={stale || save.isPending || photoUploading} uploading={photoUploading}
             canUpload={Boolean(page && !stale && !save.isPending && !photoUploading &&

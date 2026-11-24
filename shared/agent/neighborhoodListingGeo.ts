@@ -3,6 +3,8 @@
  * rectangular proximity is sufficient to claim a listing is in a neighborhood.
  * Coordinates are GeoJSON [longitude, latitude].
  */
+import { normalizeBoundaryPlace } from "./neighborhoodBoundaryIdentity";
+
 export type Position = [number, number];
 export type PolygonBoundary = { type: "Polygon"; coordinates: Position[][] };
 export type MultiPolygonBoundary = { type: "MultiPolygon"; coordinates: Position[][][] };
@@ -10,7 +12,7 @@ export type NeighborhoodBoundary = PolygonBoundary | MultiPolygonBoundary;
 export type BoundaryBounds = { minLat: number; maxLat: number; minLon: number; maxLon: number };
 
 export function normalizeNeighborhoodName(value: string): string {
-  return value.normalize("NFKC").toLowerCase().replace(/[^a-z0-9 ]+/g, " ")
+  return normalizeBoundaryPlace(value)
     .replace(/\b(?:civic association|homeowners association|home owners association|residents association|neighborhood association|neighborhood improvement district|community association|homeowners|association|hoa|inc)\b/g, " ")
     .replace(/\s+/g, " ").trim();
 }

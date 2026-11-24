@@ -76,6 +76,8 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261122_neighborhood_guide_photos.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261122_neighborhood_guide_photos.sql", "utf8"));
+  await pg.exec(await readFile("migrations/20261124_agent_neighborhood_global.sql", "utf8"));
+  await pg.exec(await readFile("migrations/20261124_neighborhood_curated_boundaries.sql", "utf8"));
   const dialect = new PgDialect();
   for (const table of [contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, teamMembers, workflows, workflowExecutions]) {
     const { name, columns } = getTableConfig(table);

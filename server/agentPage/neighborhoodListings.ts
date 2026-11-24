@@ -14,7 +14,7 @@ import {
   coordinateWithinNeighborhood,
 } from "@shared/agent/neighborhoodListingGeo";
 import { inventoryListingToAgentPageCard } from "./agentPageListingCard";
-import { resolveNeighborhoodBoundary } from "./neighborhoodBoundaryService";
+import { resolvePageNeighborhoodBoundary } from "./neighborhoodBoundaryService";
 
 export const NEIGHBORHOOD_LISTING_MAX_PER_TYPE = 9;
 export const NEIGHBORHOOD_LISTING_MAX_CANDIDATES = 3000;
@@ -22,8 +22,9 @@ export const NEIGHBORHOOD_LISTING_MAX_CANDIDATES = 3000;
 export const NEIGHBORHOOD_PUBLIC_FRESHNESS_DAYS = 14;
 
 export type NeighborhoodListingResult = {
-  boundaryStatus: "verified" | "unsupported" | "unmatched" | "unavailable";
+  boundaryStatus: "verified" | "custom_area" | "community_area" | "unsupported" | "unmatched" | "unavailable";
   boundarySource: string | null;
+  boundaryAttribution?: string | null;
   mode: "public" | "owner_preview";
   sale: AgentPageListingCard[];
   rent: AgentPageListingCard[];
@@ -37,7 +38,7 @@ export type NeighborhoodListingResult = {
 
 export async function findNeighborhoodListings(input: {
   userId: string;
-  neighborhood: { name: string; city: string; state: string };
+  neighborhood: { name: string; city: string; state: string; country?: string | null; customBoundary?: unknown };
   appOrigin: string;
   /** Allows historic examples only in private, authenticated owner previews. */
   ownerPreview?: boolean;
@@ -51,14 +52,14 @@ export async function findNeighborhoodListings(input: {
     ({ boundaryStatus, boundarySource, mode, sale: [], rent: [], hasOlderMatchingInventory: false,
       totalSale: 0, totalRent: 0, hasMoreSale: false, hasMoreRent: false, candidateLimitReached: false });
 
-  const boundary = await resolveNeighborhoodBoundary(input.neighborhood);
-  if (boundary.status !== "verified") return empty(boundary.status);
+  const boundary = await resolvePageNeighborhoodBoundary(input.neighborhood);
+  if (boundary.status !== "verified" && boundary.status !== "custom_area" && boundary.status !== "community_area") return empty(boundary.status);
 
   const [settings] = await db.select({
     enabled: aiBusinessKnowledge.publishListingsPublicly,
   }).from(aiBusinessKnowledge).where(eq(aiBusinessKnowledge.userId, input.userId)).limit(1);
 
-  if (!settings?.enabled) return empty("verified", boundary.source);
+  if (!settings?.enabled) return empty(boundary.status, boundary.source);
 
   const cutoff = new Date(Date.now() - NEIGHBORHOOD_PUBLIC_FRESHNESS_DAYS * 86400000);
   const conditions = [
@@ -120,7 +121,8 @@ export async function findNeighborhoodListings(input: {
     filters: input.filters ? { ...input.filters, listingType: "rent", location: null } : undefined,
   });
   return {
-    boundaryStatus: "verified", boundarySource: boundary.source, mode,
+    boundaryStatus: boundary.status, boundarySource: boundary.source,
+    boundaryAttribution: "attribution" in boundary ? boundary.attribution : null, mode,
     sale: salePage.listings, rent: rentPage.listings, hasOlderMatchingInventory,
     totalSale: salePage.total, totalRent: rentPage.total,
     hasMoreSale: salePage.hasMore, hasMoreRent: rentPage.hasMore,

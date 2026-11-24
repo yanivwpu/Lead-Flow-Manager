@@ -1,3 +1,6 @@
+import { validateAgentDefinedArea } from "@shared/agent/neighborhoodCustomArea";
+import { resolveCuratedNeighborhoodBoundary } from "./curatedNeighborhoodBoundaryService";
+import { normalizeBoundaryCountry } from "@shared/agent/neighborhoodBoundaryIdentity";
 import {
   boundaryBounds, normalizeNeighborhoodName, selectExactNamedNeighborhood,
   supportsFortLauderdaleBoundary, type NeighborhoodBoundary, type BoundaryBounds,
@@ -55,6 +58,8 @@ const GIS_RESPONSE_MAX_BYTES = 3_000_000;
 
 export type NeighborhoodBoundaryResult =
   | { status: "verified"; source: string; geometry: NeighborhoodBoundary; bounds: BoundaryBounds }
+  | { status: "community_area"; source: string; geometry: NeighborhoodBoundary; bounds: BoundaryBounds; attribution: string }
+  | { status: "custom_area"; source: "Agent-defined service area"; geometry: NeighborhoodBoundary; bounds: BoundaryBounds }
   | { status: "unsupported" | "unmatched" | "unavailable"; source: null };
 
 type CachedDataset = { expires: number; features: unknown[] | null };
@@ -156,6 +161,33 @@ export async function resolveNeighborhoodBoundary(input: {
     return { status: "unmatched", source: null };
   }
   return { status: "verified", source: source.source, geometry, bounds };
+}
+
+/**
+ * Explicitly owner-authored polygons can be used only when no provider can
+ * identify this neighborhood. A temporary official-source outage NEVER gets
+ * replaced with an unverified area without the visitor knowing.
+ */
+export async function resolvePageNeighborhoodBoundary(input: {
+  name: string; city: string; state: string; country?: string | null; customBoundary?: unknown;
+}): Promise<NeighborhoodBoundaryResult> {
+  if (!normalizeBoundaryCountry(input.country)) return { status: "unsupported", source: null };
+  const official = await resolveNeighborhoodBoundary({ ...input, country: input.country ?? undefined });
+  if (official.status === "verified" || official.status === "unavailable") return official;
+  const curated = await resolveCuratedNeighborhoodBoundary(input);
+  if (curated?.status === "community_area") {
+    return { status: "community_area", geometry: curated.geometry, bounds: curated.bounds,
+      source: curated.source, attribution: curated.attribution };
+  }
+  if (curated && !["unmatched"].includes(curated.status)) {
+    return { status: "unavailable", source: null };
+  }
+  const custom = input.customBoundary == null ? null : validateAgentDefinedArea(input.customBoundary);
+  if (!custom) return official;
+  return {
+    status: "custom_area", source: "Agent-defined service area",
+    geometry: custom, bounds: boundaryBounds(custom),
+  };
 }
 
 /** Provider registry enables adding new cities without hardcoding agent IDs. */

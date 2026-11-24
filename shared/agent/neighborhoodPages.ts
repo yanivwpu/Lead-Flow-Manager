@@ -1,4 +1,5 @@
 import { buildAgentPageUrl } from "./agentPageSlug";
+import type { PolygonBoundary } from "./neighborhoodListingGeo";
 
 export const NEIGHBORHOOD_GUIDE_MAX_PHOTOS = 6;
 export const NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -9,6 +10,10 @@ export type NeighborhoodContent = {
   name: string;
   city: string;
   state: string;
+  /** ISO 3166-1 alpha-2 country. Absent in browser drafts created before global support. */
+  country?: string;
+  /** Explicit owner-authored boundary, never described as a verified municipal neighborhood. */
+  customBoundary?: PolygonBoundary | null;
   content: string;
   /** Optional for existing pages and previously saved browser drafts. */
   photos?: NeighborhoodPhoto[];
@@ -22,8 +27,9 @@ export type NeighborhoodPageSettings = NeighborhoodContent & {
   publicUrl: string | null;
 };
 
-export function neighborhoodTitle(page: Pick<NeighborhoodContent, "name" | "city" | "state">): string {
-  return `${page.name}, ${page.city}, ${page.state}`;
+export function neighborhoodTitle(page: Pick<NeighborhoodContent, "name" | "city" | "state"> & { country?: string }): string {
+  const country = page.country?.toUpperCase() ?? "US";
+  return `${page.name}, ${page.city}, ${page.state}${country === "US" ? "" : `, ${country}`}`;
 }
 
 export function buildNeighborhoodUrl(agentSlug: string, neighborhoodSlug: string, origin: string): string {
