@@ -13,6 +13,7 @@ const square: PolygonBoundary = { type: "Polygon", coordinates: [[
 
 test("agent boundary is a valid small, closed polygon; inside/outside are exact", () => {
   assert.deepEqual(readCustomNeighborhoodBoundary(square), square);
+  assert.deepEqual(readCustomNeighborhoodBoundary({ ...square, extra: "ignored" }), square);
   assert.equal(coordinateWithinNeighborhood(26.125, -80.145, square), true);
   assert.equal(coordinateWithinNeighborhood(26.16, -80.145, square), false);
   assert.equal(readCustomNeighborhoodBoundary({ type: "Point", coordinates: [-80.14, 26.12] }), null);
