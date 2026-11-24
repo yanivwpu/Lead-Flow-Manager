@@ -9,6 +9,8 @@ export type NeighborhoodContent = {
   name: string;
   city: string;
   state: string;
+  /** ISO 3166-1 alpha-2; omitted only on pre-migration US drafts. */
+  country?: string;
   content: string;
   /** Optional for existing pages and previously saved browser drafts. */
   photos?: NeighborhoodPhoto[];
@@ -22,8 +24,9 @@ export type NeighborhoodPageSettings = NeighborhoodContent & {
   publicUrl: string | null;
 };
 
-export function neighborhoodTitle(page: Pick<NeighborhoodContent, "name" | "city" | "state">): string {
-  return `${page.name}, ${page.city}, ${page.state}`;
+export function neighborhoodTitle(page: Pick<NeighborhoodContent, "name" | "city" | "state" | "country">): string {
+  const suffix = page.country && page.country.toUpperCase() !== "US" ? `, ${page.country.toUpperCase()}` : "";
+  return `${page.name}, ${page.city}, ${page.state}${suffix}`;
 }
 
 export function buildNeighborhoodUrl(agentSlug: string, neighborhoodSlug: string, origin: string): string {
