@@ -27,7 +27,7 @@ export type NeighborhoodPageSettings = NeighborhoodContent & {
   publicUrl: string | null;
 };
 
-export function neighborhoodTitle(page: Pick<NeighborhoodContent, "name" | "city" | "state">): string {
+export function neighborhoodTitle(page: Pick<NeighborhoodContent, "name" | "city" | "state"> & { country?: string }): string {
   const country = page.country?.toUpperCase() ?? "US";
   return `${page.name}, ${page.city}, ${page.state}${country === "US" ? "" : `, ${country}`}`;
 }
