@@ -1736,6 +1736,7 @@ export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
   name: text("name").notNull(),
   city: text("city").notNull(),
   state: text("state").notNull(),
+  country: text("country").notNull().default("US"),
   content: text("content").notNull(),
   photos: jsonb("photos").$type<Array<{ url: string; alt: string }>>().notNull().default(sql`'[]'::jsonb`),
   published: boolean("published").notNull().default(false),
