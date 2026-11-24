@@ -23,6 +23,7 @@ const KNOWN_PUBLIC_PATHS = new Set([
   "/partner-program",
   "/prospect-ai",
   "/realtor-growth-engine",
+  "/shopify-growth-engine",
   "/real-estate-crm",
   "/shopify-crm",
   "/go-high-level-agencies",
@@ -93,6 +94,10 @@ assert.ok(
 assert.ok(
   PRODUCT_NAV.groups.some((g) => g.items.some((i) => i.href === "/realtor-growth-engine")),
   "RGE dedicated page",
+);
+assert.ok(
+  PRODUCT_NAV.groups.some(g => g.items.some(i => i.href === "/shopify-growth-engine")),
+  "Shopify Growth Engine public product page",
 );
 assert.ok(
   PRODUCT_NAV.groups.every((g) =>
