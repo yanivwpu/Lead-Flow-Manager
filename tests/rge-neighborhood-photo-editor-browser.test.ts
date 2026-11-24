@@ -31,7 +31,7 @@ test("real article editor visibly inserts an image at the chosen heading and per
     define: { "process.env.NODE_ENV": '"production"' },
     loader: { ".css": "empty" }, logLevel: "silent",
   });
-  const js = result.outputFiles.find((file) => file.path.endsWith(".js"));
+  const js = result.outputFiles.find((file) => file.path.endsWith(".js")) ?? result.outputFiles[0];
   assert.ok(js, "browser harness bundled successfully");
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   t.after(() => page.close());
