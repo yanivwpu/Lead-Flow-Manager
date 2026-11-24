@@ -8,6 +8,8 @@ import type {
 } from "@shared/prospectImport";
 import { prospectImportService } from "../prospectImport/prospectImportService";
 import { requireProspectImportAccess } from "./prospectImportAccess";
+import { previewCsvProspects, startCsvProspectImport } from "../prospectImport/csvImportService";
+import { PROSPECT_CSV_MAX_BYTES } from "@shared/prospectCsvImport";
 import {
   canAccessProspectWorkspaceTools,
   resolveProspectWorkspaceUserId,
@@ -183,6 +185,56 @@ export function registerProspectImportRoutes(app: Express): void {
         });
       }
     },
+  );
+
+  // User-owned CSV only: bounded parsing -> immutable preview -> one-use import.
+  app.post(
+    "/api/growth-tools/prospect-import/csv/preview",
+    requireProspectImportAccess,
+    async (req,res) => {
+      try {
+        const { csvText, filters } = req.body || {};
+        if(typeof csvText !== "string" || Buffer.byteLength(csvText,"utf8") > PROSPECT_CSV_MAX_BYTES) {
+          return res.status(400).json({error:"Choose a CSV no larger than 512 KB."});
+        }
+        const destinationUserId=await resolveProspectWorkspaceUserId((req.user as {id:string}).id);
+        if(destinationUserId!==(req.user as {id:string}).id) return res.status(403).json({error:"CSV import must stay in your own Prospect AI workspace."});
+        const preview=await previewCsvProspects({
+          csvText,filters:filters||{},destinationUserId,
+          initiatedByUserId:(req.user as {id:string}).id,
+        });
+        res.json({async:false,preview});
+      } catch(e) {
+        res.status(400).json({error:e instanceof Error?e.message:"Invalid CSV"});
+      }
+    }
+  );
+  app.post(
+    "/api/growth-tools/prospect-import/csv/import",
+    requireProspectImportAccess,
+    async(req,res)=>{
+      try {
+        const body=req.body||{};
+        const previewJobId=String(body.previewJobId||"");
+        const filterFingerprint=String(body.filterFingerprint||"");
+        const options=body.importOptions||{};
+        if(!/^[0-9a-f-]{36}$/.test(previewJobId)||!body.confirmOwnedData) {
+          return res.status(400).json({error:"Confirm your CSV data is authorized and previewed."});
+        }
+        const destinationUserId=await resolveProspectWorkspaceUserId((req.user as {id:string}).id);
+        if(destinationUserId!==(req.user as {id:string}).id) return res.status(403).json({error:"CSV import must stay in your own Prospect AI workspace."});
+        const job=await startCsvProspectImport({
+          previewJobId,filterFingerprint,
+          batchName:String(options.batchName||""),
+          importReason:String(options.importReason||"General prospecting"),
+          selectedExternalIds:Array.isArray(options.selectedExternalIds)?options.selectedExternalIds:undefined,
+          destinationUserId,initiatedByUserId:(req.user as {id:string}).id,
+        });
+        res.status(202).json({job});
+      }catch(e){
+        res.status(400).json({error:e instanceof Error?e.message:"CSV import rejected"});
+      }
+    }
   );
 
   app.get(

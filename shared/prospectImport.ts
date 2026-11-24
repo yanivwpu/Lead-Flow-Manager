@@ -16,6 +16,7 @@ export const PROSPECT_IMPORT_INTERNAL_TAGS = [
   "Imported-GHL",
   "Imported-Agency",
   "Imported-Shopify",
+  "Imported-CSV",
   "Imported-Affiliate",
 ] as const;
 export type ProspectImportInternalTag = (typeof PROSPECT_IMPORT_INTERNAL_TAGS)[number];
@@ -25,6 +26,7 @@ export const PROSPECT_IMPORT_INTERNAL_TAG_LABELS: Record<ProspectImportInternalT
   "Imported-GHL": "Imported-CRM",
   "Imported-Agency": "Imported-Agency",
   "Imported-Shopify": "Imported-Shopify",
+  "Imported-CSV": "Imported-CSV",
   "Imported-Affiliate": "Imported-Affiliate",
 };
 

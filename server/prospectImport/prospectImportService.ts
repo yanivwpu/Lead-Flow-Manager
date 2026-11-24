@@ -304,7 +304,7 @@ function mergeMissingFields(existing: Contact, incoming: {
   return patch;
 }
 
-async function runProspectImportJob(jobId: string): Promise<void> {
+export async function runProspectImportJob(jobId: string): Promise<void> {
   if (runningJobs.has(jobId)) return;
   runningJobs.add(jobId);
 
@@ -379,6 +379,33 @@ async function runProspectImportJob(jobId: string): Promise<void> {
           email,
           phone,
         });
+
+        // CSV contacts are owner-uploaded prospects, not GHL identities.
+        // Never fabricate a GHL ID, mutate an existing CRM contact, or infer consent.
+        if (job.provider === "csv") {
+          if (dup) { duplicates++; skipped++; continue; }
+          const csvMeta = {
+            csvRowId: raw.id, batchName, importReason,
+            importedAt: new Date().toISOString(), importJobId: jobId,
+            createdByImportJob: true, originalTags: raw.tags ?? [],
+          };
+          const created = await storage.createContact({
+            userId: destinationUserId,
+            name, email: email ?? null, phone: phone ?? null,
+            primaryChannel: phone ? "whatsapp" : "email",
+            source: "import", tag: "Imported-CSV",
+            pipelineStage: "Imported",
+            notes: raw.companyName ? `Company: ${raw.companyName}` : "",
+            sourceDetails: { prospectImportProvider: "csv", prospectImport: csvMeta },
+            customFields: { prospectImport: csvMeta },
+          });
+          createdContactIds.push(created.id);
+          if (email) dedupIndex.byEmail.set(email.toLowerCase(),created);
+          const digits = phone?.replace(/\\D/g, "");
+          if (digits && digits.length >= 7) dedupIndex.byPhone.set(digits,created);
+          imported++;
+          continue;
+        }
 
         const prospectMeta: ProspectImportGhlMetadata = {
           ghlLocationId: job.sourceLocationId,
