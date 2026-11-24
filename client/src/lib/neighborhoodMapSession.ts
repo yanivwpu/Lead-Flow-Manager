@@ -46,3 +46,8 @@ export function writeNeighborhoodMapSession(storage: Pick<Storage, "setItem"> | 
     return Boolean(storage);
   } catch { return false; }
 }
+
+/** Discard removes only this neighborhood's temporary map view/corners. */
+export function clearNeighborhoodMapSession(storage: Pick<Storage, "removeItem"> | undefined, key: string): void {
+  try { storage?.removeItem(key); } catch { /* private-mode storage may be blocked */ }
+}
