@@ -32,6 +32,7 @@ const mapCenterQuery = z.object({
   country: z.string().trim().regex(/^[a-zA-Z]{2}$/),
 });
 const mapCenterCache = new Map<string, { latitude: number; longitude: number; expires: number }>();
+const mapCenterDailyQuota = new Map<string, { day: string; count: number }>();
 let lastMapCenterLookup = 0;
 
 const fields = z.object({
@@ -39,7 +40,8 @@ const fields = z.object({
   city: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   state: z.string().trim().min(1).max(60).regex(/[\p{L}\p{N}]/u),
   country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).default("US"),
-  customBoundary: z.custom<PolygonBoundary>((value) => readCustomNeighborhoodBoundary(value) !== null).nullable().optional(),
+  customBoundary: z.custom<PolygonBoundary>((value) => readCustomNeighborhoodBoundary(value) !== null)
+    .transform((value) => readCustomNeighborhoodBoundary(value)!).nullable().optional(),
   content: z.string().trim().max(5000),
   photos: z.array(z.object({
     url: z.string().url().max(600),
@@ -100,7 +102,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   // Explicit click-to-locate only; never autocomplete or unbounded geocoding.
   // Reuse the platform's existing optional Google Places credential, without
   // exposing it to the browser or requiring a new map provider.
-  router.get("/map-center", run(async (req, res) => {
+  router.get("/map-center", run(async (req, res, userId) => {
     const parsed = mapCenterQuery.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: "Enter a valid city, region and country first." });
     const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
@@ -111,6 +113,11 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const cached = mapCenterCache.get(queryKey);
     if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude });
     if (now - lastMapCenterLookup < 1000) return res.status(429).json({ error: "Try locating again in a moment." });
+    const day = new Date(now).toISOString().slice(0, 10);
+    const usage = mapCenterDailyQuota.get(userId);
+    if (usage?.day === day && usage.count >= 15) return res.status(429).json({ error: "Daily map location limit reached. Enter coordinates manually." });
+    if (mapCenterDailyQuota.size > 10000) mapCenterDailyQuota.clear();
+    mapCenterDailyQuota.set(userId, { day, count: (usage?.day === day ? usage.count : 0) + 1 });
     lastMapCenterLookup = now;
     // Neighborhood match preferred; city-level center is only a map starting point,
     // never treated as a validated property boundary.
