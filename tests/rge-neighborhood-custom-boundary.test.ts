@@ -1,4 +1,5 @@
 import test from "node:test";
+import { build } from "esbuild";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { readCustomNeighborhoodBoundary } from "../shared/agent/neighborhoodCustomBoundary";
@@ -101,4 +102,61 @@ test("owner endpoints, public HTML, persistence and map editing retain custom-ar
     assert.ok(labels.apply && labels.remove && labels.attribution);
   }
   assert.match(migration, /ADD COLUMN IF NOT EXISTS custom_boundary jsonb/);
+});
+
+test("map editor visibly restores saved geometry when draft is discarded or changed in another tab", { timeout: 90_000 }, async (t) => {
+  if (process.env.AGENT_PAGE_BROWSER_TEST !== "1") { t.skip("Chromium runs in RGE CI"); return; }
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const updated: PolygonBoundary = { type: "Polygon", coordinates: [[
+    [-80.149, 26.115], [-80.135, 26.115], [-80.135, 26.13],
+    [-80.149, 26.13], [-80.149, 26.115],
+  ]] };
+  const harness = [
+    'import React from "react";',
+    'import { createRoot } from "react-dom/client";',
+    'import { NeighborhoodBoundaryEditor } from "./client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx";',
+    'const original = ' + JSON.stringify(square) + ';',
+    'function Harness() {',
+    ' const [saved, setSaved] = React.useState(original);',
+    ' window.__replaceBoundary = (boundary) => setSaved(boundary);',
+    ' return <NeighborhoodBoundaryEditor boundary={saved} name="Victoria Park" city="Fort Lauderdale"',
+    '  state="FL" country="US" disabled={false} onChange={setSaved} />;',
+    '}',
+    'createRoot(document.getElementById("root")).render(<Harness />);',
+  ].join("\n");
+  const result = await build({
+    stdin: { contents: harness, resolveDir: process.cwd(), sourcefile: "rge-map-harness.tsx", loader: "tsx" },
+    bundle: true, write: false, format: "iife", platform: "browser", jsx: "automatic",
+    alias: { "@": "./client/src", "@shared": "./shared" },
+    define: { "process.env.NODE_ENV": '"production"' },
+    loader: { ".css": "empty" }, logLevel: "silent",
+  });
+  const js = result.outputFiles.find((file) => file.path.endsWith(".js")) ?? result.outputFiles[0];
+  assert.ok(js, "map editor browser harness bundles");
+  const page = await browser.newPage({ viewport: { width: 960, height: 800 } });
+  t.after(() => page.close());
+  await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
+  await page.setContent('<!doctype html><html><body><div id="root"></div></body></html>');
+  await page.addScriptTag({ content: js.text });
+  await page.locator("summary").click();
+  const map = page.locator("svg.cursor-crosshair");
+  await map.waitFor();
+  const circles = map.locator("circle");
+  assert.equal(await circles.count(), 4, "the saved four-corner area is visible");
+  await map.click({ position: { x: 250, y: 160 } });
+  assert.equal(await circles.count(), 5, "unapplied local edit appears on the map");
+  await page.evaluate((newBoundary) => (window as any).__replaceBoundary(newBoundary), updated);
+  await page.waitForFunction(() => document.querySelectorAll("svg.cursor-crosshair circle").length === 4);
+  const afterUpdate = await map.locator("polygon").getAttribute("points");
+  assert.ok(afterUpdate && afterUpdate.split(" ").length === 4, "updated saved polygon replaces stale corners");
+  await page.evaluate(() => (window as any).__replaceBoundary(null));
+  await page.waitForFunction(() => document.querySelectorAll("svg.cursor-crosshair circle").length === 0);
+  assert.equal(await map.locator("polygon").count(), 0, "clearing a saved custom area clears the visible map");
+  await map.click({ position: { x: 240, y: 155 } });
+  assert.equal(await circles.count(), 1);
+  await page.evaluate((previousBoundary) => (window as any).__replaceBoundary(previousBoundary), square);
+  await page.waitForFunction(() => document.querySelectorAll("svg.cursor-crosshair circle").length === 4);
+  assert.equal(await circles.count(), 4, "discarding again restores the exact saved area");
 });
