@@ -92,9 +92,13 @@ test("owner endpoints, public HTML, persistence and map editing retain custom-ar
   assert.match(listings, /row\.country/);
   assert.match(listings, /row\.city/);
   assert.match(html, /agent-defined custom area, not an official neighborhood boundary/);
-  assert.match(html, /data\\.boundaryStatus !== "verified" && data\\.boundaryStatus !== "custom"/);
-  assert.match(editor, /Apply this area/);
-  assert.match(editor, /Remove custom area/);
-  assert.match(editor, /© OpenStreetMap contributors/);
+  assert.ok(html.includes('data.boundaryStatus !== "verified" && data.boundaryStatus !== "custom"'));
+  assert.ok(editor.includes('t("rgeMap.apply")'));
+  assert.ok(editor.includes('t("rgeMap.remove")'));
+  assert.ok(editor.includes('t("rgeMap.attribution")'));
+  for (const locale of ["en", "he", "es"]) {
+    const labels = JSON.parse(readFileSync(`client/src/locales/${locale}.json`, "utf8")).rgeMap;
+    assert.ok(labels.apply && labels.remove && labels.attribution);
+  }
   assert.match(migration, /ADD COLUMN IF NOT EXISTS custom_boundary jsonb/);
 });
