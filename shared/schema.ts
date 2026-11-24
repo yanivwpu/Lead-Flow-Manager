@@ -1736,6 +1736,11 @@ export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
   name: text("name").notNull(),
   city: text("city").notNull(),
   state: text("state").notNull(),
+  country: varchar("country", { length: 2 }).notNull().default("US"),
+  // Tenant-owned, explicitly agent-defined service area; never an official map.
+  customBoundary: jsonb("custom_boundary").$type<{
+    type: "Polygon"; coordinates: [number, number][][];
+  } | null>(),
   content: text("content").notNull(),
   photos: jsonb("photos").$type<Array<{ url: string; alt: string }>>().notNull().default(sql`'[]'::jsonb`),
   published: boolean("published").notNull().default(false),
