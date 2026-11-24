@@ -349,7 +349,7 @@ function CopilotPopoverHeader({ title, onClose }: { title: string; onClose: () =
 
 function RowLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide shrink-0">
+    <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide shrink-0">
       {children}
     </span>
   );
@@ -2229,41 +2229,31 @@ export function InboxLeadDetailsPanel({
       {/* ══ COPILOT — distinct assistant region ═════════════════════════════════ */}
       <div
         className={cn(
-          "mx-2 mt-2 mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-900/[0.06]",
+          "mx-2 mt-2 mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-[#21473f] bg-[#082f2a] text-emerald-50 shadow-sm shadow-emerald-950/15",
+          "[&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:-outline-offset-2 [&_button:focus-visible]:outline-emerald-600",
           copilotExpanded && "max-h-[min(72vh,720px)]",
           copilotExpanded && !panelClassName && "h-[min(60%,560px)]",
         )}
       >
       {/* ══ COPILOT FIXED HEADER ════════════════════════════════════════ */}
       <div
-        className={cn(
-          "z-10 shrink-0 rounded-t-xl transition-colors duration-200",
-          copilotExpanded
-            ? "bg-gray-50/90 border-b border-gray-200"
-            : "bg-gray-50/70 border-b border-gray-200",
-        )}
+        className="z-10 shrink-0 rounded-t-xl border-b border-[#31534b]"
       >
         {/* Full-width clickable header row */}
         <div
           onClick={() => onCopilotExpandedChange(!copilotExpanded)}
-          className={cn(
-            "px-3 pt-2.5 pb-1.5 flex items-start justify-between cursor-pointer transition-colors select-none gap-2",
-            copilotExpanded ? "hover:bg-gray-100/70" : "hover:bg-gray-100/60",
-          )}
+          className="px-3 pt-2.5 pb-1.5 flex items-start justify-between cursor-pointer transition-colors select-none gap-2 hover:bg-white/5 focus-within:bg-white/5"
           data-testid="button-copilot-collapse"
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <Sparkles
-                className={cn(
-                  "w-3.5 h-3.5 shrink-0 transition-colors duration-200",
-                  copilotExpanded ? "text-gray-700" : "text-gray-600",
-                )}
+                className="w-3.5 h-3.5 shrink-0 text-emerald-200"
               />
-              <span className="text-sm font-bold tracking-tight text-gray-900">Copilot</span>
+              <span className="text-sm font-bold tracking-tight text-white">Copilot</span>
             </div>
             {hasAIBrain && (
-              <p className="text-[9px] text-gray-500 font-medium mt-1 ml-[22px] leading-tight">
+              <p className="text-[10px] text-emerald-100 font-medium mt-1 ml-[22px] leading-tight">
                 {headerShowsSnoozed ? "AI paused for this conversation" : "AI Brain"}
               </p>
             )}
@@ -2272,7 +2262,7 @@ export function InboxLeadDetailsPanel({
           <div className="flex items-center gap-2 shrink-0 pt-0.5">
             {copilotEntitlementLoading ? (
               <span
-                className="h-4 w-12 rounded-full bg-gray-100 animate-pulse"
+                className="h-4 w-12 rounded-full bg-[#31534b] animate-pulse"
                 data-testid="copilot-entitlement-loading-pill"
               />
             ) : canSeeCopilot ? (
@@ -2284,20 +2274,20 @@ export function InboxLeadDetailsPanel({
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
                   headerShowsSnoozed
-                    ? "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
+                    ? "bg-amber-100 text-amber-900 border-amber-200 hover:bg-amber-200"
+                    : "bg-[#243f36] text-emerald-50 border-[#5b7e6e] hover:bg-[#304d42]",
                 )}
                 data-testid="button-ai-toggle"
               >
                 {headerShowsSnoozed ? "Snoozed" : "Active"}
               </button>
             ) : (
-              <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
+              <span className="text-[10px] text-emerald-100 font-medium">{copilotUpgradeTo}+</span>
             )}
 
-            <div className="flex items-center gap-0.5 text-gray-500">
+            <div className="flex items-center gap-0.5 rounded-md border border-white/30 px-1 text-white">
               <ChevronDown
-                className={cn("w-[18px] h-[18px] transition-transform duration-200", copilotExpanded && "rotate-180")}
+                className={cn("w-[18px] h-[18px] transition-transform duration-200 motion-reduce:transition-none", copilotExpanded && "rotate-180")}
               />
               <span className="text-[10px] font-medium">{copilotExpanded ? "Collapse" : "Expand"}</span>
             </div>
@@ -2308,13 +2298,13 @@ export function InboxLeadDetailsPanel({
         {!copilotExpanded && canSeeCopilot && (
           <div
             onClick={() => onCopilotExpandedChange(true)}
-            className="px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer border-t border-gray-200"
+            className="px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer border-t border-[#31534b] hover:bg-white/5"
           >
-            <p className="text-[11px] font-medium text-gray-800 leading-tight truncate min-w-0">
+            <p className="text-[11px] font-medium text-emerald-50 leading-tight truncate min-w-0">
               {copilotCollapsedSummary}
             </p>
             {activeSuggestionCount > 0 && (
-              <span className="text-[9px] text-gray-600 font-semibold shrink-0">
+              <span className="text-[10px] text-emerald-100 font-semibold shrink-0">
                 {activeSuggestionCount} suggestion{activeSuggestionCount !== 1 ? "s" : ""}
               </span>
             )}
@@ -2324,18 +2314,18 @@ export function InboxLeadDetailsPanel({
 
       {/* Utilities (operational) — keep near top under header */}
       {copilotExpanded && (
-      <div className="shrink-0 border-b border-gray-200 bg-gray-50/60 px-3 py-2">
+      <div className="shrink-0 border-b border-[#31534b] bg-white/5 px-3 py-2">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
           <Popover open={bookOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("book", open)}>
             <PopoverTrigger asChild>
               <button
-                className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-[#55756a] bg-[#173b34] text-emerald-50 hover:bg-[#23493f] transition-colors"
                 data-testid="button-ai-book"
               >
-                <CalendarIcon className="w-3 h-3 text-gray-500" />
-                <span className="text-[9px] text-gray-500 font-medium">Book</span>
+                <CalendarIcon className="w-3 h-3 text-emerald-50" />
+                <span className="text-[10px] font-semibold">Book</span>
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
@@ -2510,13 +2500,13 @@ export function InboxLeadDetailsPanel({
                   "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
                   contact.followUpDate
                     ? "border-amber-200 bg-amber-50 hover:bg-amber-100"
-                    : "border-gray-200 bg-white hover:bg-gray-50"
+                    : "border-[#55756a] bg-[#173b34] hover:bg-[#23493f]"
                 )}
                 data-testid="button-ai-followup"
                 title="Schedule follow-up"
               >
-                <Bell className={cn("w-3 h-3", contact.followUpDate ? "text-amber-600" : "text-gray-500")} />
-                <span className={cn("text-[9px] font-medium", contact.followUpDate ? "text-amber-700" : "text-gray-500")}>
+                <Bell className={cn("w-3 h-3", contact.followUpDate ? "text-amber-600" : "text-emerald-50")} />
+                <span className={cn("text-[10px] font-semibold", contact.followUpDate ? "text-amber-700" : "text-emerald-50")}>
                   {contact.followUpDate ? "Set" : "Follow"}
                 </span>
               </button>
@@ -2655,16 +2645,16 @@ export function InboxLeadDetailsPanel({
                   "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
                   headerShowsSnoozed
                     ? "border-gray-200 bg-gray-100 hover:bg-gray-200"
-                    : "border-gray-200 bg-white hover:bg-gray-50"
+                    : "border-[#55756a] bg-[#173b34] hover:bg-[#23493f]"
                 )}
                 data-testid="button-ai-pause"
                 title="Temporarily pause AI for this conversation"
               >
                 {headerShowsSnoozed
-                  ? <PlayCircle className="w-3 h-3 text-gray-500" />
-                  : <PauseCircle className="w-3 h-3 text-gray-500" />
+                  ? <PlayCircle className="w-3 h-3 text-slate-700" />
+                  : <PauseCircle className="w-3 h-3 text-emerald-50" />
                 }
-                <span className="text-[9px] text-gray-500 font-medium">AI</span>
+                <span className={cn("text-[10px] font-semibold", headerShowsSnoozed ? "text-slate-700" : "text-emerald-50")}>AI</span>
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
@@ -2698,9 +2688,9 @@ export function InboxLeadDetailsPanel({
 
               {copilotEntitlementLoading ? (
                 <div className="space-y-2 py-1" data-testid="copilot-entitlement-loading">
-                  <div className="h-3 w-2/5 rounded bg-gray-100 animate-pulse" />
-                  <div className="h-16 rounded-lg bg-gray-50 border border-gray-100 animate-pulse" />
-                  <div className="h-10 rounded-lg bg-gray-50 border border-gray-100 animate-pulse" />
+                  <div className="h-3 w-2/5 rounded bg-[#45685d] animate-pulse" />
+                  <div className="h-16 rounded-lg bg-[#173b34] border border-[#31534b] animate-pulse" />
+                  <div className="h-10 rounded-lg bg-[#173b34] border border-[#31534b] animate-pulse" />
                 </div>
               ) : showCopilotUpgrade ? (
                 <AIUpgradePrompt
@@ -2713,11 +2703,11 @@ export function InboxLeadDetailsPanel({
                 <>
                   {!primaryConversation || messages.length === 0 ? (
                     <div
-                      className="mb-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5"
+                      className="mb-3 rounded-lg border border-dashed border-[#55756a] bg-white/5 px-3 py-2.5"
                       data-testid="copilot-no-conversation-context"
                     >
-                      <p className="text-[12px] font-medium text-gray-700">No conversation context yet</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      <p className="text-[12px] font-medium text-emerald-50">No conversation context yet</p>
+                      <p className="text-[11px] text-emerald-100 mt-0.5 leading-snug">
                         Conversation-based insights appear after the first message on this contact.
                       </p>
                     </div>
@@ -2727,15 +2717,15 @@ export function InboxLeadDetailsPanel({
                     {intel.leadScoreDetails && messages.length > 0 ? (
                       <div className="flex items-end justify-between gap-2">
                         <div className="space-y-0.5 min-w-0">
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-100">
                             Lead score
                           </p>
-                          <p className="text-[22px] font-bold text-gray-900 tabular-nums leading-none">
+                          <p className="text-[22px] font-bold text-white tabular-nums leading-none">
                             {intel.leadScoreDetails.score}
                           </p>
                           <div className="flex items-center gap-1.5 pt-0.5">
                             <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
-                            <span className={cn("text-[11px] font-semibold truncate", intel.leadScore.color)}>
+                            <span className="truncate text-[11px] font-semibold text-emerald-50">
                               {(intel.leadScoreDetails?.bucket === "unqualified"
                                 ? "Unqualified"
                                 : intel.leadScore.label)}{" "}
@@ -2747,7 +2737,7 @@ export function InboxLeadDetailsPanel({
                     ) : messages.length > 0 ? (
                       <div className="flex items-center gap-2">
                         <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", intel.leadScore.dot)} />
-                        <span className={cn("text-[13px] font-bold", intel.leadScore.color)}>
+                        <span className="text-[13px] font-bold text-emerald-50">
                           {intel.leadScore.label} Lead
                         </span>
                       </div>
@@ -2755,11 +2745,11 @@ export function InboxLeadDetailsPanel({
 
                     {customerInsights.length > 0 ? (
                       <div className="space-y-1">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-100">
                           Customer insights
                         </p>
                         {customerInsights.length === 1 ? (
-                          <p className="text-[12px] font-medium text-gray-800 leading-snug">
+                          <p className="text-[12px] font-medium text-emerald-50 leading-snug">
                             {customerInsights[0]}
                           </p>
                         ) : (
@@ -2767,9 +2757,9 @@ export function InboxLeadDetailsPanel({
                             {customerInsights.map((insight) => (
                               <li
                                 key={insight}
-                                className="text-[12px] font-medium text-gray-800 leading-snug flex gap-1.5"
+                                className="text-[12px] font-medium text-emerald-50 leading-snug flex gap-1.5"
                               >
-                                <span className="text-gray-400 shrink-0">•</span>
+                                <span className="text-emerald-100 shrink-0">•</span>
                                 <span>{insight}</span>
                               </li>
                             ))}
@@ -2797,12 +2787,12 @@ export function InboxLeadDetailsPanel({
                               title={isAnswered ? "Mark as unanswered" : "Mark as answered"}
                             >
                               {isAnswered
-                                ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                                : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
+                                ? <CheckCircle2 className="w-3 h-3 text-emerald-300 shrink-0" />
+                                : <Circle className="w-3 h-3 text-emerald-200 shrink-0" />
                               }
-                              <span className={cn("text-[11px] truncate", isAnswered ? "text-gray-700" : "text-gray-400")}>
+                              <span className={cn("text-[11px] truncate", isAnswered ? "text-emerald-50" : "text-emerald-100")}>
                                 <span className="font-medium">{criterion.label}</span>
-                                {!isAnswered && <span className="text-gray-300"> —</span>}
+                                {!isAnswered && <span className="text-emerald-200"> —</span>}
                               </span>
                             </button>
                           );
@@ -2819,7 +2809,7 @@ export function InboxLeadDetailsPanel({
                     if (!primary && !handoffActive) return null;
 
                     return (
-                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-md shadow-gray-900/[0.06] ring-1 ring-gray-100/80">
+                      <div className="rounded-xl border border-emerald-200 bg-white px-3 py-3 shadow-sm shadow-emerald-950/20">
                         <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">
                           {primary?.informational ? "Status" : "Primary recommendation"}
                         </p>
@@ -2857,7 +2847,7 @@ export function InboxLeadDetailsPanel({
                               e.stopPropagation();
                               primary.onClick();
                             }}
-                            className="mt-2 w-full text-left rounded-lg border border-gray-200 bg-gray-50 hover:bg-white transition-colors px-2.5 py-2"
+                            className="mt-2 w-full text-left rounded-lg border border-[#cddad4] bg-[#f2f6f4] hover:bg-[#e6eee9] transition-colors px-2.5 py-2"
                             data-testid={`next-best-action-primary-${primary.id}`}
                             title={primary.title ?? primary.label}
                           >
@@ -2899,7 +2889,7 @@ export function InboxLeadDetailsPanel({
 
                   {/* C. Buyer preferences — RGE / real-estate workspace only */}
                   {(showCopilotBuyerPreferences || (!hideGrowthEngine && inventoryStatus?.canUse)) && (
-                    <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-2.5 py-2">
+                    <div className="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-2">
                       <BuyerPreferencesPanel
                         contactId={contact.id}
                         initialProfile={persistedBuyerProfile}
@@ -2926,43 +2916,45 @@ export function InboxLeadDetailsPanel({
                   {showCopilotInventoryPanels &&
                     !inventorySourcesError &&
                     (inventoryConnected || inventorySourcesLoading || !inventorySourcesFetched) && (
-                    <MatchingListingsPanel
-                      contactId={contact.id}
-                      contactFirstName={contact.name?.trim().split(/\s+/)[0]}
-                      compact
-                      isWorkspaceAdmin={isWorkspaceAdmin}
-                      isWorkspaceOwner={isWorkspaceOwner}
-                      buyerProfile={persistedBuyerProfile}
-                      inventoryRelevant={showCopilotInventoryPanels}
-                      onInsertComposerDraft={onInsertComposerDraft}
-                    />
+                    <div className="rounded-lg bg-white px-2.5 pb-2.5 pt-0.5">
+                      <MatchingListingsPanel
+                        contactId={contact.id}
+                        contactFirstName={contact.name?.trim().split(/\s+/)[0]}
+                        compact
+                        isWorkspaceAdmin={isWorkspaceAdmin}
+                        isWorkspaceOwner={isWorkspaceOwner}
+                        buyerProfile={persistedBuyerProfile}
+                        inventoryRelevant={showCopilotInventoryPanels}
+                        onInsertComposerDraft={onInsertComposerDraft}
+                      />
+                    </div>
                   )}
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
                   {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (
-                    <div className="pt-2 border-t border-gray-100" data-testid="copilot-summary-section">
-                      <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">
+                    <div className="pt-2 border-t border-[#31534b]" data-testid="copilot-summary-section">
+                      <p className="text-[9px] uppercase tracking-wide font-medium text-emerald-100 mb-1">
                         Summary
                       </p>
                       {aiMemoryLoading ? (
                         <div className="flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                          <span className="text-[11px] text-gray-400 italic">Generating…</span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                          <span className="text-[11px] text-emerald-100 italic">Generating…</span>
                         </div>
                       ) : customerSummaryBullets.length >= 2 ? (
                         <ul className="space-y-0.5">
                           {customerSummaryBullets.slice(0, 2).map((line) => (
                             <li
                               key={line}
-                              className="text-[11px] text-gray-600 leading-snug flex gap-1.5"
+                              className="text-[11px] text-emerald-50 leading-snug flex gap-1.5"
                             >
-                              <span className="text-gray-300 shrink-0">•</span>
+                              <span className="text-emerald-200 shrink-0">•</span>
                               <span>{line}</span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-[11px] text-gray-600 leading-snug line-clamp-3">
+                        <p className="text-[11px] text-emerald-50 leading-snug line-clamp-3">
                           {customerSummaryBullets[0] ?? aiMemory}
                         </p>
                       )}
@@ -3018,7 +3010,7 @@ export function InboxLeadDetailsPanel({
 
       {/* ══ Body ════════════════════════════════════════════════════════════ */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-gutter:stable]">
-        <div className="px-3 py-3 space-y-3">
+        <div className="px-3 py-3 [&>div+div]:mt-3 [&>div+div]:border-t [&>div+div]:border-slate-200/80 [&>div+div]:pt-3 [&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:-outline-offset-2 [&_button:focus-visible]:outline-emerald-700">
 
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}
           <div>
@@ -3027,7 +3019,7 @@ export function InboxLeadDetailsPanel({
               {isSavedCrmContact ? (
                 <button
                   onClick={onEditContact}
-                  className="p-0.5 text-gray-300 hover:text-gray-500 transition-colors rounded"
+                  className="rounded p-0.5 text-slate-500 transition-colors hover:text-slate-800"
                   data-testid="button-edit-contact-panel"
                 >
                   <Edit className="w-3 h-3" />
@@ -3037,7 +3029,7 @@ export function InboxLeadDetailsPanel({
             <div className="space-y-1">
               {contact.name ? (
                 <p
-                  className="text-[13px] font-semibold text-gray-900 truncate"
+                  className="text-sm font-semibold text-slate-900 truncate"
                   data-testid="text-contact-panel-name"
                 >
                   {contact.name}
@@ -3088,7 +3080,7 @@ export function InboxLeadDetailsPanel({
                 <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
                   <SelectTrigger
                     className={cn(
-                      "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
+                      "h-7 min-w-0 text-[11px] font-medium flex-1 bg-slate-50 border border-slate-300 px-2 shadow-none",
                       conversationStatusRow.textClass
                     )}
                     data-testid="select-conversation-status"
@@ -3117,7 +3109,7 @@ export function InboxLeadDetailsPanel({
                   value={contact.pipelineStage}
                   onValueChange={val => onUpdateContact({ pipelineStage: val })}
                 >
-                  <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
+                  <SelectTrigger className="h-7 min-w-0 text-[11px] font-medium flex-1 border-slate-300 bg-slate-50 px-2 shadow-none" data-testid="select-pipeline">
                     <SelectValue placeholder="Stage" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3151,7 +3143,7 @@ export function InboxLeadDetailsPanel({
                   "shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
                   contact.automationsPaused
                     ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                    : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100",
                 )}
                 data-testid="button-toggle-automations-pause"
                 title="Stops workflows, timers, campaigns, chatbot, and AI auto. Manual Inbox sends still work. Not Do Not Contact."
@@ -3195,7 +3187,7 @@ export function InboxLeadDetailsPanel({
                     "shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
                     primaryConversation.aiControl?.paused
                       ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                      : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100",
                   )}
                   data-testid="button-toggle-ai-control"
                 >
@@ -3360,7 +3352,7 @@ export function InboxLeadDetailsPanel({
                     "text-[10px] px-2 py-0.5 rounded-full border transition-all font-medium",
                     contact.tag === tag
                       ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
-                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-300 hover:text-gray-600"
+                      : "bg-white text-slate-600 border-slate-300 hover:border-slate-400 hover:bg-slate-50"
                   )}
                   data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
                 >

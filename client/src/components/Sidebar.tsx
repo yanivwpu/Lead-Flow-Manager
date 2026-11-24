@@ -104,7 +104,8 @@ export function Sidebar() {
     <TooltipProvider delayDuration={200}>
       <div
         className={cn(
-          "hidden md:flex h-full min-w-0 shrink-0 flex-col overflow-hidden bg-gray-50 z-20 transition-[width]",
+          "hidden md:flex h-full min-w-0 shrink-0 flex-col overflow-hidden border-[#27313b] bg-[#0f1720] text-slate-50 z-20 transition-[width]",
+          "[&_:is(a,button):focus-visible]:outline [&_:is(a,button):focus-visible]:outline-2 [&_:is(a,button):focus-visible]:-outline-offset-2 [&_:is(a,button):focus-visible]:outline-emerald-300",
           sidebarMotion,
           isRTL ? "border-is" : "border-ie",
           collapsed ? "w-16" : "w-[200px]",
@@ -123,7 +124,7 @@ export function Sidebar() {
               <span className="text-[11px] font-bold leading-none text-white">W</span>
             </div>
             <span className={cn(
-              "truncate font-display text-sm font-medium leading-tight tracking-tight text-gray-900 transition-opacity",
+              "truncate font-display text-sm font-medium leading-tight tracking-tight text-slate-50 transition-opacity",
               sidebarMotion,
               collapsed && "opacity-0",
             )}>
@@ -138,7 +139,7 @@ export function Sidebar() {
                 onClick={toggleSidebar}
                 data-testid="button-toggle-sidebar"
                 className={cn(
-                  "absolute end-[15px] flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-[top,background-color,color] hover:bg-gray-100 hover:text-gray-700",
+                  "absolute end-[15px] flex h-8 w-8 items-center justify-center rounded-md text-slate-50 transition-[top,background-color,color] hover:bg-[#202b35] hover:text-white",
                   sidebarMotion,
                   collapsed ? "top-10" : "top-3",
                 )}
@@ -173,7 +174,7 @@ export function Sidebar() {
                     type="button"
                     onClick={() => toggleCategory(category.id)}
                     aria-expanded={!isCategoryCollapsed}
-                    className="flex w-full items-center justify-between gap-2 px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 transition-colors hover:text-gray-600"
+                    className="flex w-full items-center justify-between gap-2 px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 transition-colors hover:text-white"
                     data-testid={`sidebar-section-${category.id}`}
                   >
                     <span className="truncate">{category.label}</span>
@@ -188,13 +189,13 @@ export function Sidebar() {
                     const linkClasses = cn(
                       "group my-0.5 flex h-10 w-full min-w-0 items-center overflow-hidden rounded-lg border-s border-s-transparent ps-[9px] pe-1 transition-colors",
                       isActive
-                        ? "border-s-gray-300 bg-gray-100 font-medium text-gray-900"
-                        : "text-gray-600 hover:bg-gray-100/90 hover:text-gray-900",
+                        ? "border-s-emerald-400 bg-[#1b3631] font-medium text-slate-50"
+                        : "font-medium text-slate-50 hover:bg-[#202b35] hover:text-white",
                     );
                     const inner = (
                       <>
                         <span className="relative inline-flex shrink-0">
-                          <item.icon className={cn("h-5 w-5", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
+                          <item.icon className="h-5 w-5 text-slate-50 group-hover:text-white" />
                           {item.href === "/app/inbox" ? (
                             <InboxActivityNavBadge testId="sidebar-inbox-activity-badge" />
                           ) : null}
@@ -233,13 +234,13 @@ export function Sidebar() {
                               aria-label={commerceExpanded ? t("nav.collapseCommerce") : t("nav.expandCommerce")}
                               aria-expanded={commerceExpanded}
                               onClick={() => setCommerceExpanded(v => !v)}
-                              className="ms-9 mb-1 mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                              className="ms-9 mb-1 mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold text-slate-200 hover:bg-[#202b35] hover:text-white"
                             >
                               {commerceExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />}
                               <span>{commerceExpanded ? (isRTL ? "הסתרה" : commerceLocale === "es" ? "Ocultar" : "Hide") : (isRTL ? "הצגה" : commerceLocale === "es" ? "Mostrar" : "Show")}</span>
                             </button>
                             {commerceExpanded && (
-                              <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
+                              <div className="ms-4 border-s border-[#34414b] ps-3" data-testid="ecommerce-sidebar-modules">
                                 {commerceSubnav.map(module => {
                                   const isSelected = item.active && selectedCommerceView === module.id;
                                   return (
@@ -247,7 +248,7 @@ export function Sidebar() {
                                       <a data-testid={`ecommerce-sidebar-${module.id}`}
                                         aria-current={isSelected ? "page" : undefined}
                                         className={cn("block truncate rounded-md px-2 py-1.5 text-xs transition-colors",
-                                          isSelected ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600 hover:text-blue-700 hover:bg-slate-100")}>
+                                          isSelected ? "bg-[#1b3631] font-semibold text-slate-50" : "text-slate-50 hover:bg-[#202b35] hover:text-white")}>
                                         {isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}
                                       </a>
                                     </Link>
@@ -266,17 +267,17 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="shrink-0 border-t px-3 pb-3 pt-3">
+        <div className="shrink-0 border-t border-[#27313b] px-3 pb-3 pt-3">
           <SidebarSection visible={!collapsed}>
             <div className="w-[175px]">
               {user && (
                 <div className="mb-1 px-2">
-                  <div className="text-[10px] font-medium text-gray-400">{t("common.signedInAs", "Signed in as")}</div>
-                  <div className="truncate text-xs font-medium text-gray-700">{user.name}</div>
+                  <div className="text-[10px] font-medium text-slate-300">{t("common.signedInAs", "Signed in as")}</div>
+                  <div className="truncate text-xs font-medium text-slate-100">{user.name}</div>
                 </div>
               )}
               <div className="mb-2 px-2">
-                <LanguageSelector variant="default" className="w-full justify-start" />
+                <LanguageSelector variant="default" className="w-full justify-start text-slate-50 hover:bg-[#202b35] hover:text-white" />
               </div>
             </div>
           </SidebarSection>
@@ -288,7 +289,7 @@ export function Sidebar() {
                 onClick={logout}
                 data-testid="button-logout"
                 aria-label={t("common.logout", "Logout")}
-                className="flex h-10 w-full items-center overflow-hidden rounded-lg ps-[10px] text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                className="flex h-10 w-full items-center overflow-hidden rounded-lg ps-[10px] text-slate-50 transition-colors hover:bg-red-950 hover:text-red-100"
               >
                 <LogOut className="h-5 w-5 shrink-0" />
                 <span className={cn("ms-3 whitespace-nowrap font-medium transition-opacity", sidebarMotion, collapsed && "opacity-0")}>
