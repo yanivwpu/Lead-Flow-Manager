@@ -24,6 +24,7 @@ import {
   usableShopifyOwnerEmail,
   SHOPIFY_ONBOARDING_DAY5_THRESHOLD,
   SHOPIFY_ONBOARDING_DAY10_THRESHOLD,
+  SHOPIFY_ONBOARDING_ACTIVE_FOLLOWUP_MAX_DAYS,
 } from "../shared/shopifyOnboardingEmailEligibility";
 import {
   APP_INBOX_PATH,
@@ -41,6 +42,7 @@ import {
   renderShopifyActivationEmailDay5Html,
   renderShopifyActivationEmailDay10Html,
   renderShopifyWelcomeEmailHtml,
+  renderShopifyGrowthEngineSetupEmailHtml,
 } from "../server/email";
 
 const root = process.cwd();
@@ -372,4 +374,44 @@ test("in-app Shopify Day 0 copy uses existing modal, not a new one", () => {
   assert.ok(inbox.includes("emptyNoChannelsHintShopify"));
   const en = src("client/src/locales/en.json");
   assert.ok(en.includes("Shopify is connected. Next, connect WhatsApp"));
+});
+
+
+test("Connected Shopify merchants get setup-specific Day 5/10, not another connect-channel email", () => {
+  const basis = {
+    welcomeSent: true, day5Sent: false, day10Sent: false,
+    hasQualifyingChannel: true, hasUsableOwnerEmail: true,
+  };
+  assert.deepEqual(chooseShopifyOnboardingSequenceAction({
+    ...basis, daysSinceInstall: 5, engineActivated: false, catalogSynced: false,
+  }), { action: "day5", setupStep: "activate_engine" });
+  assert.deepEqual(chooseShopifyOnboardingSequenceAction({
+    ...basis, daysSinceInstall: 10, engineActivated: true, catalogSynced: false,
+  }), { action: "day10", alsoCompleteDay5: true, setupStep: "sync_products" });
+  assert.deepEqual(chooseShopifyOnboardingSequenceAction({
+    ...basis, daysSinceInstall: 5, engineActivated: true, catalogSynced: true,
+  }), { action: "mark_complete" });
+  assert.deepEqual(chooseShopifyOnboardingSequenceAction({
+    ...basis, daysSinceInstall: 5,
+  }), { action: "mark_complete" });
+  assert.equal(SHOPIFY_ONBOARDING_ACTIVE_FOLLOWUP_MAX_DAYS, 14);
+  assert.deepEqual(chooseShopifyOnboardingSequenceAction({
+    ...basis, daysSinceInstall: 40, engineActivated: false, catalogSynced: false,
+  }), { action: "mark_complete" });
+  assert.deepEqual(chooseShopifyOnboardingSequenceAction({
+    ...basis, daysSinceInstall: 8, day5Sent: true, day10Sent: true,
+    engineActivated: false, catalogSynced: false,
+  }), { action: "none" });
+  const activate = renderShopifyGrowthEngineSetupEmailHtml("Acme", "activate_engine", { appUrl });
+  const sync = renderShopifyGrowthEngineSetupEmailHtml("Acme", "sync_products", { appUrl });
+  assert.match(activate, /still needs activation/);
+  assert.match(sync, /Sync products/);
+  assert.ok(activate.includes("/app/ecommerce-growth-engine?view=setup"));
+  assert.ok(sync.includes("/app/ecommerce-growth-engine?view=products"));
+  assert.doesNotMatch(sync, /connect WhatsApp so/);
+  const service = src("server/shopifyOnboardingEmailService.ts");
+  assert.match(service, /merchantSetupStatus\(user.id, user.shopifyShop\)/);
+  assert.match(service, /setup_progress_unavailable/);
+  assert.match(service, /sendShopifyGrowthEngineSetupEmail/);
+  assert.match(service, /withShopifyMailPrivacyFence/);
 });
