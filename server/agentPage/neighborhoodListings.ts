@@ -8,6 +8,8 @@ import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCo
 import { canResolveIndexedPublicListing } from "@shared/inventory/publicListingPublication";
 import { isProductionDevSeedGuardEnabled } from "@shared/inventory/inventoryDevSeedGuard";
 import type { AgentPageListingCard } from "@shared/agent/agentPageTypes";
+import type { AgentPageListingBrowseFilters } from "@shared/agent/publicAgentPageBrowse";
+import { pageVerifiedNeighborhoodCards } from "@shared/agent/neighborhoodPropertyBrowse";
 import {
   coordinateWithinNeighborhood,
 } from "@shared/agent/neighborhoodListingGeo";
@@ -26,6 +28,11 @@ export type NeighborhoodListingResult = {
   sale: AgentPageListingCard[];
   rent: AgentPageListingCard[];
   hasOlderMatchingInventory: boolean;
+  totalSale: number;
+  totalRent: number;
+  hasMoreSale: boolean;
+  hasMoreRent: boolean;
+  candidateLimitReached: boolean;
 };
 
 export async function findNeighborhoodListings(input: {
@@ -34,11 +41,15 @@ export async function findNeighborhoodListings(input: {
   appOrigin: string;
   /** Allows historic examples only in private, authenticated owner previews. */
   ownerPreview?: boolean;
+  filters?: AgentPageListingBrowseFilters;
+  offset?: number;
+  limit?: number;
 }): Promise<NeighborhoodListingResult> {
   const mode = input.ownerPreview ? "owner_preview" : "public";
   const empty = (boundaryStatus: NeighborhoodListingResult["boundaryStatus"],
     boundarySource: string | null = null): NeighborhoodListingResult =>
-    ({ boundaryStatus, boundarySource, mode, sale: [], rent: [], hasOlderMatchingInventory: false });
+    ({ boundaryStatus, boundarySource, mode, sale: [], rent: [], hasOlderMatchingInventory: false,
+      totalSale: 0, totalRent: 0, hasMoreSale: false, hasMoreRent: false, candidateLimitReached: false });
 
   const boundary = await resolveNeighborhoodBoundary(input.neighborhood);
   if (boundary.status !== "verified") return empty(boundary.status);
@@ -68,8 +79,10 @@ export async function findNeighborhoodListings(input: {
     .orderBy(desc(inventoryListings.syncedAt), desc(inventoryListings.id))
     .limit(NEIGHBORHOOD_LISTING_MAX_CANDIDATES);
 
-  const sale: AgentPageListingCard[] = [];
-  const rent: AgentPageListingCard[] = [];
+  // MLS/workspace, exact polygon, compliance and freshness checks MUST precede
+  // any visitor-provided filters, sorting or pagination.
+  const allSale: AgentPageListingCard[] = [];
+  const allRent: AgentPageListingCard[] = [];
   let hasOlderMatchingInventory = false;
 
   for (const row of rows) {
@@ -89,16 +102,30 @@ export async function findNeighborhoodListings(input: {
     }
     if (listing.syncedAt < cutoff) hasOlderMatchingInventory = true;
     const card = inventoryListingToAgentPageCard(listing, input.appOrigin);
-    if (card.listingLabel === "FOR RENT") {
-      if (rent.length < NEIGHBORHOOD_LISTING_MAX_PER_TYPE) rent.push(card);
-    } else if (card.listingLabel === "FOR SALE") {
-      if (sale.length < NEIGHBORHOOD_LISTING_MAX_PER_TYPE) sale.push(card);
-    }
-    if (sale.length >= NEIGHBORHOOD_LISTING_MAX_PER_TYPE &&
-        rent.length >= NEIGHBORHOOD_LISTING_MAX_PER_TYPE) break;
+    if (card.listingLabel === "FOR RENT") allRent.push(card);
+    else if (card.listingLabel === "FOR SALE") allSale.push(card);
   }
+
+  const pageInput = {
+    filters: input.filters,
+    offset: input.offset,
+    limit: input.limit ?? NEIGHBORHOOD_LISTING_MAX_PER_TYPE,
+  };
+  const salePage = pageVerifiedNeighborhoodCards({
+    ...pageInput, cards: allSale,
+    filters: input.filters ? { ...input.filters, listingType: "sale", location: null } : undefined,
+  });
+  const rentPage = pageVerifiedNeighborhoodCards({
+    ...pageInput, cards: allRent,
+    filters: input.filters ? { ...input.filters, listingType: "rent", location: null } : undefined,
+  });
   return {
     boundaryStatus: "verified", boundarySource: boundary.source, mode,
-    sale, rent, hasOlderMatchingInventory,
+    sale: salePage.listings, rent: rentPage.listings, hasOlderMatchingInventory,
+    totalSale: salePage.total, totalRent: rentPage.total,
+    hasMoreSale: salePage.hasMore, hasMoreRent: rentPage.hasMore,
+    // Candidate bounds are bounded to protect shared DB reads. Never suggest
+    // these counts are exhaustive if this limit was reached.
+    candidateLimitReached: rows.length >= NEIGHBORHOOD_LISTING_MAX_CANDIDATES,
   };
 }
