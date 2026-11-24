@@ -162,6 +162,33 @@ export function NeighborhoodGuideVisualEditor({
 
   const selectedPhoto = photos.find((photo) => neighborhoodGuidePhotoId(photo.url) === selectedId);
 
+  // Some browsers discard an inactive contentEditable DOM when a dashboard tab
+  // is hidden or its parent subtree is temporarily detached. The React content
+  // prop remains the source of truth; restore it only if the DOM is actually
+  // empty, never while the agent is actively typing or inserting a photo.
+  function recoverEmptyEditor() {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (!editor.children.length ||
+        (content && !articleToText(editor).trim() &&
+          !editor.querySelector('[data-inline-photo-picker="true"]'))) {
+      restoreEditor(editor, content, photosRef.current);
+      lastAuthored.current = content;
+    }
+  }
+
+  useEffect(() => {
+    const onRestore = () => {
+      if (document.visibilityState !== "hidden") recoverEmptyEditor();
+    };
+    document.addEventListener("visibilitychange", onRestore);
+    window.addEventListener("pageshow", onRestore);
+    return () => {
+      document.removeEventListener("visibilitychange", onRestore);
+      window.removeEventListener("pageshow", onRestore);
+    };
+  }, [content]);
+
   function syncEditor() {
     const editor = editorRef.current;
     if (!editor || disabled) return;
@@ -385,7 +412,7 @@ export function NeighborhoodGuideVisualEditor({
           [&>figure]:my-6 [&>p:empty]:min-h-7"
         onInput={syncEditor} onKeyUp={rememberCursor} onMouseUp={rememberCursor}
         onPointerDown={startResizeFromHandle}
-        onFocus={rememberCursor}
+        onFocus={() => { recoverEmptyEditor(); rememberCursor(); }}
         onPaste={(event) => {
           event.preventDefault();
           // Plain-text paste prevents imported HTML, external images and unsafe tags.
