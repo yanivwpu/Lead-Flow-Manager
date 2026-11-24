@@ -32,7 +32,7 @@ function renderGuide(content: string, includePhoto = true) {
       parentUrl: "https://app.whachatcrm.com/agents/jane-agent",
       content,
       photos: includePhoto ? [
-        { url: photo.replace(".jpg", ".png"), alt: "Neighborhood cover" },
+        { url: photo.replace(id, "0f517ee0-66c8-4eeb-b2bd-8540f7aeb843").replace(".jpg", ".png"), alt: "Neighborhood cover" },
         { url: photo, alt: "Tree lined road near the park" },
       ] : [],
     },
