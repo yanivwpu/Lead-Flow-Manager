@@ -38,7 +38,9 @@ export function parseNeighborhoodGuideBlocks(content: string): NeighborhoodGuide
   return content.trim().split(/\n\s*\n/).map((section): NeighborhoodGuideBlock => {
     const text = section.trim();
     const marker = parseNeighborhoodPhotoMarker(text);
-    if (marker) return { type: "photo", id: marker.id, width: marker.width };
+    if (marker) return marker.width === 100
+      ? { type: "photo", id: marker.id }
+      : { type: "photo", id: marker.id, width: marker.width };
     if (text.startsWith("## ")) return { type: "heading", text: text.slice(3) };
     return { type: "paragraph", text };
   });
