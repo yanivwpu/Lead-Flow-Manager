@@ -295,6 +295,17 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   // Only saved neighborhood photo IDs can become inline images. This prevents
   // arbitrary article Markdown or HTML from injecting external image URLs.
   const inlineGuidePhotoMarkers = new Set<string>();
+  // Match the editor's small inline formatting vocabulary while escaping every
+  // character supplied by the agent. Never render arbitrary HTML from content.
+  function guideInlineHtml(value: string): string {
+    return value.split(/(\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*)/g).map((part) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
+        return `<strong>${escapeHtml(part.slice(2, -2))}</strong>`;
+      if (part.startsWith("*") && part.endsWith("*") && part.length > 2)
+        return `<em>${escapeHtml(part.slice(1, -1))}</em>`;
+      return escapeHtml(part);
+    }).join("");
+  }
   const guideEditorialHtml = guideParagraphs.map((text) => {
     const photo = guidePhotos.find((candidate) => neighborhoodPhotoMarker(candidate.url) === text);
     if (photo) {
@@ -306,8 +317,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     // Removed photos should not leave visible technical tokens on public pages.
     if (/^\[\[photo:[a-f0-9-]{36}\]\]$/i.test(text)) return "";
     return text.startsWith("## ") && text.length <= 84
-      ? `<h3 class="neighborhood-guide-subheading">${escapeHtml(text.slice(3).trim())}</h3>`
-      : `<p>${escapeHtml(text)}</p>`;
+      ? `<h3 class="neighborhood-guide-subheading">${guideInlineHtml(text.slice(3).trim())}</h3>`
+      : `<p>${guideInlineHtml(text)}</p>`;
   }).join("");
   const galleryGuidePhotos = guidePhotos.slice(1).filter((photo) =>
     !inlineGuidePhotoMarkers.has(neighborhoodPhotoMarker(photo.url) ?? ""));
@@ -373,7 +384,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     primaryMarket ? `Serving ${data.marketArea}.` : "",
     data.bio || "Contact the agent for help buying or selling a home.",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\s+/g, " ").trim() : profileSummary;
+  const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\*+/g, "").replace(/\s+/g, " ").trim() : profileSummary;
   const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
   const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
     ? "index, follow"
