@@ -92,6 +92,7 @@ test("owner endpoints, public HTML, persistence and map editing retain custom-ar
   assert.match(listings, /row\.country/);
   assert.match(listings, /row\.city/);
   assert.match(html, /agent-defined custom area, not an official neighborhood boundary/);
+  assert.match(html, /data\\.boundaryStatus !== "verified" && data\\.boundaryStatus !== "custom"/);
   assert.match(editor, /Apply this area/);
   assert.match(editor, /Remove custom area/);
   assert.match(editor, /© OpenStreetMap contributors/);
