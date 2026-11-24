@@ -259,7 +259,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
         </div>
       ))}
       {active && data && (
-        <div className="space-y-4 rounded-lg bg-slate-50/70 p-4">
+        <div data-rge-neighborhood-editor="true" className="space-y-4 rounded-lg bg-slate-50/70 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-semibold">{active === NEW_NEIGHBORHOOD ? "New neighborhood" : "Edit neighborhood"}</h4>
             {dirty && <span role="status" className="text-sm text-slate-700">
