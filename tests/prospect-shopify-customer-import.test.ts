@@ -36,7 +36,7 @@ test("Merchant scope, privacy locks, preview TTL and no-send behavior are hard s
   const eligibility=readFileSync("server/prospectImport/prospectIntelligenceEligibility.ts","utf8");
   const ui=readFileSync("client/src/components/settings/GhlProspectImport.tsx","utf8");
   assert.match(src,/isShopifyContactInstallationActive/);
-  assert.match(src,/integration\.userId,userId/);
+  assert.match(src,/eq\(integrations\.userId,userId\)/);
   assert.match(src,/customerPrivacyLocked/);
   assert.match(src,/pg_advisory_xact_lock/);
   assert.match(src,/preview\.filterFingerprint!==input\.fingerprint/);
