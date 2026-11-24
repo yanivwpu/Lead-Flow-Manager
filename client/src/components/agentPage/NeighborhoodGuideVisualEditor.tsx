@@ -89,7 +89,14 @@ function createPhotoNode(photo: NeighborhoodPhoto, width = 100): HTMLElement | n
   const caption = document.createElement("figcaption");
   caption.className = "mt-2 text-center text-sm text-slate-500";
   caption.textContent = photo.alt;
-  figure.append(img, caption);
+  const grip = document.createElement("button");
+  grip.type = "button";
+  grip.dataset.photoResizeHandle = "true";
+  grip.setAttribute("aria-label", "Drag to resize image");
+  grip.title = "Drag to resize";
+  grip.textContent = "↘";
+  grip.className = "absolute bottom-8 right-2 flex h-9 w-9 touch-none items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-xl font-semibold text-slate-700 shadow-sm cursor-nwse-resize hover:bg-white";
+  figure.append(img, caption, grip);
   return figure;
 }
 
@@ -267,6 +274,41 @@ export function NeighborhoodGuideVisualEditor({
     syncEditor();
   }
 
+
+  function startResizeFromHandle(event: React.PointerEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || disabled) return;
+    const handle = target.closest<HTMLElement>("[data-photo-resize-handle]");
+    const editor = editorRef.current;
+    const figure = handle?.closest<HTMLElement>("figure[data-photo-id]");
+    if (!figure || !editor) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = figure.dataset.photoId;
+    if (!id) return;
+    const initialX = event.clientX;
+    const initialWidth = normalizeNeighborhoodPhotoWidth(Number(figure.dataset.photoWidth || "100"));
+    const editorWidth = Math.max(editor.clientWidth - 40, 200);
+    setSelectedId(id);
+    setSelectedWidth(initialWidth);
+    const move = (e: PointerEvent) => {
+      const delta = ((e.clientX - initialX) / editorWidth) * 100;
+      const next = Math.max(40, Math.min(100, Math.round((initialWidth + delta) / 5) * 5));
+      figure.dataset.photoWidth = String(next);
+      figure.style.width = next + "%";
+      setSelectedWidth(next);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      syncEditor();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }
+
   function toolbarButton(label: string, icon: React.ReactNode, action: () => void) {
     return (
       <Button type="button" size="icon" variant="ghost" disabled={disabled}
@@ -342,6 +384,7 @@ export function NeighborhoodGuideVisualEditor({
           [&>p]:mb-4 [&>p]:min-h-7 [&>h3]:mb-3 [&>h3]:mt-5 [&>h3]:text-xl [&>h3]:font-semibold
           [&>figure]:my-6 [&>p:empty]:min-h-7"
         onInput={syncEditor} onKeyUp={rememberCursor} onMouseUp={rememberCursor}
+        onPointerDown={startResizeFromHandle}
         onFocus={rememberCursor}
         onPaste={(event) => {
           event.preventDefault();
@@ -378,7 +421,7 @@ export function NeighborhoodGuideVisualEditor({
               <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" /> Remove from article
             </Button>
           </div>
-          <p className="text-xs text-slate-500">Drag the width slider to enlarge or shrink the selected picture. The published guide will use the same width.</p>
+          <p className="text-xs text-slate-500">Drag the corner handle on the photo, or use the width slider. The published guide will use the same width.</p>
         </div>
       )}
       <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
