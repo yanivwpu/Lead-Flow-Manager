@@ -24,7 +24,7 @@ export type AgentPageListingCard = {
 
 /** Public guide cards are server-selected; never trust a neighborhood name alone. */
 export type NeighborhoodListingRenderData = {
-  boundaryStatus: "verified" | "unsupported" | "unmatched" | "unavailable";
+  boundaryStatus: "verified" | "custom" | "unsupported" | "unmatched" | "unavailable";
   boundarySource: string | null;
   mode: "public" | "owner_preview";
   sale: AgentPageListingCard[];

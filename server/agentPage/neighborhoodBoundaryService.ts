@@ -1,3 +1,4 @@
+import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
 import {
   boundaryBounds, normalizeNeighborhoodName, selectExactNamedNeighborhood,
   supportsFortLauderdaleBoundary, type NeighborhoodBoundary, type BoundaryBounds,
@@ -54,7 +55,7 @@ const ERROR_TTL_MS = 5 * 60 * 1000;
 const GIS_RESPONSE_MAX_BYTES = 3_000_000;
 
 export type NeighborhoodBoundaryResult =
-  | { status: "verified"; source: string; geometry: NeighborhoodBoundary; bounds: BoundaryBounds }
+  | { status: "verified" | "custom"; source: string; geometry: NeighborhoodBoundary; bounds: BoundaryBounds }
   | { status: "unsupported" | "unmatched" | "unavailable"; source: null };
 
 type CachedDataset = { expires: number; features: unknown[] | null };
@@ -137,7 +138,14 @@ async function fetchOfficialBoundaries(source: OfficialBoundarySource): Promise<
 
 export async function resolveNeighborhoodBoundary(input: {
   name: string; city: string; state: string; country?: string;
+  customBoundary?: unknown;
 }): Promise<NeighborhoodBoundaryResult> {
+  if (input.customBoundary != null) {
+    const geometry = readCustomNeighborhoodBoundary(input.customBoundary);
+    if (!geometry) return { status: "unmatched", source: null };
+    return { status: "custom", source: "Agent-defined custom area (not official GIS)",
+      geometry, bounds: boundaryBounds(geometry) };
+  }
   const source = sourceFor(input);
   if (!source) return { status: "unsupported", source: null };
   const features = await fetchOfficialBoundaries(source);

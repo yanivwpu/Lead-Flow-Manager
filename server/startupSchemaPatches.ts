@@ -170,6 +170,10 @@ CREATE INDEX IF NOT EXISTS agent_neighborhood_pages_published_idx ON agent_neigh
     sql: "ALTER TABLE agent_neighborhood_pages ADD COLUMN IF NOT EXISTS country text NOT NULL DEFAULT 'US'",
   },
   {
+    tag: "20261124_agent_neighborhood_custom_boundary",
+    sql: "ALTER TABLE agent_neighborhood_pages ADD COLUMN IF NOT EXISTS custom_boundary jsonb",
+  },
+  {
     tag: "20261119_agent_page_profile_publication",
     sql: `-- Preserve old live profiles and leave previously non-public profiles private.
 DO $$

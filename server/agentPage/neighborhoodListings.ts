@@ -11,7 +11,7 @@ import type { AgentPageListingCard } from "@shared/agent/agentPageTypes";
 import type { AgentPageListingBrowseFilters } from "@shared/agent/publicAgentPageBrowse";
 import { pageVerifiedNeighborhoodCards } from "@shared/agent/neighborhoodPropertyBrowse";
 import {
-  coordinateWithinNeighborhood,
+  coordinateWithinNeighborhood, normalizeNeighborhoodName,
 } from "@shared/agent/neighborhoodListingGeo";
 import { inventoryListingToAgentPageCard } from "./agentPageListingCard";
 import { resolveNeighborhoodBoundary } from "./neighborhoodBoundaryService";
@@ -22,7 +22,7 @@ export const NEIGHBORHOOD_LISTING_MAX_CANDIDATES = 3000;
 export const NEIGHBORHOOD_PUBLIC_FRESHNESS_DAYS = 14;
 
 export type NeighborhoodListingResult = {
-  boundaryStatus: "verified" | "unsupported" | "unmatched" | "unavailable";
+  boundaryStatus: "verified" | "custom" | "unsupported" | "unmatched" | "unavailable";
   boundarySource: string | null;
   mode: "public" | "owner_preview";
   sale: AgentPageListingCard[];
@@ -37,7 +37,7 @@ export type NeighborhoodListingResult = {
 
 export async function findNeighborhoodListings(input: {
   userId: string;
-  neighborhood: { name: string; city: string; state: string; country?: string };
+  neighborhood: { name: string; city: string; state: string; country?: string; customBoundary?: unknown };
   appOrigin: string;
   /** Allows historic examples only in private, authenticated owner previews. */
   ownerPreview?: boolean;
@@ -52,13 +52,13 @@ export async function findNeighborhoodListings(input: {
       totalSale: 0, totalRent: 0, hasMoreSale: false, hasMoreRent: false, candidateLimitReached: false });
 
   const boundary = await resolveNeighborhoodBoundary(input.neighborhood);
-  if (boundary.status !== "verified") return empty(boundary.status);
+  if (boundary.status !== "verified" && boundary.status !== "custom") return empty(boundary.status);
 
   const [settings] = await db.select({
     enabled: aiBusinessKnowledge.publishListingsPublicly,
   }).from(aiBusinessKnowledge).where(eq(aiBusinessKnowledge.userId, input.userId)).limit(1);
 
-  if (!settings?.enabled) return empty("verified", boundary.source);
+  if (!settings?.enabled) return empty(boundary.status, boundary.source);
 
   const cutoff = new Date(Date.now() - NEIGHBORHOOD_PUBLIC_FRESHNESS_DAYS * 86400000);
   const conditions = [
@@ -85,8 +85,16 @@ export async function findNeighborhoodListings(input: {
   const allRent: AgentPageListingCard[] = [];
   let hasOlderMatchingInventory = false;
 
+  const cityKey = (value: string) => normalizeNeighborhoodName(value)
+    .replace(/^ft /, "fort ").replace(/^st /, "saint ");
   for (const row of rows) {
     if (!coordinateWithinNeighborhood(row.latitude, row.longitude, boundary.geometry)) continue;
+    // A hand-drawn area is not independently tied to the typed locality.
+    // Do not advertise properties from a different city or country.
+    if (boundary.status === "custom" && (
+      cityKey(row.city ?? "") !== cityKey(input.neighborhood.city) ||
+      (row.country ?? "US").toUpperCase() !== (input.neighborhood.country ?? "US").toUpperCase()
+    )) continue;
     const listing = {
       ...row, listingCompliance: normalizeListingCompliance(row.listingCompliance),
     } satisfies InventoryListing;
@@ -120,7 +128,7 @@ export async function findNeighborhoodListings(input: {
     filters: input.filters ? { ...input.filters, listingType: "rent", location: null } : undefined,
   });
   return {
-    boundaryStatus: "verified", boundarySource: boundary.source, mode,
+    boundaryStatus: boundary.status, boundarySource: boundary.source, mode,
     sale: salePage.listings, rent: rentPage.listings, hasOlderMatchingInventory,
     totalSale: salePage.total, totalRent: rentPage.total,
     hasMoreSale: salePage.hasMore, hasMoreRent: rentPage.hasMore,

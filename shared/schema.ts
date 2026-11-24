@@ -1737,6 +1737,7 @@ export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
   city: text("city").notNull(),
   state: text("state").notNull(),
   country: text("country").notNull().default("US"),
+  customBoundary: jsonb("custom_boundary").$type<import("./agent/neighborhoodListingGeo").PolygonBoundary | null>(),
   content: text("content").notNull(),
   photos: jsonb("photos").$type<Array<{ url: string; alt: string }>>().notNull().default(sql`'[]'::jsonb`),
   published: boolean("published").notNull().default(false),

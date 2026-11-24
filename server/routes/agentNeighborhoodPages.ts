@@ -1,6 +1,9 @@
 import { Router, type Express, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
+import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
+import { geocodeLocation } from "../prospectAI/providers/googlePlacesProvider";
+import type { PolygonBoundary } from "@shared/agent/neighborhoodListingGeo";
 import { buildPublicAgentPageHtml } from "@shared/agent/publicAgentPageHtml";
 import {
   buildNeighborhoodUrl, neighborhoodContentComplete,
@@ -22,11 +25,23 @@ import {
 } from "../agentPage/neighborhoodPages";
 import { getAppOrigin } from "../urlOrigins";
 
+const mapCenterQuery = z.object({
+  name: z.string().trim().min(1).max(80),
+  city: z.string().trim().min(1).max(80),
+  state: z.string().trim().min(1).max(60),
+  country: z.string().trim().regex(/^[a-zA-Z]{2}$/),
+});
+const mapCenterCache = new Map<string, { latitude: number; longitude: number; expires: number }>();
+const mapCenterDailyQuota = new Map<string, { day: string; count: number }>();
+let lastMapCenterLookup = 0;
+
 const fields = z.object({
   name: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   city: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   state: z.string().trim().min(1).max(60).regex(/[\p{L}\p{N}]/u),
   country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).default("US"),
+  customBoundary: z.custom<PolygonBoundary>((value) => readCustomNeighborhoodBoundary(value) !== null)
+    .transform((value) => readCustomNeighborhoodBoundary(value)!).nullable().optional(),
   content: z.string().trim().max(5000),
   photos: z.array(z.object({
     url: z.string().url().max(600),
@@ -35,8 +50,8 @@ const fields = z.object({
 });
 
 function settings(page: NeighborhoodPage, agentSlug: string | null) {
-  const { id, name, city, state, country, content, photos, slug, published, updatedAt } = page;
-  return { id, name, city, state, country, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
+  const { id, name, city, state, country, customBoundary, content, photos, slug, published, updatedAt } = page;
+  return { id, name, city, state, country, customBoundary, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
     ? buildNeighborhoodUrl(agentSlug, slug, getAppOrigin()) : null };
 }
 
@@ -82,6 +97,39 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const [agent, pages] = await Promise.all([getAgentPageSettingsRow(userId), listNeighborhoodPages(userId)]);
     const liveSlug = agent && canResolvePublicAgentPage(agent) ? agent.agentPageSlug : null;
     res.json({ canPublish: Boolean(liveSlug), pages: pages.map((page) => settings(page, liveSlug)) });
+  }));
+
+  // Explicit click-to-locate only; never autocomplete or unbounded geocoding.
+  // Reuse the platform's existing optional Google Places credential, without
+  // exposing it to the browser or requiring a new map provider.
+  router.get("/map-center", run(async (req, res, userId) => {
+    const parsed = mapCenterQuery.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: "Enter a valid city, region and country first." });
+    const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
+    if (!key) return res.status(503).json({ error: "Automatic map location is unavailable; enter map coordinates to center the map." });
+    const { name, city, state, country } = parsed.data;
+    const queryKey = [name, city, state, country].map((s) => s.toLowerCase()).join("|");
+    const now = Date.now();
+    const cached = mapCenterCache.get(queryKey);
+    if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude });
+    if (now - lastMapCenterLookup < 1000) return res.status(429).json({ error: "Try locating again in a moment." });
+    const day = new Date(now).toISOString().slice(0, 10);
+    const usage = mapCenterDailyQuota.get(userId);
+    if (usage?.day === day && usage.count >= 15) return res.status(429).json({ error: "Daily map location limit reached. Enter coordinates manually." });
+    if (mapCenterDailyQuota.size > 10000) mapCenterDailyQuota.clear();
+    mapCenterDailyQuota.set(userId, { day, count: (usage?.day === day ? usage.count : 0) + 1 });
+    lastMapCenterLookup = now;
+    // Neighborhood match preferred; city-level center is only a map starting point,
+    // never treated as a validated property boundary.
+    const context = [name, city, state, country].join(", ");
+    let coordinates = await geocodeLocation(context, key);
+    if (!coordinates) coordinates = await geocodeLocation([city, state, country].join(", "), key);
+    if (!coordinates || Math.abs(coordinates.latitude) > 85) {
+      return res.status(404).json({ error: "No map center found. You can enter coordinates manually." });
+    }
+    if (mapCenterCache.size > 2000) mapCenterCache.clear();
+    mapCenterCache.set(queryKey, { ...coordinates, expires: now + 7 * 24 * 3600000 });
+    return res.json(coordinates);
   }));
 
   router.post("/", run(async (req, res, userId) => {

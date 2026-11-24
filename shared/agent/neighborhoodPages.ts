@@ -1,4 +1,5 @@
 import { buildAgentPageUrl } from "./agentPageSlug";
+import type { PolygonBoundary } from "./neighborhoodListingGeo";
 
 export const NEIGHBORHOOD_GUIDE_MAX_PHOTOS = 6;
 export const NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -11,6 +12,8 @@ export type NeighborhoodContent = {
   state: string;
   /** ISO 3166-1 alpha-2; omitted only on pre-migration US drafts. */
   country?: string;
+  /** Owner-defined map shape, not official GIS boundary; null selects official source. */
+  customBoundary?: PolygonBoundary | null;
   content: string;
   /** Optional for existing pages and previously saved browser drafts. */
   photos?: NeighborhoodPhoto[];
