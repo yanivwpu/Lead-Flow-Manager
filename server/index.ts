@@ -301,11 +301,15 @@ function skipGlobalBodyParser(path: string): boolean {
     path.startsWith("/api/webhooks/calendly") ||
     path.startsWith("/api/webhooks/woocommerce") ||
     path === "/api/ext/webhook" ||
-    path === "/api/ghl/webhook"
+    path === "/api/ghl/webhook" ||
+    path === "/api/growth-tools/prospect-import/csv/preview"
   );
 }
 
 registerShopifyPrivacyAlertReceiver(app);
+// CSV preview is the only larger JSON body path; its payload is separately capped
+// and validated to 512 KiB of user data by the Prospect Import parser.
+app.use("/api/growth-tools/prospect-import/csv/preview", express.json({ limit: "2mb" }));
 const globalJsonParser = express.json();
 app.use((req: Request, _res: Response, next: NextFunction) => {
   if (skipGlobalBodyParser(req.path)) {
