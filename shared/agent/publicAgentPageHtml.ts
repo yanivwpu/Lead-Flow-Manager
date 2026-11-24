@@ -1,5 +1,6 @@
 import { agentPageNavigationCss, agentPageNavigationScript } from "./publicAgentPageNavigation";
-import { neighborhoodPhotoMarker, neighborhoodTitle } from "./neighborhoodPages";
+import { neighborhoodTitle } from "./neighborhoodPages";
+import { neighborhoodGuidePhotoId, parseNeighborhoodPhotoMarker } from "./neighborhoodGuideBlocks";
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { listingTypeChipClass } from "./agentPageEmbed";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
@@ -307,21 +308,25 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     }).join("");
   }
   const guideEditorialHtml = guideParagraphs.map((text) => {
-    const photo = guidePhotos.find((candidate) => neighborhoodPhotoMarker(candidate.url) === text);
-    if (photo) {
-      inlineGuidePhotoMarkers.add(text);
-      return `<figure class="neighborhood-guide-inline-photo"><img src="${escapeHtml(photo.url)}"
+    const reference = parseNeighborhoodPhotoMarker(text);
+    if (reference) {
+      // Only trusted page-uploaded photos are renderable. Width is restricted
+      // to a validated percentage, never raw agent-authored CSS.
+      const photo = guidePhotos.find((candidate) => neighborhoodGuidePhotoId(candidate.url) === reference.id);
+      if (!photo) return "";
+      inlineGuidePhotoMarkers.add(reference.id);
+      return `<figure class="neighborhood-guide-inline-photo" style="width:${reference.width}%"><img src="${escapeHtml(photo.url)}"
         alt="${escapeHtml(photo.alt)}" loading="lazy" decoding="async" />
         <figcaption>${escapeHtml(photo.alt)}</figcaption></figure>`;
     }
-    // Removed photos should not leave visible technical tokens on public pages.
-    if (/^\[\[photo:[a-f0-9-]{36}\]\]$/i.test(text)) return "";
+    // Unknown or expired photo tokens never appear as visible user text.
+    if (/^\[\[photo:/i.test(text)) return "";
     return text.startsWith("## ") && text.length <= 84
       ? `<h3 class="neighborhood-guide-subheading">${guideInlineHtml(text.slice(3).trim())}</h3>`
       : `<p>${guideInlineHtml(text)}</p>`;
   }).join("");
   const galleryGuidePhotos = guidePhotos.slice(1).filter((photo) =>
-    !inlineGuidePhotoMarkers.has(neighborhoodPhotoMarker(photo.url) ?? ""));
+    !inlineGuidePhotoMarkers.has(neighborhoodGuidePhotoId(photo.url) ?? ""));
 
   const guideHtml = neighborhood ? `<article class="neighborhood-guide" aria-labelledby="local-guide-title">
     <div class="neighborhood-guide-hero${guideHero ? " has-photo" : ""}">
@@ -384,7 +389,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     primaryMarket ? `Serving ${data.marketArea}.` : "",
     data.bio || "Contact the agent for help buying or selling a home.",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\*+/g, "").replace(/\s+/g, " ").trim() : profileSummary;
+  const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}(?:\|\d{2,3})?\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\*+/g, "").replace(/\s+/g, " ").trim() : profileSummary;
   const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
   const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
     ? "index, follow"
@@ -706,7 +711,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-guide-editorial { padding: 4px 0 14px; }
     .neighborhood-guide-editorial p { font-size: 1rem; line-height: 1.85; color: #334155; margin: 0 0 20px; }
     .neighborhood-guide-editorial .neighborhood-guide-subheading { font-size: 1.15rem; margin: 28px 0 10px; }
-    .neighborhood-guide-inline-photo { margin: 26px 0; }
+    .neighborhood-guide-inline-photo { margin: 26px auto; max-width: 100%; }
     .neighborhood-guide-inline-photo img { display: block; width: 100%; max-height: 480px; object-fit: cover; border-radius: 12px; }
     .neighborhood-guide-inline-photo figcaption { margin-top: 8px; color: #64748b; font-size: .85rem; line-height: 1.5; }
     .neighborhood-guide-gallery { margin-top: 10px; padding-top: 26px; border-top: 1px solid var(--border); }
