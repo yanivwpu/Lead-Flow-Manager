@@ -505,6 +505,57 @@ export async function sendShopifyActivationEmailDay10(
   });
 }
 
+/**
+ * Reuse the original Shopify Day 5/10 slots when a messaging channel is
+ * connected but the merchant has not activated the engine or synced products.
+ * No extra campaign, send schedule, stored flags, or implied activation.
+ */
+export function renderShopifyGrowthEngineSetupEmailHtml(
+  firstName: string,
+  step: "activate_engine" | "sync_products",
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl } = activationEmailContext(options);
+  const activate = step === "activate_engine";
+  const destination = activate
+    ? `${appUrl}/app/ecommerce-growth-engine?view=setup`
+    : `${appUrl}/app/ecommerce-growth-engine?view=products`;
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(firstName)},`),
+    emailParagraph("Thanks for connecting a messaging channel to WhachatCRM."),
+    emailParagraph(activate
+      ? "Your Shopify Growth Engine still needs activation before you can set up shopping workflows."
+      : "Your Shopify Growth Engine is activated, but your store's product catalog has not completed its first sync."),
+    emailParagraph(activate
+      ? "Open your Shopify Growth Engine setup to activate it when you're ready."
+      : "Open Products, approve product access if prompted, and choose Sync products. This gives AI Shopping your store's actual products, prices, and inventory."),
+    emailButton(destination, activate ? "Open Growth Engine setup" : "Sync Shopify products"),
+    emailParagraph("Need a hand? Reply to this email and tell us where you're stuck."),
+  ].join("");
+  return renderBrandedEmail({
+    title: activate ? "Finish your Shopify Growth Engine setup" : "Sync your Shopify products",
+    bodyHtml: body,
+    footerHtml: emailActivationFooter(appUrl),
+  });
+}
+
+export async function sendShopifyGrowthEngineSetupEmail(
+  firstName: string,
+  email: string,
+  day: 5 | 10,
+  step: "activate_engine" | "sync_products",
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: step === "activate_engine"
+      ? "Finish setting up your Shopify Growth Engine"
+      : "Your Shopify products are ready to sync",
+    privacyContext: "shopify",
+    html: renderShopifyGrowthEngineSetupEmailHtml(firstName, step),
+    ...(day === 10 ? { replyTo: WHACHATCRM_SUPPORT_EMAIL } : {}),
+  });
+}
+
 /** Verification email for public signup (not an onboarding/welcome sequence). */
 export async function sendEmailVerificationEmail(
   name: string,
