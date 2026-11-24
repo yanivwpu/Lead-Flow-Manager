@@ -198,6 +198,7 @@ export function registerProspectImportRoutes(app: Express): void {
           return res.status(400).json({error:"Choose a CSV no larger than 512 KB."});
         }
         const destinationUserId=await resolveProspectWorkspaceUserId((req.user as {id:string}).id);
+        if(destinationUserId!==(req.user as {id:string}).id) return res.status(403).json({error:"CSV import must stay in your own Prospect AI workspace."});
         const preview=await previewCsvProspects({
           csvText,filters:filters||{},destinationUserId,
           initiatedByUserId:(req.user as {id:string}).id,
@@ -221,6 +222,7 @@ export function registerProspectImportRoutes(app: Express): void {
           return res.status(400).json({error:"Confirm your CSV data is authorized and previewed."});
         }
         const destinationUserId=await resolveProspectWorkspaceUserId((req.user as {id:string}).id);
+        if(destinationUserId!==(req.user as {id:string}).id) return res.status(403).json({error:"CSV import must stay in your own Prospect AI workspace."});
         const job=await startCsvProspectImport({
           previewJobId,filterFingerprint,
           batchName:String(options.batchName||""),
