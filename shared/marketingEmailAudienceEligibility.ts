@@ -90,3 +90,23 @@ export function hasLegacyEmailMarketingOptOut(fields: unknown): boolean {
     f.campaignOptOut === true || f.marketingOptIn === false ||
     f.suppressed === true || f.emailBounced === true || f.bounced === true;
 }
+
+export type MarketingEmailAudienceSource = "all" | "shopify" | "csv" | "crm";
+export type MarketingEmailAudiencePreviewRow = {
+  contactId: string;
+  name: string;
+  email: string | null;
+  source: Exclude<MarketingEmailAudienceSource, "all">;
+  decision: MarketingEmailAudienceDecision;
+  reason: MarketingEmailAudienceReason;
+};
+export type MarketingEmailAudiencePreview = {
+  source: MarketingEmailAudienceSource;
+  total: number;
+  offset: number;
+  limit: number;
+  rows: MarketingEmailAudiencePreviewRow[];
+  counts: Record<MarketingEmailAudienceDecision, number>;
+  /** Prospect AI general marketing dispatch remains behind controlled release gates. */
+  sendingEnabled: false;
+};
