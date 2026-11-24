@@ -174,7 +174,7 @@ export function NeighborhoodBoundaryEditor({
           style={{ height: MAP_HEIGHT }} aria-label={t("rgeMap.map")}>
           {tiles.map((tile) => <img key={tile.id} alt="" src={tile.url} width={TILE} height={TILE}
             decoding="async" referrerPolicy="strict-origin-when-cross-origin" draggable={false}
-            style={{ position: "absolute", width: TILE, height: TILE, left: tile.left, top: tile.top, maxWidth: "none" }} />)}
+            style={{ position: "absolute", width: TILE, height: TILE, left: tile.left, top: tile.top, maxWidth: "none", pointerEvents: "none" }} />)}
           <svg width="100%" height="100%" className="absolute inset-0 cursor-crosshair"
             role="img" aria-label={t("rgeMap.clickCorners")} onClick={addPoint}>
             {points.length >= 3 && <polygon points={polygonPoints} fill="rgba(16,185,129,.16)" stroke="#047857" strokeWidth={2}/>}
