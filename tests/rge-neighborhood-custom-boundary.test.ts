@@ -252,6 +252,7 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
     return Boolean(view && JSON.parse(view).open && JSON.parse(view).zoom >= 14);
   });
   await page.evaluate(() => (window as any).__switchDashboardTab());
+  await page.locator("#other-dashboard-tab").waitFor();
   assert.equal(await page.locator("#other-dashboard-tab").count(), 1);
   await page.evaluate(() => (window as any).__switchDashboardTab());
   await page.locator('[data-rge-map-toggle="true"]').waitFor();
