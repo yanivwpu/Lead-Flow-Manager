@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
 import type { PolygonBoundary, Position } from "@shared/agent/neighborhoodListingGeo";
+import { readNeighborhoodMapSession, writeNeighborhoodMapSession } from "@/lib/neighborhoodMapSession";
 
 const TILE = 256;
 const MAP_HEIGHT = 340;
@@ -34,27 +35,35 @@ function initialCenter(boundary?: PolygonBoundary | null): Center {
 }
 
 export function NeighborhoodBoundaryEditor({
-  boundary, name, city, state, country, disabled, onChange,
+  boundary, name, city, state, country, sessionKey, disabled, onChange,
 }: {
   boundary?: PolygonBoundary | null;
   name: string;
   city: string;
   state: string;
   country: string;
+  sessionKey: string;
   disabled: boolean;
   onChange: (next: PolygonBoundary | null) => void;
 }) {
   const { t } = useTranslation();
-  const initial = useMemo(() => initialCenter(boundary), []);
+  const restored = useMemo(() => {
+    try { return readNeighborhoodMapSession(window.sessionStorage, sessionKey); }
+    catch { return null; }
+  }, [sessionKey]);
+  const savedKey = JSON.stringify(boundary ?? null);
+  const restoredCorners = restored?.boundaryKey === savedKey ? restored.vertices : null;
+  const initial = useMemo(() => restored?.center ?? initialCenter(boundary), [sessionKey]);
   const [center, setCenter] = useState<Center>(initial);
-  const [zoom, setZoom] = useState(boundary ? 14 : 3);
+  const [zoom, setZoom] = useState(restored?.zoom ?? (boundary ? 14 : 3));
   const [size, setSize] = useState({ width: 600, height: MAP_HEIGHT });
-  const [vertices, setVertices] = useState<Position[]>(() => boundary?.coordinates[0]?.slice(0, -1) ?? []);
+  const [vertices, setVertices] = useState<Position[]>(() =>
+    restoredCorners ?? boundary?.coordinates[0]?.slice(0, -1) ?? []);
   const [latInput, setLatInput] = useState(String(initial.lat.toFixed(5)));
   const [lonInput, setLonInput] = useState(String(initial.lon.toFixed(5)));
   const [status, setStatus] = useState("");
   const [locating, setLocating] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(restored?.open ?? false);
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -112,6 +121,17 @@ export function NeighborhoodBoundaryEditor({
     return () => element.removeEventListener("wheel", onWheel);
   }, [open, center, zoom]);
 
+  // Map navigation survives switching dashboard pages or browser tabs.
+  // These are local view/corner drafts only; MLS geometry is never changed until
+  // the agent explicitly applies the area and saves the neighborhood page.
+  useEffect(() => {
+    try {
+      writeNeighborhoodMapSession(window.sessionStorage, sessionKey, {
+        open, center, zoom, vertices, boundaryKey: savedKey,
+      });
+    } catch { /* storage may be blocked in private browsing */ }
+  }, [sessionKey, open, center, zoom, vertices, savedKey]);
+
   useEffect(() => {
     if (!expanded) return;
     const previous = document.body.style.overflow;
@@ -129,13 +149,17 @@ export function NeighborhoodBoundaryEditor({
   // The parent can restore a saved page on Discard, or receive a newer save
   // from another browser tab. Do not leave stale, uncommitted map vertices
   // visible after its boundary prop changes.
-  const boundaryKey = JSON.stringify(boundary ?? null);
+  const boundaryKey = savedKey;
+  const previousBoundaryKey = useRef(boundaryKey);
   const locallyAppliedBoundary = useRef<string | null>(null);
   useEffect(() => {
+    // Initial mount has already restored the page-specific session. Do not
+    // erase pending corners when the editor is reopened after tab navigation.
+    if (previousBoundaryKey.current === boundaryKey) return;
+    previousBoundaryKey.current = boundaryKey;
     const saved = JSON.parse(boundaryKey) as PolygonBoundary | null;
     setVertices(saved?.coordinates[0]?.slice(0, -1) ?? []);
     if (saved) moveTo(initialCenter(saved), 14);
-    // Preserve the "Apply" / "Remove" confirmation only for our own action.
     if (locallyAppliedBoundary.current === boundaryKey) {
       locallyAppliedBoundary.current = null;
     } else {
@@ -158,7 +182,8 @@ export function NeighborhoodBoundaryEditor({
         throw new Error(result.error || t("rgeMap.locationUnavailable"));
       }
       moveTo({ lat: result.latitude, lon: result.longitude }, 14);
-      setStatus(t("rgeMap.located"));
+      setOpen(true);
+      setStatus(result.precision === "city" ? t("rgeMap.locatedApproximate") : t("rgeMap.located"));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : t("rgeMap.locationFailed"));
     } finally { setLocating(false); }
