@@ -1,4 +1,5 @@
 import { validateAgentDefinedArea } from "@shared/agent/neighborhoodCustomArea";
+import { resolveCuratedNeighborhoodBoundary } from "./curatedNeighborhoodBoundaryService";
 import { normalizeBoundaryCountry } from "@shared/agent/neighborhoodBoundaryIdentity";
 import {
   boundaryBounds, normalizeNeighborhoodName, selectExactNamedNeighborhood,
@@ -57,6 +58,7 @@ const GIS_RESPONSE_MAX_BYTES = 3_000_000;
 
 export type NeighborhoodBoundaryResult =
   | { status: "verified"; source: string; geometry: NeighborhoodBoundary; bounds: BoundaryBounds }
+  | { status: "community_area"; source: string; geometry: NeighborhoodBoundary; bounds: BoundaryBounds; attribution: string }
   | { status: "custom_area"; source: "Agent-defined service area"; geometry: NeighborhoodBoundary; bounds: BoundaryBounds }
   | { status: "unsupported" | "unmatched" | "unavailable"; source: null };
 
@@ -172,6 +174,14 @@ export async function resolvePageNeighborhoodBoundary(input: {
   if (!normalizeBoundaryCountry(input.country)) return { status: "unsupported", source: null };
   const official = await resolveNeighborhoodBoundary({ ...input, country: input.country ?? undefined });
   if (official.status === "verified" || official.status === "unavailable") return official;
+  const curated = await resolveCuratedNeighborhoodBoundary(input);
+  if (curated?.status === "community_area") {
+    return { status: "community_area", geometry: curated.geometry, bounds: curated.bounds,
+      source: curated.source, attribution: curated.attribution };
+  }
+  if (curated && !["unmatched"].includes(curated.status)) {
+    return { status: "unavailable", source: null };
+  }
   const custom = input.customBoundary == null ? null : validateAgentDefinedArea(input.customBoundary);
   if (!custom) return official;
   return {
