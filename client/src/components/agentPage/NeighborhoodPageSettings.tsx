@@ -8,7 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { NeighborhoodGuideVisualEditor } from "./NeighborhoodGuideVisualEditor";
+import { parseNeighborhoodGuideBlocks, serializeNeighborhoodGuideBlocks, neighborhoodGuidePhotoId } from "@shared/agent/neighborhoodGuideBlocks";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { parseAgentPageApiError } from "@/lib/agentPageApi";
@@ -32,7 +33,6 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const client = useQueryClient();
   const storageKey = neighborhoodDraftKey(userId);
   const photoInput = useRef<HTMLInputElement>(null);
-  const guideTextInput = useRef<HTMLTextAreaElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [drafts, setDrafts] = useState<NeighborhoodDrafts>(() => {
     const storage = browserDraftStorage();
@@ -111,33 +111,15 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     });
   }
 
-
-  function insertPhotoInArticle(photo: NeighborhoodPhoto) {
-    const marker = neighborhoodPhotoMarker(photo.url);
-    if (!marker || !active || values.content.includes(marker)) return;
-    const cursor = guideTextInput.current;
-    const start = cursor?.selectionStart ?? values.content.length;
-    const end = cursor?.selectionEnd ?? start;
-    const before = values.content.slice(0, start).trimEnd();
-    const after = values.content.slice(end).trimStart();
-    const updated = `${before}\n\n${marker}\n\n${after}`.trim();
-    if (updated.length > 5000) {
-      toast({ title: "Article is too long", description: "Shorten the guide before inserting this photo.", variant: "destructive" });
-      return;
-    }
-    editField("content", updated);
-    toast({ title: "Photo inserted", description: "Preview the guide to see it between your paragraphs." });
-  }
-
-  async function uploadPhoto(file: File | undefined) {
-    if (!file || !page || !active) return;
+  async function uploadPhoto(file: File | undefined, afterIndex?: number): Promise<boolean> {
+    if (!file || !page || !active || stale || photoUploading) return false;
     if (file.size > NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES) {
-      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return;
+      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return false;
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return;
+      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return false;
     }
-    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return;
+    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return false;
     const editingId = active;
     setPhotoUploading(true);
     try {
@@ -150,14 +132,33 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       if (!response.ok || typeof result.url !== "string") {
         throw new Error(result.error || "Photo upload failed.");
       }
-      if (draftRef.current.active !== editingId) return;
-      const current = draftRef.current.entries[editingId]?.values ?? values;
-      editPhotos([...(current.photos ?? []), {
-        url: result.url, alt: `Photo of ${current.name || "the neighborhood"} in ${current.city || "the local area"}`,
-      }]);
-      toast({ title: "Photo uploaded", description: "Save or update the page to publish this change." });
+      if (draftRef.current.active !== editingId) return false;
+      const uploadedId = neighborhoodGuidePhotoId(result.url);
+      updateDrafts((draftState) => {
+        const previous = draftState.entries[editingId];
+        const current = previous?.values ?? values;
+        const nextPhoto = {
+          url: result.url, alt: `Photo of ${current.name || "the neighborhood"} in ${current.city || "the local area"}`,
+        };
+        let content = current.content;
+        if (typeof afterIndex === "number" && uploadedId) {
+          const blocks = parseNeighborhoodGuideBlocks(content);
+          blocks.splice(Math.max(0, Math.min(blocks.length, afterIndex + 1)), 0, { type: "photo", id: uploadedId });
+          const updatedContent = serializeNeighborhoodGuideBlocks(blocks);
+          if (updatedContent.length <= 5000) content = updatedContent;
+          else toast({ title: "Image uploaded to library", description: "Article is too long to place it automatically; shorten a paragraph to insert it." });
+        }
+        const next = { ...current, photos: [...(current.photos ?? []), nextPhoto], content };
+        const entries = { ...draftState.entries };
+        if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[editingId];
+        else entries[editingId] = { values: next, baseVersion: previous?.baseVersion ?? page?.updatedAt ?? null };
+        return { active: editingId, entries };
+      });
+      toast({ title: typeof afterIndex === "number" ? "Image added to your guide" : "Photo uploaded", description: "Save or update the page to publish your changes." });
+      return true;
     } catch (error) {
       toast({ title: "Photo upload failed", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+      return false;
     } finally {
       setPhotoUploading(false);
       if (photoInput.current) photoInput.current.value = "";
@@ -279,27 +280,22 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label htmlFor="neighborhood-content">Your local guide</Label>
-            <Button type="button" size="sm" variant="ghost" disabled={stale || save.isPending}
-              onClick={() => editField("content", `${values.content.trimEnd()}\n\n## New section\n\n`)}>
-              + Section heading
-            </Button>
-          </div>
-          <Textarea ref={guideTextInput} id="neighborhood-content" rows={10} maxLength={5000} disabled={save.isPending} readOnly={stale}
-            value={values.content} onChange={(event) => editField("content", event.target.value)} />
-          <p className="text-xs text-muted-foreground">
-            Write at least two distinct paragraphs with useful local information, totaling 240 characters or more.
-            Add optional headings on their own lines, such as ## Parks &amp; Recreation, to organize your guide.
-            To place an uploaded photo between paragraphs, click in the article where you want it, then choose Insert in article below. Preview shows the photo in place.
-            Changing the neighborhood name can change its URL.
-          </p>
+          <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
+            disabled={stale || save.isPending} uploading={photoUploading}
+            canUpload={Boolean(page && !stale && !save.isPending && !photoUploading &&
+              (values.photos?.length ?? 0) < NEIGHBORHOOD_GUIDE_MAX_PHOTOS)}
+            onChange={(content) => editField("content", content)}
+            onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
+              photo.url === url ? { ...photo, alt } : photo))}
+            onUploadPhoto={(file, afterIndex) => uploadPhoto(file, afterIndex)} />
+          <p className="text-xs text-slate-600">Write at least two distinct paragraphs with useful local information (240+ characters) before publishing.
+            Changing the neighborhood name may change its URL.</p>
 
           <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h5 className="text-sm font-semibold text-slate-900">Local guide photos</h5>
-                <p className="text-xs text-muted-foreground">The first photo becomes your cover. Add up to six images with useful descriptions.</p>
+                <p className="text-xs text-muted-foreground">The first photo is your cover. Use the Image button inside your guide to insert photos in the article. Up to six images in your library.</p>
               </div>
               <Button type="button" size="sm" variant="outline" disabled={!page || stale || photoUploading || save.isPending ||
                 (values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS}
@@ -347,14 +343,6 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                           </Button>
                         </div>
                       </div>
-                      {index > 0 && (
-                        <Button type="button" size="sm" variant="outline" className="w-full"
-                          disabled={save.isPending || stale || values.content.includes(neighborhoodPhotoMarker(photo.url) ?? "")}
-                          onClick={() => insertPhotoInArticle(photo)}>
-                          <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                          {values.content.includes(neighborhoodPhotoMarker(photo.url) ?? "") ? "Placed in article" : "Insert in article"}
-                        </Button>
-                      )}
                       <Label htmlFor={`guide-photo-alt-${index}`}>Image description</Label>
                       <Input id={`guide-photo-alt-${index}`} value={photo.alt} maxLength={140}
                         disabled={save.isPending || stale}
