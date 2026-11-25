@@ -22,7 +22,7 @@ test("real article editor visibly inserts an image at the chosen heading and per
     ' window.__switchArticleTab = () => setVisible((previous) => !previous);',
     ' return visible ? <NeighborhoodGuideVisualEditor content={value} photos={[photo]} disabled={false} canUpload={true} uploading={false}',
     ' onChange={(next) => { window.__guideContent = next; setValue(next); }}',
-    ' onPhotoAltChange={() => {}} onUploadPhoto={async () => null} />',
+    ' onPhotoAltChange={() => {}} onUploadPhoto={async () => {}} />',
     ' : <p id="alternative-page">Another dashboard tab</p>;',
     '}',
     'createRoot(document.getElementById("root")).render(<Harness />);',

@@ -2439,7 +2439,12 @@
     "offer": "Elige una foto para crear un borrador sin publicar con tus cambios y subirla a la biblioteca.",
     "requiredLocation": "Primero indica el vecindario, la ciudad, la región y el código de país de dos letras.",
     "articleTooLong": "Reduce el artículo a 5.000 caracteres antes de crear el borrador.",
-    "choosePhoto": "Elegir foto y crear borrador"
+    "choosePhoto": "Elegir foto y crear borrador",
+    "reopenPicker": "Selecciona dónde insertar la foto y vuelve a abrir el selector.",
+    "inlineDraft": "Al subir la foto, se crea un borrador sin publicar y se inserta la foto aquí.",
+    "inlineTooLong": "Acorta el artículo para dejar espacio para esta foto.",
+    "inlineLibraryOnly": "La foto está en la biblioteca. Selecciona un lugar en el artículo actual para insertarla.",
+    "inlineInserted": "Foto insertada en el artículo"
   },
   "rgeMap": {
     "title": "Mapa personalizado del vecindario",
