@@ -222,9 +222,13 @@ export function NeighborhoodBoundaryEditor({
   const safeShape = shape && readCustomNeighborhoodBoundary(shape);
   const formVertices = boundary?.coordinates[0]?.slice(0, -1) ?? [];
   const drawingChanged = JSON.stringify(vertices) !== JSON.stringify(formVertices);
-  const boundaryStatus = stale ? "stale"
-    : boundaryKey !== persistedKey ? (boundary ? "applied" : "removalPending")
-    : boundary ? "saved" : rememberedRemoval ? "removed" : "optional";
+  const boundaryChanged = boundaryKey !== persistedKey;
+  const boundaryLabel = stale ? t("rgeMap.stale")
+    : boundaryChanged ? (boundary ? t("rgeMap.applied") : t("rgeMap.removalPending"))
+    : boundary ? t("rgeMap.saved") : rememberedRemoval ? t("rgeMap.removed") : t("rgeMap.optional");
+  const outlineLabel = drawingChanged && !stale
+    ? [t("rgeMap.unapplied"), boundaryChanged ? boundaryLabel : ""].filter(Boolean).join(" · ")
+    : boundaryLabel;
 
   function applyBoundary(next: PolygonBoundary | null) {
     locallyAppliedBoundary.current = JSON.stringify(next);
@@ -399,7 +403,7 @@ export function NeighborhoodBoundaryEditor({
         onClick={() => { setOpen((wasOpen) => !wasOpen); setExpanded(false); setMoreOpen(false); }}>
         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
           aria-hidden="true" />
-        <span>{t("rgeMap.title")} · {t(`rgeMap.${boundaryStatus}`)}</span>
+        <span>{t("rgeMap.title")} · {boundaryLabel}</span>
       </button>
       {open && <>
         {expanded && <div className="fixed inset-0 z-[79] bg-slate-950/65" aria-hidden="true" />}
@@ -466,9 +470,7 @@ export function NeighborhoodBoundaryEditor({
             <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
               <span>{t("rgeMap.corners", { count: vertices.length, zoom })}</span>
               <span role="status" data-rge-boundary-status="true" className="font-medium">
-                {drawingChanged && !stale
-                  ? `${t("rgeMap.unapplied")}${boundaryKey !== persistedKey ? ` · ${t(`rgeMap.${boundaryStatus}`)}` : ""}`
-                  : t(`rgeMap.${boundaryStatus}`)}
+                {outlineLabel}
               </span>
               {restoreBoundary && <Button type="button" size="sm" variant="ghost" className="h-8" disabled={disabled}
                 onClick={() => {
