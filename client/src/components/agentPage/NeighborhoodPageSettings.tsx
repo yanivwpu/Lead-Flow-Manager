@@ -179,6 +179,19 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
         url: result.url, alt: `Photo of ${current.name} in ${current.city}`.slice(0, 140),
       };
       editPhotos((photos) => [...photos, photo], target);
+      if (!page && mounted.current) {
+        // Link the first upload to the newly created draft. Keep the browser
+        // draft (including the photo) available for Save if that write fails.
+        const draftWithPhoto = draftRef.current.entries[target.id]?.values;
+        if (draftWithPhoto) {
+          try {
+            await save.mutateAsync({ page: target, values: draftWithPhoto, published: false });
+          } catch {
+            // The save mutation reports the failure and keeps the local edit.
+          }
+          return photo;
+        }
+      }
       toast({ title: "Photo uploaded", description: t("rgeNeighborhoodUpload.keepPhoto") });
       return photo;
     } catch (error) {

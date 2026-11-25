@@ -144,7 +144,7 @@ test("library uploads wait for an unpublished draft and preserve the article and
     }
     if (path === api + "/" + id + "/photos" && method === "POST") {
       uploads.push(path);
-      if (uploads.length === 1) return route.fulfill({ status: 503, json: { error: "Fixture upload error" } });
+      if (uploads.length === 2) return route.fulfill({ status: 503, json: { error: "Fixture upload error" } });
       return route.fulfill({ status: 201, json: { url: image(uploads.length) } });
     }
     if (path === api + "/" + id && method === "PUT") {
@@ -197,9 +197,9 @@ test("library uploads wait for an unpublished draft and preserve the article and
   assert.equal(uploads.length, 0);
   assert.equal(await page.locator("#neighborhood-name").inputValue(), "Victoria Park");
 
-  const uploadFailure = page.waitForResponse(response => response.url().endsWith("/photos") && response.status() === 503);
+  const firstAttachment = page.waitForResponse(response => response.request().method() === "PUT");
   await input.setInputFiles(file);
-  await uploadFailure;
+  await firstAttachment;
   await upload.waitFor();
   assert.equal(creates.length, 2, "one rejected creation and one successful creation");
   assert.equal(creates[1].published, false);
@@ -209,19 +209,24 @@ test("library uploads wait for an unpublished draft and preserve the article and
   assert.deepEqual(await page.evaluate(key => JSON.parse(sessionStorage.getItem(key) || "{}").vertices,
     neighborhoodMapSessionKey("fixture", id)), mapView.vertices);
 
-  for (let i = 2; i <= 3; i++) {
-    const [afterDraft] = await Promise.all([page.waitForEvent("filechooser"), upload.click()]);
-    await afterDraft.setFiles(file);
-    await library.locator('img[src="' + image(i) + '"]').waitFor();
-  }
+  assert.deepEqual(saved?.photos?.map(photo => photo.url), [image(1)], "first photo is linked to the unpublished draft");
+  assert.equal(updates[0].published, false);
+  assert.deepEqual(updates[0].customBoundary, polygon);
+  const uploadFailure = page.waitForResponse(response => response.url().endsWith("/photos") && response.status() === 503);
+  const [afterDraft] = await Promise.all([page.waitForEvent("filechooser"), upload.click()]);
+  await afterDraft.setFiles(file);
+  await uploadFailure;
+  const [retry] = await Promise.all([page.waitForEvent("filechooser"), upload.click()]);
+  await retry.setFiles(file);
+  await library.locator('img[src="' + image(3) + '"]').waitFor();
   assert.equal(creates.length, 2, "upload retries reuse the saved draft");
   assert.deepEqual(uploads, Array(3).fill(api + "/" + id + "/photos"));
   if (photos) await library.screenshot({ path: join(photos, "photos-in-draft-library.png") });
   const savedPhotos = page.waitForResponse(response => response.request().method() === "PUT");
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await savedPhotos;
-  assert.equal(updates[0].published, false);
-  assert.equal(updates[0].content, guide);
-  assert.deepEqual(updates[0].customBoundary, polygon);
-  assert.deepEqual(updates[0].photos?.map(photo => photo.url), [image(2), image(3)]);
+  assert.equal(updates[1].published, false);
+  assert.equal(updates[1].content, guide);
+  assert.deepEqual(updates[1].customBoundary, polygon);
+  assert.deepEqual(updates[1].photos?.map(photo => photo.url), [image(1), image(3)]);
 });
