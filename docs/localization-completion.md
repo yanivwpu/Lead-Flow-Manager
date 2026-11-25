@@ -14,8 +14,8 @@ These are route families. A comma-separated row shares the same recorded status,
 | `/app/contacts/:id` | P | P | P | P | Batch 3A covers profile, editing, notes, appointments, and purchase-history chrome. Live store and uncommon permissions states remain unverified. |
 | `/app/followups` | P | P | P | P | Batch 3A covers standard tasks, reminders, calendar, and deals. Shopify order-support tasks remain in the Shopify batch. |
 | `/app/search` | P | P | P | P | Search copy and result layout verified with synthetic data at two widths. Error and provider-specific payloads remain unverified. |
-| `/app/workflows` | ? | M | M | P | Builder controls, nodes and status |
-| `/app/chatbot` | ? | M | M | P | Builder chrome. Existing authored locale variants and field direction are preserved |
+| `/app/workflows` | P | P | P | P | Batch 3B covers workflow and sequence editors, trigger and action catalogs, and execution-history states. Live execution and uncommon provider failures remain unverified. |
+| `/app/chatbot` | P | P | P | P | Batch 3B covers builder controls, node and form editors, branching, and publishing feedback. Live sends and integration-specific states remain unverified. |
 | `/app/templates` | P | P | P | P | Foundation preset keys done. Approved library, sync, send and re-engagement UI pending |
 | `/app/campaigns/:id?` | ? | M | M | ? | Gates, enrollment and campaign views |
 | `/app/widget` | ? | P | P | P | Configuration and preview UI |
@@ -144,3 +144,11 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 - Localized task counts, views, replies, completion and error feedback, the scheduling dialog, calendar events, and pipeline stages. Built-in tags, stages, and statuses use localized display labels. Custom tags and stages, contact data, authored content, provider-supplied text and unset values keep their existing semantics.
 - Chromium ran the same synthetic CRM flows in EN, HE and ES at 1366 and 390 px. It checked translated filters and canonical URL values, the bulk-delete confirmation and contact IDs, creation and validation, editing with canonical stage and date, notes, reminder scheduling, task completion, calendar navigation, and desktop deal moves. All six locale and viewport combinations passed, including Hebrew RTL and Spanish LTR. No fixture used live contacts or providers.
 - The focused automated run passed 48 tests. Unverified cases include uncommon permission and provider responses, live purchase and booking feeds, and Shopify order-support tasks deferred to the Shopify batch.
+
+## Batch 3B Automation Builder and Chatbot Builder
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387). Batch 3A's e-commerce foundation job failed because a source assertion expected a hardcoded Needs Reply label. Commit `d15adf3d` updated the assertion to verify both the canonical filter and the English translation. Every check on that commit passed.
+- Reduced the legacy localization baseline from **6,228 to 5,951** with zero new or increased fingerprints. Added EN, HE and ES copy for the workflow and sequence editors, trigger and action catalogs, condition and timing controls, permission and validation states, and read-only execution history fed by the existing owner-checked endpoint.
+- Localized the chatbot navigation, message and question editors, delay controls, quick replies and next-step controls, action selection, form editor and preview controls, and save and activation feedback. Catalog labels translate on display. Persisted defaults, trigger identifiers, authored messages, localized variants, and connections retain their original values.
+- The focused automated run passed 18 tests. Synthetic Chromium covered the workflow editor and chatbot editor at 1366 and 390 px in all three languages. Equivalent configurations produced identical values. The fixtures intercepted every write and never executed a live workflow or sent a message.
+- Live runs, provider-specific errors, and uncommon legacy node and integration states remain unverified. Platform-native controls and provider or user-authored data retain their original source. The later Batch 3 modules remain separate.

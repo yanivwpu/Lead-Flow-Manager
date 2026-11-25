@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+import { builderCatalogText, builderDuration } from "@/lib/builderPresentation";
 import { useTranslation } from "react-i18next";
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -96,7 +98,7 @@ function NodeLocaleVariantsEditor({
         const fieldProps = builderLocalizedInputProps(loc);
         return (
           <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2">
-            <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
+            <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? t("chatbotUi.spanish") : t("chatbotUi.hebrew")}</p>
             <Textarea
               {...fieldProps}
               value={variant.content || ""}
@@ -282,33 +284,34 @@ function assignMemberDisplayLabel(
   return (m?.name || m?.email || action.value).trim();
 }
 
-function stepSummary(node: ChatbotNode, teamMembers: TeamMember[] = []): string {
+function stepSummary(t: TFunction, language: string, node: ChatbotNode, teamMembers: TeamMember[]): string {
   switch (node.type) {
     case "message":
-      if (node.data.messageType === "image") return node.data.mediaCaption ? `📷 ${node.data.mediaCaption}` : "📷 Image";
-      if (node.data.messageType === "video") return node.data.mediaCaption ? `🎥 ${node.data.mediaCaption}` : "🎥 Video";
-      if (node.data.messageType === "file") return `📎 ${node.data.fileName || "File"}`;
-      if (node.data.messageType === "buttons") return node.data.content || "Message with quick-reply buttons";
-      if (node.data.messageType === "form") return node.data.webchatForm?.title || "Structured form";
-      return node.data.content || "No message written yet";
+      if (node.data.messageType === "image") return node.data.mediaCaption ? `📷 ${node.data.mediaCaption}` : `📷 ${t("builderCatalog.image")}`;
+      if (node.data.messageType === "video") return node.data.mediaCaption ? `🎥 ${node.data.mediaCaption}` : `🎥 ${t("builderCatalog.video")}`;
+      if (node.data.messageType === "file") return `📎 ${node.data.fileName || t("builderCatalog.file")}`;
+      if (node.data.messageType === "buttons") return node.data.content || t("builderFeedback.withButtons");
+      if (node.data.messageType === "form") return node.data.webchatForm?.title || t("builderFeedback.structuredForm");
+      return node.data.content || t("builderFeedback.emptyMessage");
     case "question":
-      return node.data.content || "No question written yet";
+      return node.data.content || t("builderFeedback.emptyQuestion");
     case "delay": {
       const m = node.data.delayMinutes || 0;
-      if (m >= 60 && m % 60 === 0) return `Wait ${m / 60} hour${m / 60 > 1 ? "s" : ""}`;
-      if (m >= 1440 && m % 1440 === 0) return `Wait ${m / 1440} day${m / 1440 > 1 ? "s" : ""}`;
-      return `Wait ${m} minute${m !== 1 ? "s" : ""}`;
+      const duration = m >= 60 && m % 60 === 0
+        ? builderDuration(language, m / 60, "hour")
+        : builderDuration(language, m, "minute");
+      return t("builderFeedback.waitFor", { duration });
     }
     case "action": {
       const at = ACTION_TYPES.find(a => a.value === node.data.action?.type);
       const act = node.data.action;
-      if (!at) return "Configure this action";
+      if (!at) return t("builderFeedback.configureAction");
       if (act?.type === "assign" && act.value) {
         const label = assignMemberDisplayLabel(act, teamMembers);
-        return label ? `${at.label}: ${label}` : at.label;
+        return label ? `${builderCatalogText(t, at.label)}: ${label}` : builderCatalogText(t, at.label);
       }
       const val = act?.value;
-      return val ? `${at.label}: ${val}` : at.label;
+      return val ? `${builderCatalogText(t, at.label)}: ${val}` : builderCatalogText(t, at.label);
     }
     default:
       return "";
@@ -427,11 +430,12 @@ function DelayStepEditor({
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
 
-function FileUploadButton({ onUploaded, accept, nodeId, label = "Upload" }: {
+function FileUploadButton({ onUploaded, accept, nodeId, label }: {
   onUploaded: (url: string, fileName: string) => void;
   accept: string; nodeId: string; label?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation();
   const { uploadFile, isUploading, progress } = useUpload({
     onSuccess: (response) => {
       const url = `${window.location.origin}${response.objectPath}`;
@@ -451,8 +455,8 @@ function FileUploadButton({ onUploaded, accept, nodeId, label = "Upload" }: {
         )}
         data-testid={`upload-btn-${nodeId}`}>
         {isUploading
-          ? <><Loader2 className="h-3 w-3 animate-spin" />{progress > 0 && progress < 100 ? `${progress}%` : "Uploading…"}</>
-          : <><Upload className="h-3 w-3" />{label}</>}
+          ? <><Loader2 className="h-3 w-3 animate-spin" />{progress > 0 && progress < 100 ? `${progress}%` : t("widgetEditor.uploading")}</>
+          : <><Upload className="h-3 w-3" />{label ?? t("common.upload")}</>}
       </button>
     </div>
   );
@@ -479,14 +483,14 @@ function AddStepPicker({ onAdd, hint }: { onAdd: (type: ChatbotNode["type"]) => 
           return (
             <button key={st.type}
               onClick={() => { onAdd(st.type as ChatbotNode["type"]); setOpen(false); }}
-              className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left group"
+              className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg hover:bg-gray-50 transition-colors text-start group"
               data-testid={`pick-step-${st.type}`}>
               <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors", st.bg)}>
                 <Icon className={cn("h-3.5 w-3.5", st.color)} />
               </div>
               <div>
-                <div className="text-sm font-semibold text-gray-800">{st.label}</div>
-                <div className="text-[11px] text-gray-400 mt-0.5">{st.description}</div>
+                <div className="text-sm font-semibold text-gray-800">{builderCatalogText(t, st.label)}</div>
+                <div className="text-[11px] text-gray-400 mt-0.5">{builderCatalogText(t, st.description)}</div>
               </div>
             </button>
           );
@@ -499,7 +503,7 @@ function AddStepPicker({ onAdd, hint }: { onAdd: (type: ChatbotNode["type"]) => 
 /* ─── Main component ─────────────────────────────────────────────────── */
 
 export function ChatbotBuilder() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: subscription } = useSubscription();
@@ -543,36 +547,36 @@ export function ChatbotBuilder() {
     mutationFn: async (data: any) => (await apiRequest("POST", "/api/chatbot-flows", data)).json(),
     onSuccess: (flow) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chatbot-flows"] });
-      toast({ title: "Flow created", description: `"${flow.name}" is ready to build.` });
+      toast({ title: t("chatbotUi.flowCreated"), description: t("builderFeedback.createdFlow", { name: flow.name }) });
       setSelectedFlow(flow);
       setIsCreating(false);
       setNewFlowName("");
       setNewFlowDesc("");
       setUnsavedChanges(false);
     },
-    onError: (e: any) => toast({ title: "Couldn't create flow", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("chatbotUi.createFailed"), description: t("builderFeedback.chatbotError"), variant: "destructive" }),
   });
 
   const updateFlowMutation = useMutation({
     mutationFn: async ({ id, ...data }: any) => (await apiRequest("PATCH", `/api/chatbot-flows/${id}`, data)).json(),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chatbot-flows"] });
-      toast({ title: "Flow saved" });
+      toast({ title: t("chatbotUi.flowSaved") });
       setUnsavedChanges(false);
       setSelectedFlow(updated);
     },
-    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("chatbotUi.saveFailed"), description: t("builderFeedback.chatbotError"), variant: "destructive" }),
   });
 
   const deleteFlowMutation = useMutation({
     mutationFn: async (id: string) => (await apiRequest("DELETE", `/api/chatbot-flows/${id}`)).json(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chatbot-flows"] });
-      toast({ title: "Flow deleted" });
+      toast({ title: t("chatbotUi.flowDeleted") });
       setSelectedFlow(null);
       setSelectedStepId(null);
     },
-    onError: (e: any) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("chatbotUi.deleteFailed"), description: t("builderFeedback.chatbotError"), variant: "destructive" }),
   });
 
   const toggleFlowMutation = useMutation({
@@ -582,7 +586,7 @@ export function ChatbotBuilder() {
       queryClient.invalidateQueries({ queryKey: ["/api/chatbot-flows"] });
       if (selectedFlow?.id === updated.id) setSelectedFlow(updated);
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.chatbotError"), variant: "destructive" }),
   });
 
   const openFlow = (flow: ChatbotFlow) => {
@@ -595,8 +599,8 @@ export function ChatbotBuilder() {
       const formError = chatbotFormNodesPublishError(flow.nodes);
       toggleFlowMutation.mutate({ id: flow.id, isActive: false });
       toast({
-        title: "Moved to Draft",
-        description: formError || "This form is incomplete and cannot stay published.",
+        title: t("builderFeedback.movedDraft"),
+        description: t("builderFeedback.formReview"),
         variant: "destructive",
       });
     }
@@ -621,9 +625,9 @@ export function ChatbotBuilder() {
       setSelectedFlow(copy);
       setSelectedStepId(null);
       setUnsavedChanges(false);
-      toast({ title: "Flow duplicated", description: `"${copy.name}" created as a draft.` });
+      toast({ title: t("chatbotUi.flowCopied"), description: t("builderFeedback.copiedFlow", { name: copy.name }) });
     },
-    onError: (e: any) => toast({ title: "Duplication failed", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("chatbotUi.copyFailed"), description: t("builderFeedback.chatbotError"), variant: "destructive" }),
   });
 
   /* ── Handlers ── */
@@ -633,8 +637,8 @@ export function ChatbotBuilder() {
       const formError = chatbotFormNodesPublishError(selectedFlow.nodes);
       if (formError) {
         toast({
-          title: "Form is incomplete",
-          description: formError,
+          title: t("builderFeedback.formIncomplete"),
+          description: t("builderFeedback.formReview"),
           variant: "destructive",
         });
         return;
@@ -644,8 +648,8 @@ export function ChatbotBuilder() {
       });
       if (askError) {
         toast({
-          title: "Ask Question options need a review",
-          description: askError,
+          title: t("builderFeedback.questionReview"),
+          description: t("builderFeedback.questionReviewHint"),
           variant: "destructive",
         });
         return;
@@ -765,13 +769,13 @@ export function ChatbotBuilder() {
     if (isPlan) {
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8">
-          <Helmet><title>Flow Builder — Upgrade Required | ChatCRM</title></Helmet>
+          <Helmet><title>{[t("automationUi.flowBuilder") + " — " + t("aiBrain.upgradeRequired"), "ChatCRM"].join(" | ")}</title></Helmet>
           <div className="text-center max-w-md">
             <div className="mx-auto h-16 w-16 bg-gradient-to-br from-brand-green to-brand-teal rounded-2xl flex items-center justify-center mb-6">
               <Zap className="h-8 w-8 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("automationUi.flowBuilder")}</h2>
-            <p className="text-gray-500 mb-6">Design automated conversation flows to qualify leads, answer questions, and route conversations — 24/7. Available on Pro.</p>
+            <p className="text-gray-500 mb-6">{t("builderFeedback.upgradeFlow")}</p>
             <InAppProUpgradeButton
               canStartInternalTrial={canStartInternalTrial}
               isShopify={isShopifyBilling}
@@ -784,9 +788,11 @@ export function ChatbotBuilder() {
     }
   }
 
+  if (error) return <p role="alert" className="p-6">{t("builderFeedback.loadFailed")}</p>;
+
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div role="status" aria-label={t("builderFeedback.loading")} className="flex-1 flex items-center justify-center">
         <Loader2 className="h-7 w-7 animate-spin text-brand-green" />
       </div>
     );
@@ -798,8 +804,8 @@ export function ChatbotBuilder() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#f7f8fa]">
       <Helmet>
-        <title>Flow Builder | ChatCRM</title>
-        <meta name="description" content="Design automated conversation flows across your channels" />
+        <title>{[t("automationUi.flowBuilder"), "ChatCRM"].join(" | ")}</title>
+        <meta name="description" content={t("chatbotUi.flowIntro")} />
       </Helmet>
 
       {/* ══ Page Header ════════════════════════════════════════════════ */}
@@ -809,7 +815,7 @@ export function ChatbotBuilder() {
           <button
             className="flex md:hidden items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
             onClick={() => { setSelectedFlow(null); setIsCreating(false); setSelectedStepId(null); setUnsavedChanges(false); }}
-            data-testid="button-back-to-flows"
+            aria-label={t("builderFeedback.backToFlows")} data-testid="button-back-to-flows"
           >
             <ArrowLeft className="h-4 w-4 text-gray-600" />
           </button>
@@ -828,7 +834,7 @@ export function ChatbotBuilder() {
                   value={selectedFlow.name}
                   onChange={(e) => { setSelectedFlow({ ...selectedFlow, name: e.target.value }); setUnsavedChanges(true); }}
                   className="text-[13px] font-semibold text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-0 min-w-0 max-w-[100px] md:max-w-[200px]"
-                  placeholder="Untitled Flow"
+                  placeholder={t("chatbotUi.untitled")}
                   data-testid="input-flow-name"
                 />
               </>
@@ -876,8 +882,8 @@ export function ChatbotBuilder() {
                 const hasNewChat = selectedFlow.triggerOnNewChat === true;
                 if (!hasKeywords && !hasNewChat) {
                   toast({
-                    title: "No trigger configured",
-                    description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
+                    title: t("builderFeedback.noTrigger"),
+                    description: t("builderFeedback.triggerRequired"),
                     variant: "destructive",
                   });
                   return;
@@ -885,8 +891,8 @@ export function ChatbotBuilder() {
                 const formError = chatbotFormNodesPublishError(selectedFlow.nodes);
                 if (formError) {
                   toast({
-                    title: "Form is incomplete",
-                    description: formError,
+                    title: t("builderFeedback.formIncomplete"),
+                    description: t("builderFeedback.formReview"),
                     variant: "destructive",
                   });
                   return;
@@ -896,8 +902,8 @@ export function ChatbotBuilder() {
                 });
                 if (askError) {
                   toast({
-                    title: "Ask Question options need a review",
-                    description: askError,
+                    title: t("builderFeedback.questionReview"),
+                    description: t("builderFeedback.questionReviewHint"),
                     variant: "destructive",
                   });
                   return;
@@ -928,9 +934,9 @@ export function ChatbotBuilder() {
                 <div className="flex gap-2.5">
                   <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-800 mb-1">How to test this flow</p>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">{t("chatbotUi.testFlow")}</p>
                     <p className="text-xs text-gray-500 leading-relaxed">
-                      Activate the flow, then send a real message from a test contact that matches your trigger keyword — or enable "Start on new conversation" and open a fresh chat.
+                      {t("builderFeedback.testInstructions")}
                     </p>
                   </div>
                 </div>
@@ -942,7 +948,7 @@ export function ChatbotBuilder() {
               onClick={handleSave}
               disabled={!unsavedChanges || updateFlowMutation.isPending}
               className="h-8 text-xs font-semibold bg-brand-green hover:bg-brand-green/90 gap-1.5"
-              data-testid="button-save-flow"
+              aria-label={t("common.save")} data-testid="button-save-flow"
             >
               {updateFlowMutation.isPending
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -967,7 +973,7 @@ export function ChatbotBuilder() {
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
                     : <Copy className="h-3.5 w-3.5 text-gray-400" />
                   }
-                  Duplicate
+                  {t("chatbotUi.duplicate")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -997,7 +1003,7 @@ export function ChatbotBuilder() {
       <div className="flex-1 flex overflow-hidden">
         {/* ══ Left Sidebar ════════════════════════════════════════════ */}
         <aside className={cn(
-          "w-full md:w-56 bg-white border-r border-gray-200/80 flex flex-col flex-shrink-0",
+          "w-full md:w-56 bg-white border-e border-gray-200/80 flex flex-col flex-shrink-0",
           (selectedFlow || isCreating) ? "hidden md:flex" : "flex"
         )}>
           {/* Sidebar header */}
@@ -1010,7 +1016,7 @@ export function ChatbotBuilder() {
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search…"
+                placeholder={t("chatbotUi.search")}
                 className="w-full pl-7 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green/40 placeholder-gray-300 transition-all"
                 data-testid="input-search-flows"
               />
@@ -1024,7 +1030,7 @@ export function ChatbotBuilder() {
                 <Zap className="h-7 w-7 mx-auto text-gray-200 mb-2.5" />
                 <p className="text-xs font-medium text-gray-400 mb-0.5">{t("chatbotEditor.noFlows")}</p>
                 <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Use <span className="font-semibold text-gray-600">{t("automationUi.createFlow")}</span> at the top to create one.
+                  {t("builderFeedback.emptyFlows")}
                 </p>
               </div>
             )}
@@ -1035,7 +1041,7 @@ export function ChatbotBuilder() {
                   key={flow.id}
                   onClick={() => openFlow(flow)}
                   className={cn(
-                    "w-full text-left px-3 py-2.5 rounded-xl transition-all",
+                    "w-full text-start px-3 py-2.5 rounded-xl transition-all",
                     isSelected
                       ? "bg-brand-green/8 border border-brand-green/20 shadow-sm"
                       : "hover:bg-gray-50 border border-transparent"
@@ -1055,9 +1061,9 @@ export function ChatbotBuilder() {
                         {flow.name}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <span className="text-[10px] text-gray-400">{flow.nodes?.length || 0} steps</span>
+                        <span className="text-[10px] text-gray-400">{t("builderFeedback.stepCount", { count: flow.nodes?.length || 0 })}</span>
                         <span className="text-gray-200">·</span>
-                        <span className="text-[10px] text-gray-400">{flow.executionCount || 0} runs</span>
+                        <span className="text-[10px] text-gray-400">{t("builderFeedback.runs", { count: flow.executionCount || 0 })}</span>
                         {flow.isActive && (
                           <span className="text-[10px] font-semibold text-emerald-600">{t("automations.active")}</span>
                         )}
@@ -1073,7 +1079,7 @@ export function ChatbotBuilder() {
         {/* ══ Center Canvas ════════════════════════════════════════════ */}
         <main className={cn(
           "flex-1 overflow-y-auto",
-          selectedStep ? "border-r border-gray-200/80" : "",
+          selectedStep ? "border-e border-gray-200/80" : "",
           (!selectedFlow && !isCreating) ? "hidden md:block" : ""
         )}>
 
@@ -1086,7 +1092,7 @@ export function ChatbotBuilder() {
                     <Zap className="h-5 w-5 text-white" />
                   </div>
                   <h2 className="text-base font-bold text-gray-900">{t("chatbotEditor.createNew")}</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">Give it a name to get started. You can always rename it later.</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{t("chatbotUi.flowNameHint")}</p>
                 </div>
                 <div className="p-6 space-y-4">
                   <div>
@@ -1094,7 +1100,7 @@ export function ChatbotBuilder() {
                     <Input
                       value={newFlowName}
                       onChange={(e) => setNewFlowName(e.target.value)}
-                      placeholder="e.g., Welcome Flow, Lead Qualifier"
+                      placeholder={t("builderFeedback.flowExample")}
                       autoFocus
                       onKeyDown={(e) => e.key === "Enter" && handleCreateFlow()}
                       className="text-sm"
@@ -1103,12 +1109,12 @@ export function ChatbotBuilder() {
                   </div>
                   <div>
                     <Label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                      Description <span className="text-gray-400 font-normal">(optional)</span>
+                      {t("builderUi.description")} <span className="text-gray-400 font-normal">{t("builderUi.optional")}</span>
                     </Label>
                     <Textarea
                       value={newFlowDesc}
                       onChange={(e) => setNewFlowDesc(e.target.value)}
-                      placeholder="What does this flow do?"
+                      placeholder={t("chatbotUi.flowPurpose")}
                       className="min-h-[70px] resize-none text-sm"
                       data-testid="input-new-flow-desc"
                     />
@@ -1120,7 +1126,7 @@ export function ChatbotBuilder() {
                       className="bg-brand-green hover:bg-brand-green/90 text-sm font-semibold"
                       data-testid="button-confirm-create-flow"
                     >
-                      {createFlowMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
+                      {createFlowMutation.isPending && <Loader2 className="h-3.5 w-3.5 me-2 animate-spin" />}
                       {t("chatbotEditor.create")}
                     </Button>
                     <Button variant="outline" className="text-sm" onClick={() => setIsCreating(false)} data-testid="button-cancel-create">
@@ -1140,10 +1146,10 @@ export function ChatbotBuilder() {
               </div>
               <h3 className="text-sm font-bold text-gray-700 mb-1">{t("chatbotEditor.selectFlow")}</h3>
               <p className="text-xs text-gray-400 mb-2 max-w-xs">
-                Design automated conversation flows to qualify leads, answer questions, and route contacts.
+                {t("chatbotUi.flowIntro")}
               </p>
               <p className="text-xs text-gray-500">
-                Tap <span className="font-semibold text-gray-700">{t("automationUi.createFlow")}</span> above to get started.
+                {t("builderFeedback.selectOrCreate")}
               </p>
             </div>
           )}
@@ -1160,8 +1166,8 @@ export function ChatbotBuilder() {
                     <Zap className="h-4 w-4 text-violet-600" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-900">Trigger</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">Set when this flow should start</div>
+                    <div className="text-sm font-bold text-gray-900">{t("chatbotUi.trigger")}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">{t("chatbotUi.triggerHint")}</div>
                   </div>
                 </div>
 
@@ -1201,7 +1207,7 @@ export function ChatbotBuilder() {
                             {kw}
                             <button
                               onClick={() => removeKeyword(kw)}
-                              className="text-violet-300 hover:text-violet-600 transition-colors ml-0.5"
+                              className="text-violet-300 hover:text-violet-600 transition-colors ms-0.5"
                               data-testid={`remove-keyword-${kw}`}
                             >
                               <X className="h-2.5 w-2.5" />
@@ -1239,9 +1245,9 @@ export function ChatbotBuilder() {
                   {/* Channel filter */}
                   <div className="h-px bg-gray-100" />
                   <div>
-                    <div className="text-xs font-semibold text-gray-700 mb-1.5">Channel filter</div>
+                    <div className="text-xs font-semibold text-gray-700 mb-1.5">{t("chatbotUi.channelFilter")}</div>
                     <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
-                      Run on all channels, or limit to specific ones.
+                      {t("chatbotUi.channelHint")}
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {CHANNEL_OPTIONS.map((ch) => {
@@ -1266,13 +1272,13 @@ export function ChatbotBuilder() {
                             data-testid={`channel-chip-${ch.value}`}
                           >
                             <span>{ch.icon}</span>
-                            {ch.label}
+                            {builderCatalogText(t, ch.label)}
                           </button>
                         );
                       })}
                     </div>
                     {(selectedFlow.triggerChannels || []).length === 0 && (
-                      <p className="text-[11px] text-gray-400 mt-1.5">All channels active</p>
+                      <p className="text-[11px] text-gray-400 mt-1.5">{t("chatbotUi.allChannels")}</p>
                     )}
                   </div>
 
@@ -1283,25 +1289,25 @@ export function ChatbotBuilder() {
                     if (!hasKw && !newChat) return (
                       <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-700" data-testid="trigger-summary-warning">
                         <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                        <span>No trigger set. Add a keyword or enable "Start on new conversation" so this flow can run.</span>
+                        <span>{t("chatbotUi.noTrigger")}</span>
                       </div>
                     );
                     if (hasKw && newChat) return (
                       <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-700" data-testid="trigger-summary-both">
                         <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                        <span>This flow runs when a new conversation starts <strong>{t("common.or")}</strong> when a message matches a keyword — whichever comes first.</span>
+                        <span>{t("builderFeedback.newOrKeyword")}</span>
                       </div>
                     );
                     if (newChat) return (
                       <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-emerald-50 border border-emerald-100 text-xs text-emerald-700" data-testid="trigger-summary-newchat">
                         <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                        <span>This flow runs on <strong>every new conversation.</strong></span>
+                        <span>{t("builderFeedback.newConversation")}</span>
                       </div>
                     );
                     return (
                       <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-emerald-50 border border-emerald-100 text-xs text-emerald-700" data-testid="trigger-summary-keywords">
                         <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                        <span>This flow runs when a message matches one of the trigger keywords.</span>
+                        <span>{t("chatbotUi.keywordTrigger")}</span>
                       </div>
                     );
                   })()}
@@ -1318,8 +1324,8 @@ export function ChatbotBuilder() {
               {selectedFlow.nodes.length === 0 && (
                 <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center shadow-sm">
                   <MousePointer2 className="h-8 w-8 text-gray-200 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-gray-500 mb-1">Start building your flow</p>
-                  <p className="text-xs text-gray-400 mb-5">Add your first step to design the conversation path.</p>
+                  <p className="text-sm font-bold text-gray-500 mb-1">{t("chatbotUi.startBuilding")}</p>
+                  <p className="text-xs text-gray-400 mb-5">{t("chatbotUi.firstStep")}</p>
                   <AddStepPicker onAdd={addStep} hint="Add first step" />
                 </div>
               )}
@@ -1329,7 +1335,7 @@ export function ChatbotBuilder() {
                 const meta = stepTypeMeta(node.type);
                 const Icon = meta.icon;
                 const isSelected = selectedStepId === node.id;
-                const summary = stepSummary(node, teamMembers);
+                const summary = stepSummary(t, i18n.language, node, teamMembers);
 
                 return (
                   <div key={node.id} className="flex flex-col items-center">
@@ -1353,7 +1359,7 @@ export function ChatbotBuilder() {
                         {/* Content hierarchy */}
                         <div className="flex-1 min-w-0">
                           <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide leading-none mb-0.5">
-                            {meta.label}
+                            {builderCatalogText(t, meta.label)}
                           </div>
                           <div className="text-sm font-semibold text-gray-800 truncate leading-snug">
                             {node.data.label}
@@ -1387,14 +1393,14 @@ export function ChatbotBuilder() {
                                 onClick={(e) => { e.stopPropagation(); deleteStep(node.id); }}
                                 className="text-xs font-medium gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
                                 data-testid={`delete-step-${node.id}`}>
-                                <Trash2 className="h-3 w-3" />Delete step
+                                <Trash2 className="h-3 w-3" />{t("chatbotUi.deleteStep")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
 
                         <Settings2 className={cn(
-                          "h-3.5 w-3.5 flex-shrink-0 ml-1 transition-colors",
+                          "h-3.5 w-3.5 flex-shrink-0 ms-1 transition-colors",
                           isSelected ? "text-brand-green" : "text-gray-200 group-hover:text-gray-400"
                         )} />
                       </div>
@@ -1420,7 +1426,7 @@ export function ChatbotBuilder() {
                 <div className="flex justify-center pb-10 pt-2">
                   <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm text-xs text-gray-400 font-medium">
                     <CheckCircle2 className="h-3.5 w-3.5 text-gray-300" />
-                    Flow ends here
+                    {t("chatbotUi.flowEnds")}
                   </div>
                 </div>
               )}
@@ -1430,7 +1436,7 @@ export function ChatbotBuilder() {
 
         {/* ══ Right Inspector Panel ════════════════════════════════════ */}
         {selectedStep && selectedFlow && (
-          <aside className="fixed inset-0 z-[60] md:relative md:inset-auto md:z-auto md:w-[300px] w-full bg-white border-l border-gray-200/80 flex flex-col flex-shrink-0 overflow-hidden">
+          <aside className="fixed inset-0 z-[60] md:relative md:inset-auto md:z-auto md:w-[300px] w-full bg-white border-s border-gray-200/80 flex flex-col flex-shrink-0 overflow-hidden">
             {/* Panel header */}
             <div className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-100 bg-gray-50/50">
               {(() => {
@@ -1444,19 +1450,19 @@ export function ChatbotBuilder() {
               })()}
               <div className="flex-1 min-w-0">
                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  {stepTypeMeta(selectedStep.type).label}
+                  {builderCatalogText(t, stepTypeMeta(selectedStep.type).label)}
                 </div>
                 <input
                   value={selectedStep.data.label}
                   onChange={(e) => updateStep(selectedStep.id, { label: e.target.value })}
                   className="text-xs font-semibold text-gray-800 bg-transparent border-0 focus:outline-none w-full p-0 mt-0.5"
-                  data-testid="input-step-label"
+                  aria-label={t("builderFeedback.stepName")} data-testid="input-step-label"
                 />
               </div>
               <button
                 onClick={() => setSelectedStepId(null)}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors flex-shrink-0"
-                data-testid="button-close-panel"
+                aria-label={t("common.close")} data-testid="button-close-panel"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1470,7 +1476,7 @@ export function ChatbotBuilder() {
                 <>
                   {/* Type switcher */}
                   <div>
-                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Message type</div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t("chatbotUi.messageType")}</div>
                     <div className="flex flex-wrap gap-1">
                       {MESSAGE_TYPES.map((mt) => {
                         const Icon = mt.icon;
@@ -1491,7 +1497,7 @@ export function ChatbotBuilder() {
                                 : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
                             )}
                             data-testid={`msg-type-${mt.value}-${selectedStep.id}`}>
-                            <Icon className="h-3 w-3" />{mt.label}
+                            <Icon className="h-3 w-3" />{builderCatalogText(t, mt.label)}
                           </button>
                         );
                       })}
@@ -1501,11 +1507,11 @@ export function ChatbotBuilder() {
                   {/* Text */}
                   {(selectedStep.data.messageType || "text") === "text" && (
                     <div>
-                      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Message</Label>
+                      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("builderUi.message")}</Label>
                       <Textarea
                         value={selectedStep.data.content || ""}
                         onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
-                        placeholder="Type your message here…"
+                        placeholder={t("chatbotUi.typeMessage")}
                         className="min-h-[110px] text-sm resize-none border-gray-200 focus:ring-brand-green/20"
                         data-testid={`input-message-${selectedStep.id}`}
                       />
@@ -1525,29 +1531,29 @@ export function ChatbotBuilder() {
                     <div className="space-y-3">
                       <div>
                         <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                          {selectedStep.data.messageType === "image" ? "Image" : "Video"}
+                          {selectedStep.data.messageType === "image" ? t("chatbotUi.image") : t("chatbotUi.video")}
                         </Label>
                         <div className="flex gap-2 mb-2">
                           <Input value={selectedStep.data.mediaUrl || ""} onChange={(e) => updateStep(selectedStep.id, { mediaUrl: e.target.value })}
-                            placeholder="Paste URL…" className="text-sm flex-1 border-gray-200" data-testid={`input-media-url-${selectedStep.id}`} />
+                            placeholder={t("chatbotUi.pasteUrl")} className="text-sm flex-1 border-gray-200" data-testid={`input-media-url-${selectedStep.id}`} />
                           <FileUploadButton nodeId={`media-${selectedStep.id}`}
                             accept={selectedStep.data.messageType === "image" ? "image/*" : "video/*"}
-                            label={selectedStep.data.mediaUrl ? "Replace" : "Upload"}
+                            label={selectedStep.data.mediaUrl ? t("widgetEditor.replace") : t("common.upload")}
                             onUploaded={(url) => updateStep(selectedStep.id, { mediaUrl: url })} />
                         </div>
                         {selectedStep.data.mediaUrl && selectedStep.data.messageType === "image" && (
                           <div className="rounded-xl overflow-hidden border border-gray-100 max-h-28 bg-gray-50">
-                            <img src={selectedStep.data.mediaUrl} alt="Preview" className="w-full object-cover max-h-28"
+                            <img src={selectedStep.data.mediaUrl} alt={t("chatbotUi.preview")} className="w-full object-cover max-h-28"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                           </div>
                         )}
                       </div>
                       <div>
                         <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                          Caption <span className="normal-case font-normal text-gray-300">(optional)</span>
+                          {t("chatbotUi.caption")} <span className="normal-case font-normal text-gray-300">{t("builderUi.optional")}</span>
                         </Label>
                         <Textarea value={selectedStep.data.mediaCaption || ""} onChange={(e) => updateStep(selectedStep.id, { mediaCaption: e.target.value })}
-                          placeholder="Add a caption…" className="min-h-[60px] text-sm resize-none border-gray-200" data-testid={`input-media-caption-${selectedStep.id}`} />
+                          placeholder={t("chatbotUi.addCaption")} className="min-h-[60px] text-sm resize-none border-gray-200" data-testid={`input-media-caption-${selectedStep.id}`} />
                       </div>
                     </div>
                   )}
@@ -1556,12 +1562,12 @@ export function ChatbotBuilder() {
                   {selectedStep.data.messageType === "file" && (
                     <div className="space-y-3">
                       <div>
-                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">File</Label>
+                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotUi.file")}</Label>
                         <div className="flex gap-2 mb-2">
                           <Input value={selectedStep.data.mediaUrl || ""} onChange={(e) => updateStep(selectedStep.id, { mediaUrl: e.target.value })}
-                            placeholder="Paste URL…" className="text-sm flex-1 border-gray-200" data-testid={`input-file-url-${selectedStep.id}`} />
+                            placeholder={t("chatbotUi.pasteUrl")} className="text-sm flex-1 border-gray-200" data-testid={`input-file-url-${selectedStep.id}`} />
                           <FileUploadButton nodeId={`file-${selectedStep.id}`} accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"
-                            label={selectedStep.data.mediaUrl ? "Replace" : "Upload"}
+                            label={selectedStep.data.mediaUrl ? t("widgetEditor.replace") : t("common.upload")}
                             onUploaded={(url, fileName) => updateStep(selectedStep.id, { mediaUrl: url, fileName })} />
                         </div>
                         {selectedStep.data.mediaUrl && (
@@ -1573,17 +1579,17 @@ export function ChatbotBuilder() {
                       </div>
                       <div>
                         <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                          File name <span className="normal-case font-normal text-gray-300">(optional)</span>
+                          {t("chatbotUi.fileName")} <span className="normal-case font-normal text-gray-300">{t("builderUi.optional")}</span>
                         </Label>
                         <Input value={selectedStep.data.fileName || ""} onChange={(e) => updateStep(selectedStep.id, { fileName: e.target.value })}
-                          placeholder="e.g., Price List.pdf" className="text-sm border-gray-200" data-testid={`input-file-name-${selectedStep.id}`} />
+                          placeholder={t("builderFeedback.fileExample")} className="text-sm border-gray-200" data-testid={`input-file-name-${selectedStep.id}`} />
                       </div>
                       <div>
                         <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                          Message <span className="normal-case font-normal text-gray-300">(optional)</span>
+                          {t("builderUi.message")} <span className="normal-case font-normal text-gray-300">{t("builderUi.optional")}</span>
                         </Label>
                         <Textarea value={selectedStep.data.content || ""} onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
-                          placeholder="Here's the file you requested…" className="min-h-[60px] text-sm resize-none border-gray-200" data-testid={`input-file-message-${selectedStep.id}`} />
+                          placeholder={t("builderFeedback.fileMessageExample")} className="min-h-[60px] text-sm resize-none border-gray-200" data-testid={`input-file-message-${selectedStep.id}`} />
                       </div>
                     </div>
                   )}
@@ -1596,30 +1602,30 @@ export function ChatbotBuilder() {
                     return (
                       <div className="space-y-4">
                         <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 space-y-1.5">
-                          <p className="font-bold text-slate-700 mb-1">Channel support</p>
-                          <p>✅ Full — WhatsApp (Meta), WebChat</p>
-                          <p>〜 Partial — WhatsApp (Twilio), sent as numbered list</p>
-                          <p>✖ Text only — Instagram, Facebook, Telegram, SMS</p>
+                          <p className="font-bold text-slate-700 mb-1">{t("chatbotUi.channelSupport")}</p>
+                          <p>{t("chatbotUi.fullSupport")}</p>
+                          <p>{t("chatbotUi.partialSupport")}</p>
+                          <p>{t("chatbotUi.textOnly")}</p>
                         </div>
                         {buttons.length > 3 && (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-100 text-[11px] text-amber-700">
-                            ⚠️ WhatsApp supports max 3 buttons.
+                            {t("chatbotUi.whatsappButtons")}
                           </div>
                         )}
                         <div>
-                          <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Prompt message</Label>
+                          <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotUi.prompt")}</Label>
                           <Textarea value={selectedStep.data.content || ""} onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
-                            placeholder="Choose an option below:" className="min-h-[60px] text-sm resize-none border-gray-200" data-testid={`input-buttons-message-${selectedStep.id}`} />
+                            placeholder={t("chatbotUi.chooseOption")} className="min-h-[60px] text-sm resize-none border-gray-200" data-testid={`input-buttons-message-${selectedStep.id}`} />
                         </div>
                         <div>
                           <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                            Buttons <span className="normal-case font-normal text-gray-300">(max 3)</span>
+                            {t("chatbotUi.buttons")} <span className="normal-case font-normal text-gray-300">{t("chatbotUi.buttonLimit")}</span>
                           </Label>
                           <div className="space-y-2">
                             {buttons.map((btn, bi) => (
                               <div key={bi} className="p-3 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Button {bi + 1}</span>
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("chatbotUi.button")} {bi + 1}</span>
                                   <button onClick={() => { const nb = buttons.filter((_, i) => i !== bi); updateStep(selectedStep.id, { buttons: nb }); }}
                                     className="text-gray-300 hover:text-red-500 transition-colors" data-testid={`delete-button-${selectedStep.id}-${bi}`}>
                                     <X className="h-3.5 w-3.5" />
@@ -1630,14 +1636,14 @@ export function ChatbotBuilder() {
                                   const autoVal = label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "").substring(0, 64);
                                   nb[bi] = { ...nb[bi], label, value: autoVal || label };
                                   updateStep(selectedStep.id, { buttons: nb });
-                                }} placeholder={`Button ${bi + 1} label`} maxLength={20} className="text-sm h-8 border-gray-200" data-testid={`input-button-label-${selectedStep.id}-${bi}`} />
+                                }} placeholder={t("builderFeedback.buttonLabel", { number: bi + 1 })} maxLength={20} className="text-sm h-8 border-gray-200" data-testid={`input-button-label-${selectedStep.id}-${bi}`} />
                                 {otherNodes.length > 0 && (
                                   <Select value={btn.nextNodeId || "__none__"} onValueChange={(val) => {
                                     const nb = [...buttons]; nb[bi] = { ...nb[bi], nextNodeId: val === "__none__" ? undefined : val };
                                     updateStep(selectedStep.id, { buttons: nb });
                                   }}>
                                     <SelectTrigger className="h-8 text-xs border-gray-200" data-testid={`select-nextstep-${selectedStep.id}-${bi}`}>
-                                      <SelectValue placeholder="Next step (optional)" />
+                                      <SelectValue placeholder={t("chatbotUi.nextStep")} />
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="__none__">{t("chatbotEditor.endFlow")}</SelectItem>
@@ -1653,7 +1659,7 @@ export function ChatbotBuilder() {
                                 updateStep(selectedStep.id, { buttons: [...buttons, { label: `Option ${idx}`, value: `option_${idx}` }] });
                               }} className="w-full py-2.5 rounded-xl border border-dashed border-gray-200 text-[11px] font-semibold text-gray-400 hover:border-brand-green hover:text-brand-green transition-colors flex items-center justify-center gap-1"
                                 data-testid={`add-button-${selectedStep.id}`}>
-                                <Plus className="h-3 w-3" />Add button
+                                <Plus className="h-3 w-3" />{t("chatbotUi.addButton")}
                               </button>
                             )}
                           </div>
@@ -1686,26 +1692,26 @@ export function ChatbotBuilder() {
                 <div className="space-y-4">
                   {/* WhatsApp-only info */}
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 space-y-1">
-                    <p className="font-bold text-slate-700 mb-1">Official WhatsApp template send</p>
-                    <p>✅ Sends via Meta Cloud API or Twilio Content API</p>
-                    <p>✅ Works outside the 24-hour conversation window</p>
-                    <p>✅ Supports Meta and Twilio providers automatically</p>
-                    <p>✖ WhatsApp only — skipped on all other channels</p>
+                    <p className="font-bold text-slate-700 mb-1">{t("chatbotUi.officialTemplate")}</p>
+                    <p>{t("chatbotUi.templateApi")}</p>
+                    <p>{t("chatbotUi.templateWindow")}</p>
+                    <p>{t("chatbotUi.templateProviders")}</p>
+                    <p>{t("chatbotUi.templateWhatsappOnly")}</p>
                   </div>
                   {(selectedFlow.triggerChannels || []).length > 0 &&
                     !(selectedFlow.triggerChannels || []).includes("whatsapp") && (
                     <div className="flex gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
                       <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
                       <p className="text-[11px] text-amber-700 leading-relaxed">
-                        This flow's channel filter does not include WhatsApp. Template steps will be skipped on the configured channels.
+                        {t("chatbotUi.noWhatsappFilter")}
                       </p>
                     </div>
                   )}
                   <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Template</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("builderUi.template")}</Label>
                     {messageTemplates.length === 0 ? (
                       <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[11px] text-gray-500">
-                        No approved templates found. Sync or create templates in your Templates section first.
+                        {t("chatbotUi.noApprovedTemplates")}
                       </div>
                     ) : (
                       <Select
@@ -1721,12 +1727,12 @@ export function ChatbotBuilder() {
                         }}
                       >
                         <SelectTrigger className="text-sm border-gray-200 bg-gray-50" data-testid={`select-template-${selectedStep.id}`}>
-                          <SelectValue placeholder="Select approved template…" />
+                          <SelectValue placeholder={t("chatbotUi.chooseTemplate")} />
                         </SelectTrigger>
                         <SelectContent>
                           {messageTemplates.map((t) => (
                             <SelectItem key={t.id} value={t.id}>
-                              {t.name} <span className="text-gray-400 text-xs ml-1">({t.language})</span>
+                              {t.name} <span className="text-gray-400 text-xs ms-1">({t.language})</span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1744,7 +1750,7 @@ export function ChatbotBuilder() {
                         </div>
                         {vars.length > 0 && (
                           <div className="space-y-2">
-                            <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Variables</Label>
+                            <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">{t("chatbotUi.variables")}</Label>
                             {vars.map((varName) => (
                               <div key={varName} className="flex items-center gap-2">
                                 <span className="text-[11px] font-mono text-violet-600 w-20 flex-shrink-0">{`{{${varName}}}`}</span>
@@ -1754,7 +1760,7 @@ export function ChatbotBuilder() {
                                     const vars = { ...(selectedStep.data.templateVariables || {}), [varName]: e.target.value };
                                     updateStep(selectedStep.id, { templateVariables: vars });
                                   }}
-                                  placeholder={`Value for ${varName}`}
+                                  placeholder={t("builderFeedback.variableValue", { name: varName })}
                                   className="text-sm border-gray-200 h-8 flex-1"
                                   data-testid={`input-template-var-${selectedStep.id}-${varName}`}
                                 />
@@ -1772,25 +1778,24 @@ export function ChatbotBuilder() {
               {selectedStep.type === "question" && (
                 <>
                   <p className="text-[11px] text-gray-500 leading-relaxed rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
-                    Ask Question sends one message, waits for the visitor, saves the answer, then continues once.
-                    You can put the greeting and the question in this same message. Quick replies are visitor-facing buttons — they are not Send Message “Buttons” branches.
+                    {t("builderFeedback.askInstructions")}
                   </p>
                   <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Question</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotUi.question")}</Label>
                     <Textarea value={selectedStep.data.content || ""} onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
-                      placeholder="Hi! 👋 Welcome to our team. I can help you explore features, find the right solution, or book a live demo. What would you like help with today?" className="min-h-[110px] text-sm resize-none border-gray-200" data-testid={`input-question-${selectedStep.id}`} />
+                      placeholder={t("chatbotUi.typeMessage")} className="min-h-[110px] text-sm resize-none border-gray-200" data-testid={`input-question-${selectedStep.id}`} />
                   </div>
                   <div>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                      Save answer as <span className="normal-case font-normal text-gray-300">(optional)</span>
+                      {t("chatbotUi.saveAnswer")} <span className="normal-case font-normal text-gray-300">{t("builderUi.optional")}</span>
                     </Label>
                     <Input value={selectedStep.data.variableName || ""} onChange={(e) => updateStep(selectedStep.id, { variableName: e.target.value })}
-                      placeholder="e.g., visitor_intent" className="text-sm border-gray-200" data-testid={`input-variable-${selectedStep.id}`} />
+                      placeholder={t("builderFeedback.variableExample")} className="text-sm border-gray-200" data-testid={`input-variable-${selectedStep.id}`} />
                   </div>
                   <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Quick reply options</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotUi.quickReplies")}</Label>
                     <p className="text-[11px] text-gray-400 mb-2">
-                      Visitor-facing buttons. Website Chat supports up to {WEBCHAT_ASK_QUICK_REPLY_MAX}. WhatsApp supports {WHATSAPP_ASK_QUICK_REPLY_MAX} (extra options are omitted there). Visitors can still type a free-text answer.
+                      {t("builderFeedback.quickReplyLimits", { web: WEBCHAT_ASK_QUICK_REPLY_MAX, whatsapp: WHATSAPP_ASK_QUICK_REPLY_MAX })}
                     </p>
                     <div className="space-y-2">
                       {(selectedStep.data.options || []).map((opt, oi) => (
@@ -1799,7 +1804,7 @@ export function ChatbotBuilder() {
                             const opts = [...(selectedStep.data.options || [])];
                             opts[oi] = { ...opts[oi], label: e.target.value };
                             updateStep(selectedStep.id, { options: opts });
-                          }} placeholder={`Option ${oi + 1}`} className="text-sm flex-1 border-gray-200" data-testid={`input-option-${selectedStep.id}-${oi}`} />
+                          }} placeholder={t("builderFeedback.optionNumber", { number: oi + 1 })} className="text-sm flex-1 border-gray-200" data-testid={`input-option-${selectedStep.id}-${oi}`} />
                           <button onClick={() => {
                             const opts = (selectedStep.data.options || []).filter((_, i) => i !== oi);
                             updateStep(selectedStep.id, { options: opts });
@@ -1813,7 +1818,7 @@ export function ChatbotBuilder() {
                         updateStep(selectedStep.id, { options: opts });
                       }} className="w-full py-2.5 rounded-xl border border-dashed border-gray-200 text-[11px] font-semibold text-gray-400 hover:border-brand-green hover:text-brand-green transition-colors flex items-center justify-center gap-1"
                         data-testid={`add-option-${selectedStep.id}`}>
-                        <Plus className="h-3 w-3" />Add option
+                        <Plus className="h-3 w-3" />{t("chatbotUi.addOption")}
                       </button>
                     </div>
                   </div>
@@ -1841,7 +1846,7 @@ export function ChatbotBuilder() {
               {selectedStep.type === "action" && (
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Action type</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotUi.actionType")}</Label>
                     <Select value={selectedStep.data.action?.type || "set_tag"}
                       onValueChange={(val) => {
                         const prev = selectedStep.data.action;
@@ -1863,14 +1868,14 @@ export function ChatbotBuilder() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ACTION_TYPES.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+                        {ACTION_TYPES.map(a => <SelectItem key={a.value} value={a.value}>{builderCatalogText(t, a.label)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  {selectedStep.data.action?.type === "shopping_assistant" && <p className="text-sm text-muted-foreground">Uses the customer's message to search verified products and select options. Enable AI Shopping Assistant in Shopify Products. AI Brain controls reply approval and delivery.</p>}
+                  {selectedStep.data.action?.type === "shopping_assistant" && <p className="text-sm text-muted-foreground">{t("builderFeedback.shoppingHelp")}</p>}
                   <div hidden={selectedStep.data.action?.type === "shopping_assistant"}>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-                      {selectedStep.data.action?.type === "assign" ? "Team member" : "Value"}
+                      {selectedStep.data.action?.type === "assign" ? t("chatbotUi.teamMember") : t("builderUi.value")}
                     </Label>
                     {selectedStep.data.action?.type === "assign" ? (
                       <div>
@@ -1888,11 +1893,11 @@ export function ChatbotBuilder() {
                           }}
                         >
                           <SelectTrigger className="text-sm border-gray-200 bg-gray-50" data-testid={`select-assign-member-${selectedStep.id}`}>
-                            <SelectValue placeholder="Select team member…" />
+                            <SelectValue placeholder={t("chatbotUi.selectMember")} />
                           </SelectTrigger>
                           <SelectContent>
                             {teamMembers.length === 0 && (
-                              <SelectItem value="__none__" disabled>No team members found</SelectItem>
+                              <SelectItem value="__none__" disabled>{t("chatbotUi.noMembers")}</SelectItem>
                             )}
                             {selectedStep.data.action?.value &&
                               !teamMembers.some((m) => m.memberId === selectedStep.data.action?.value) && (
@@ -1903,7 +1908,7 @@ export function ChatbotBuilder() {
                             )}
                             {teamMembers.map((m) => (
                               <SelectItem key={m.memberId} value={m.memberId}>
-                                {m.name || m.email} {m.role === "owner" ? "(Owner)" : ""}
+                                {m.name || m.email} {m.role === "owner" ? t("chatbotUi.owner") : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1912,7 +1917,7 @@ export function ChatbotBuilder() {
                           !teamMembers.find((m) => m.memberId === selectedStep.data.action?.value) && (
                           <div className="flex gap-1.5 mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
                             <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                            <p className="text-[11px] text-amber-700">Previously saved team member no longer exists. Please re-select.</p>
+                            <p className="text-[11px] text-amber-700">{t("chatbotUi.missingMember")}</p>
                           </div>
                         )}
                       </div>
@@ -1920,10 +1925,10 @@ export function ChatbotBuilder() {
                       <Input value={selectedStep.data.action?.value || ""}
                         onChange={(e) => updateStep(selectedStep.id, { action: { type: selectedStep.data.action?.type || "set_tag", value: e.target.value } })}
                         placeholder={
-                          selectedStep.data.action?.type === "set_tag" ? "e.g. lead, vip, interested…" :
+                          selectedStep.data.action?.type === "set_tag" ? t("builderFeedback.tagExample") :
                           selectedStep.data.action?.type === "set_status" ? "open / resolved / pending" :
-                          selectedStep.data.action?.type === "set_pipeline" ? "Stage name or ID" :
-                          "Enter value…"
+                          selectedStep.data.action?.type === "set_pipeline" ? t("builderFeedback.stageNameOrId") :
+                          t("builderFeedback.enterValue")
                         }
                         className="text-sm border-gray-200" data-testid={`input-action-value-${selectedStep.id}`} />
                     )}

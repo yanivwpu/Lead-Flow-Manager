@@ -39,3 +39,30 @@ test("chatbot delay and website placement controls keep their stored values", ()
     assert.ok(widget.includes(`t("widgetEditor.${position}")`));
   }
 });
+
+test("builder catalog renders translated labels without changing action identifiers or authored copy", async () => {
+  const { builderCatalogText, builderDuration, builderStatusLabel } = await import("../client/src/lib/builderPresentation");
+  const { CRM_WORKFLOW_ACTIONS, GROWTH_ENGINE_WORKFLOW_ACTIONS } = await import("../client/src/lib/workflowActionCatalog");
+  const catalog = [...CRM_WORKFLOW_ACTIONS, ...GROWTH_ENGINE_WORKFLOW_ACTIONS];
+  const snapshot = catalog.map(({ value, label, description }) => ({ value, label, description }));
+  const i18n = createInstance();
+  await i18n.init({ lng: "en", resources });
+
+  for (const [language, { translation }] of Object.entries(resources)) {
+    await i18n.changeLanguage(language);
+    for (const { label, description } of catalog) {
+      const displayLabel = builderCatalogText(i18n.t, label);
+      const displayDescription = builderCatalogText(i18n.t, description);
+      if (language !== "en") {
+        assert.notEqual(displayLabel, label);
+        assert.notEqual(displayDescription, description);
+      }
+    }
+    assert.equal(builderCatalogText(i18n.t, "Custom welcome · שלום"), "Custom welcome · שלום");
+    assert.equal(builderStatusLabel(i18n.t, "draft"), translation.automationUi.draft);
+    assert.equal(builderDuration(language, 2, "hour"), new Intl.NumberFormat(language, {
+      style: "unit", unit: "hour", unitDisplay: "long",
+    }).format(2));
+  }
+  assert.deepEqual(catalog.map(({ value, label, description }) => ({ value, label, description })), snapshot);
+});
