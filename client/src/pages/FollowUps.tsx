@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+import { crmAppointmentType, crmStageLabel } from "@/lib/crmPresentation";
 import { useTranslation } from "react-i18next";
 import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { useState, useMemo, useEffect } from "react";
@@ -32,11 +34,23 @@ type ViewMode = 'list' | 'calendar' | 'pipeline';
 
 const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
 
+function kpiLabel(t: TFunction, filter: Exclude<KPIFilter, null>) {
+  switch (filter) {
+    case "overdue": return t("followups.overdue");
+    case "today": return t("crmDetails.dueToday");
+    case "needs-reply": return t("crmDetails.needsReply");
+    case "booking-requested": return t("crmDetails.highIntent");
+    case "booked": return t("crmDetails.closed");
+    case "active-deals": return t("crmDetails.activeDeals");
+  }
+}
+
 function KPIHeader({ chats, activeFilter, onFilterChange }: { 
   chats: Chat[]; 
   activeFilter: KPIFilter;
   onFilterChange: (filter: KPIFilter) => void;
 }) {
+  const { t } = useTranslation();
   // Counters and filters use the same predicates as every view.
   const overdueCount = applyKPIFilter(chats, 'overdue').length;
   const todayCount = applyKPIFilter(chats, 'today').length;
@@ -45,13 +59,13 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   const needsReplyCount = applyKPIFilter(chats, 'needs-reply').length;
   const activeDealsCount = applyKPIFilter(chats, 'active-deals').length;
 
-  const kpis: { label: string; filterKey: KPIFilter; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
-    { label: 'Active Deals', filterKey: 'active-deals', value: activeDealsCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', activeBorder: 'border-indigo-500 ring-2 ring-indigo-200' },
-    { label: 'Overdue', filterKey: 'overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', activeBorder: 'border-red-500 ring-2 ring-red-200' },
-    { label: 'Due Today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', activeBorder: 'border-amber-500 ring-2 ring-amber-200' },
-    { label: 'Needs Reply', filterKey: 'needs-reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', activeBorder: 'border-blue-500 ring-2 ring-blue-200' },
-    { label: 'High Intent', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', activeBorder: 'border-purple-500 ring-2 ring-purple-200' },
-    { label: 'Closed', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', activeBorder: 'border-green-500 ring-2 ring-green-200' },
+  const kpis: { id: string; filterKey: Exclude<KPIFilter, null>; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
+    { id: 'active-deals', filterKey: 'active-deals', value: activeDealsCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', activeBorder: 'border-indigo-500 ring-2 ring-indigo-200' },
+    { id: 'overdue', filterKey: 'overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-eed-100', activeBorder: 'border-eed-500 ring-2 ring-red-200' },
+    { id: 'due-today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', activeBorder: 'border-amber-500 ring-2 ring-amber-200' },
+    { id: 'needs-reply', filterKey: 'needs-reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', activeBorder: 'border-blue-500 ring-2 ring-blue-200' },
+    { id: 'high-intent', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', activeBorder: 'border-purple-500 ring-2 ring-purple-200' },
+    { id: 'closed', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', activeBorder: 'border-green-500 ring-2 ring-green-200' },
   ];
 
   const handleClick = (filterKey: KPIFilter) => {
@@ -62,18 +76,19 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3 mb-6" data-testid="kpi-header">
       {kpis.map(kpi => (
         <button 
-          key={kpi.label}
+          key={kpi.filterKey}
           onClick={() => handleClick(kpi.filterKey)}
+          aria-pressed={activeFilter === kpi.filterKey}
           className={cn(
-            "rounded-xl border p-3 md:p-4 text-left transition-all cursor-pointer hover:shadow-md",
+            "rounded-xl border p-3 md:p-4 text-start transition-all cursor-pointer hover:shadow-md",
             kpi.bg,
             activeFilter === kpi.filterKey ? kpi.activeBorder : kpi.border
           )}
-          data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
+          data-testid={`kpi-${kpi.id}`}
         >
           <div className="flex items-center gap-2 mb-1">
             <kpi.icon className={cn("h-4 w-4", kpi.color)} />
-            <span className="text-xs md:text-sm font-medium text-gray-600">{kpi.label}</span>
+            <span className="text-xs md:text-sm font-medium text-gray-600">{kpiLabel(t, kpi.filterKey)}</span>
           </div>
           <p className={cn("text-xl md:text-2xl font-bold", kpi.color)}>{kpi.value}</p>
         </button>
@@ -83,18 +98,19 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
 }
 
 function StatusTag({ status }: { status: 'overdue' | 'today' | 'upcoming' | null }) {
+  const { t } = useTranslation();
   if (!status) return null;
   
   const styles = {
-    overdue: 'bg-red-100 text-red-700 border-red-200',
+    overdue: 'bg-red-100 text-red-700 border-eed-200',
     today: 'bg-amber-100 text-amber-700 border-amber-200',
     upcoming: 'bg-blue-100 text-blue-700 border-blue-200',
   };
   
   const labels = {
-    overdue: 'Overdue',
-    today: 'Today',
-    upcoming: 'Upcoming',
+    overdue: t("followups.overdue"),
+    today: t("common.today"),
+    upcoming: t("crmDetails.upcoming"),
   };
   
   return (
@@ -119,7 +135,7 @@ function TaskListItem({
   onClick: (chatId: string) => void;
   onSetReminder?: (chat: Chat) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const status = chat.followUpDate ? getTaskStatus(chat.followUpDate) : null;
   const needsReply = hasNeedsReply(chat);
   
@@ -130,7 +146,7 @@ function TaskListItem({
       data-testid={`task-item-${chat.id}`}
     >
       {hasTask(chat) && !chat.isAppointment && !chat.reviewRecommended && <button
-        className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white mr-4 shrink-0 transition-colors flex items-center justify-center"
+        className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white me-4 shrink-0 transition-colors flex items-center justify-center"
         onClick={(e) => onMarkDone(e, chat.id)}
         disabled={isPending}
         data-testid={`button-mark-done-${chat.id}`}
@@ -146,36 +162,36 @@ function TaskListItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="font-semibold text-gray-900" data-testid={`text-contact-${chat.id}`}>
-            {chat.name}
+            <bdi>{chat.name}</bdi>
           </span>
           {status && <StatusTag status={status} />}
           {needsReply && (
             <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-medium" data-testid={`tag-unreplied-${chat.id}`}>
-              Needs Reply
+              {t("crmDetails.needsReply")}
             </span>
           )}
         </div>
         <p className="text-sm text-gray-600 mb-1">
-          {chat.reviewRecommended || (hasTask(chat) ? `Follow up: ${chat.followUp}` : needsReply ? 'Reply to customer inquiry' : `Sales opportunity · ${chat.pipelineStage}`)}
+          {chat.reviewRecommended || (hasTask(chat) ? t("crmDetails.followUpText", { task: chat.followUp }) : needsReply ? t("crmDetails.replyInquiry") : t("crmDetails.salesOpportunity", { stage: crmStageLabel(t, chat.pipelineStage) }))}
           {chat.followUpDate && (
-            <span className="text-gray-400 ml-2">
-              ({format(new Date(chat.followUpDate), 'MMM d, yyyy')})
+            <span className="text-gray-400 ms-2">
+              ({formatRegionalDate(new Date(chat.followUpDate), i18n.language, { dateStyle: "medium" })})
             </span>
           )}
         </p>
         <p className="text-sm text-gray-500 truncate" data-testid={`text-lastmessage-${chat.id}`}>
-          Last message: {chat.lastMessage}
+          {t("crmDetails.lastMessage")}: <bdi>{chat.lastMessage}</bdi>
         </p>
         {chat.notes && (
           <p className="text-xs text-gray-400 truncate mt-1">
-            Note: {chat.notes}
+            {t("crmDetails.note")}: <bdi>{chat.notes}</bdi>
           </p>
         )}
       </div>
 
-      {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ml-3 shrink-0"
+      {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ms-3 shrink-0"
         onClick={(event) => { event.stopPropagation(); onSetReminder(chat); }}>{t("inboxUi.setReminder")}</Button>
-        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ml-4" data-testid={`icon-arrow-${chat.id}`} />}
+        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ms-4 rtl:rotate-180" data-testid={`icon-arrow-${chat.id}`} />}
     </div>
   );
 }
@@ -193,7 +209,7 @@ function PipelineCard({
   onDragEnd: () => void;
   isDragging: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const status = getTaskStatus(chat.followUpDate);
   const needsReply = hasNeedsReply(chat);
 
@@ -210,15 +226,15 @@ function PipelineCard({
       data-testid={`pipeline-card-${chat.id}`}
     >
       <div className="font-semibold text-gray-900 text-sm mb-1 truncate" data-testid={`pipeline-contact-${chat.id}`}>
-        {chat.name}
+        <bdi>{chat.name}</bdi>
       </div>
       <p className="text-xs text-gray-500 truncate mb-2" data-testid={`pipeline-lastmessage-${chat.id}`}>
-        {chat.lastMessage}
+        <bdi>{chat.lastMessage}</bdi>
       </p>
       <div className="flex flex-wrap gap-1">
         {needsReply && (
           <span className="text-[10px] bg-green-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
-            Needs Reply
+            {t("crmDetails.needsReply")}
           </span>
         )}
         {status === 'overdue' && (
@@ -233,7 +249,7 @@ function PipelineCard({
         )}
         {chat.followUpDate && status === 'upcoming' && (
           <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-            {format(new Date(chat.followUpDate), 'MMM d')}
+            {formatRegionalDate(new Date(chat.followUpDate), i18n.language, { month: "short", day: "numeric" })}
           </span>
         )}
       </div>
@@ -252,6 +268,7 @@ function PipelineView({
   onStageChange: (chatId: string, newStage: string) => void;
   isMobile: boolean;
 }) {
+  const { t } = useTranslation();
   const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
 
   const chatsByStage = useMemo(() => {
@@ -301,11 +318,11 @@ function PipelineView({
   };
 
   const emptyStateMessages: Record<string, string> = {
-    'Lead': 'No new leads yet',
-    'Contacted': 'No leads contacted yet',
-    'Proposal': 'No proposals sent yet',
-    'Negotiation': 'No deals in negotiation',
-    'Closed': 'No closed opportunities',
+    'Lead': t("crmDetails.emptyLead"),
+    'Contacted': t("crmDetails.emptyContacted"),
+    'Proposal': t("crmDetails.emptyProposal"),
+    'Negotiation': t("crmDetails.emptyNegotiation"),
+    'Closed': t("crmDetails.emptyClosed"),
   };
 
   return (
@@ -330,8 +347,8 @@ function PipelineView({
             <div className={cn("p-3 rounded-t-xl border-b", colors.header, colors.border)}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">{stage}</h3>
-                  <p className="text-xs text-gray-500">{stageChats.length} opportunit{stageChats.length !== 1 ? 'ies' : 'y'}</p>
+                  <h3 className="font-semibold text-gray-900 text-sm">{crmStageLabel(t, stage)}</h3>
+                  <p className="text-xs text-gray-500">{t("crmDetails.dealCount", { count: stageChats.length })}</p>
                 </div>
               </div>
             </div>
@@ -348,7 +365,7 @@ function PipelineView({
               ))}
               {stageChats.length === 0 && (
                 <div className="text-center py-8 text-gray-400 text-sm italic">
-                  {emptyStateMessages[stage]}
+                  {emptyStateMessages[stage] ?? t("crmDetails.emptyStage")}
                 </div>
               )}
             </div>
@@ -470,7 +487,7 @@ function TaskCalendarView({
             <div
               key={idx}
               className={cn(
-                "min-h-[60px] md:min-h-[100px] p-0.5 md:p-1 border-b border-r border-gray-100 transition-colors",
+                "min-h-[60px] md:min-h-[100px] p-0.5 md:p-1 border-b border-e border-gray-100 transition-colors",
                 !isCurrentMonth && "bg-gray-50",
                 isDayToday && "bg-amber-50",
                 !isMobile && draggedTask && "hover:bg-green-50"
@@ -480,7 +497,7 @@ function TaskCalendarView({
               data-testid={`calendar-day-${dateKey}`}
             >
               <div className={cn(
-                "text-[10px] md:text-xs font-medium mb-0.5 md:mb-1 text-right pr-0.5 md:pr-1",
+                "text-[10px] md:text-xs font-medium mb-0.5 md:mb-1 text-end pe-0.5 md:pe-1",
                 !isCurrentMonth && "text-gray-400",
                 isDayToday && "text-amber-600",
                 isPastDay && isCurrentMonth && "text-gray-500"
@@ -509,17 +526,17 @@ function TaskCalendarView({
                         draggedTask?.id === task.id && "opacity-50"
                       )}
                       data-testid={`calendar-task-${task.id}`}
-                      title={task.isAppointment ? `${task.appointmentType} · ${task.name}` : (task.followUp ? `${task.name} · ${task.followUp}` : task.name)}
+                      title={task.isAppointment ? `${crmAppointmentType(t, task.appointmentType)} · ${task.name}` : (task.followUp ? `${task.name} · ${task.followUp}` : task.name)}
                     >
                       {task.isAppointment
-                        ? (isMobile ? task.appointmentType! : `${task.appointmentType} · ${task.name}`)
+                        ? (isMobile ? crmAppointmentType(t, task.appointmentType) : `${crmAppointmentType(t, task.appointmentType)} · ${task.name}`)
                         : (isMobile ? task.name.split(' ')[0] : (task.followUp ? `${task.name} · ${task.followUp.split(' · ')[0]}` : task.name))
                       }
                     </div>
                   );
                 })}
                 {dayTasks.length > maxTasksToShow && (
-                  <div className="text-[9px] md:text-xs text-gray-500 pl-0.5 md:pl-1">
+                  <div className="text-[9px] md:text-xs text-gray-500 ps-0.5 md:ps-1" aria-label={t("crmDetails.extraTasks", { count: dayTasks.length - maxTasksToShow })}>
                     +{dayTasks.length - maxTasksToShow}
                   </div>
                 )}
@@ -533,7 +550,7 @@ function TaskCalendarView({
 }
 
 export function FollowUps() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -543,7 +560,7 @@ export function FollowUps() {
   const isMobile = useIsMobile();
   const [leadReviewsOnly, setLeadReviewsOnly] = useState(false);
 
-  const { data: inboxData = [], isLoading } = useQuery<InboxItem[]>({
+  const { data: inboxData = [], isLoading, isError: tasksError, refetch: retryTasks } = useQuery<InboxItem[]>({
     queryKey: ['/api/inbox'],
     enabled: !!user,
     refetchOnMount: 'always',
@@ -551,7 +568,7 @@ export function FollowUps() {
     refetchInterval: 30_000,
   });
 
-  const { data: appointmentsData = [] } = useQuery<AppointmentRecord[]>({
+  const { data: appointmentsData = [], isError: appointmentsError, refetch: retryAppointments } = useQuery<AppointmentRecord[]>({
     queryKey: ['/api/appointments'],
     enabled: !!user,
   });
@@ -577,9 +594,9 @@ export function FollowUps() {
           queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
           queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
           toast({
-            title: "Booking confirmed",
+            title: t("inboxUi.bookingConfirmed"),
             description:
-              typeof msg.title === "string" && msg.title ? msg.title : "Calendly booking saved to Tasks.",
+              typeof msg.title === "string" && msg.title ? msg.title : t("crmDetails.bookingSaved"),
           });
         }
       } catch {
@@ -590,7 +607,7 @@ export function FollowUps() {
       if (heartbeat) clearInterval(heartbeat);
       ws?.close();
     };
-  }, [user, queryClient, toast]);
+  }, [user, queryClient, toast, t]);
 
   const chats = useMemo(() => buildFollowUpItems(inboxData), [inboxData]);
   const scheduledFollowUps = useMemo(() => chats.filter(hasScheduledFollowUp), [chats]);
@@ -619,6 +636,7 @@ export function FollowUps() {
       return patchContact(contactId, { followUp: null, followUpDate: null });
     },
     onSuccess: invalidateAll,
+    onError: () => toast({ title: t("crmDetails.completionFailed"), variant: "destructive" }),
   });
 
   const updateFollowUpDateMutation = useMutation({
@@ -626,7 +644,7 @@ export function FollowUps() {
       return patchContact(chatId, { followUpDate: newDate.toISOString(), ...(title ? { followUp: title } : {}) });
     },
     onSuccess: () => { invalidateAll(); setReminder(undefined); },
-    onError: () => toast({ title: 'Could not save reminder', variant: 'destructive' }),
+    onError: () => toast({ title: t("crmDetails.reminderFailed"), variant: 'destructive' }),
   });
 
   const updatePipelineStageMutation = useMutation({
@@ -634,6 +652,7 @@ export function FollowUps() {
       return patchContact(chatId, { pipelineStage: newStage });
     },
     onSuccess: invalidateAll,
+    onError: () => toast({ title: t("crmDetails.stageFailed"), variant: "destructive" }),
   });
 
   const filteredChats = useMemo(() => {
@@ -689,9 +708,9 @@ export function FollowUps() {
     return [...followUpEvents, ...appointments];
   }, [followUps, appointmentTasks, appointmentsData, filteredChats, kpiFilter]);
 
-  const handleMarkDone = async (e: React.MouseEvent, chatId: string) => {
+  const handleMarkDone = (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
-    await clearFollowUpMutation.mutateAsync(chatId);
+    clearFollowUpMutation.mutate(chatId);
   };
 
   const handleRowClick = (chatId: string) => {
@@ -718,18 +737,19 @@ export function FollowUps() {
   }
 
   return (
-    <div className="flex-1 h-full bg-white flex flex-col">
+    <div className="flex-1 h-full bg-white flex flex-col" dir={i18n.dir()}>
       <div className="p-4 md:p-8 pb-4 border-b border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">{t("crmUi.tasks")}</h1>
-            <p className="text-sm md:text-base text-gray-500 mt-1">{scheduledFollowUps.length} scheduled follow-up{scheduledFollowUps.length !== 1 ? 's' : ''} · {appointmentTasks.length} appointment{appointmentTasks.length !== 1 ? 's' : ''}</p>
-            <p className="text-xs text-gray-400 mt-1">Contact task and deal counts reflect the recent inbox.</p>
+            <p className="text-sm md:text-base text-gray-500 mt-1">{t("crmDetails.scheduledCount", { count: scheduledFollowUps.length })} · {t("crmDetails.appointmentCount", { count: appointmentTasks.length })}</p>
+            <p className="text-xs text-gray-400 mt-1">{t("crmDetails.taskScope")}</p>
           </div>
           
           <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg self-start md:self-auto" data-testid="view-toggle">
             <button
               onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
               className={cn(
                 "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
                 viewMode === 'list' 
@@ -743,6 +763,7 @@ export function FollowUps() {
             </button>
             <button
               onClick={() => setViewMode('calendar')}
+              aria-pressed={viewMode === 'calendar'}
               className={cn(
                 "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
                 viewMode === 'calendar' 
@@ -756,6 +777,7 @@ export function FollowUps() {
             </button>
             <button
               onClick={() => setViewMode('pipeline')}
+              aria-pressed={viewMode === 'pipeline'}
               className={cn(
                 "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
                 viewMode === 'pipeline' 
@@ -772,6 +794,8 @@ export function FollowUps() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {tasksError && <p role="alert" className="flex items-center gap-2 text-sm text-red-700">{t("crmDetails.tasksFailed")}<Button type="button" variant="outline" size="sm" onClick={() => void retryTasks()}>{t("common.tryAgain")}</Button></p>}
+        {appointmentsError && <p role="alert" className="flex items-center gap-2 text-sm text-red-700">{t("crmDetails.appointmentsFailed")}<Button type="button" variant="outline" size="sm" onClick={() => void retryAppointments()}>{t("common.tryAgain")}</Button></p>}
         <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
         <Dialog open={!!reminder} onOpenChange={(open) => { if (!open) setReminder(undefined); }}>
           <DialogContent aria-describedby={undefined}>
@@ -779,7 +803,11 @@ export function FollowUps() {
             <form className="space-y-4" onSubmit={(event) => {
               event.preventDefault();
               const date = new Date(String(new FormData(event.currentTarget).get('reminderAt')));
-              if (reminder && Number.isFinite(date.getTime())) updateFollowUpDateMutation.mutate({ chatId: reminder.id, newDate: date, title: reminder.reviewRecommended });
+              if (!Number.isFinite(date.getTime())) {
+                toast({ title: t("crmDetails.invalidReminder"), variant: "destructive" });
+                return;
+              }
+              if (reminder) updateFollowUpDateMutation.mutate({ chatId: reminder.id, newDate: date, title: reminder.reviewRecommended });
             }}>
               <label className="grid gap-1 text-sm">{t("crmUi.dateTime")}
                 <input name="reminderAt" type="datetime-local" required className="rounded-md border border-gray-300 p-2" />
@@ -793,16 +821,7 @@ export function FollowUps() {
         {kpiFilter && (
           <div className="mb-4 flex items-center gap-2">
             <span className="text-sm text-gray-600">
-              Filtering by: <span className="font-semibold">
-                {{
-                  'overdue': 'Overdue',
-                  'today': 'Due Today',
-                  'booking-requested': 'High Intent',
-                  'booked': 'Closed',
-                  'needs-reply': 'Needs Reply',
-                  'active-deals': 'Active Deals',
-                }[kpiFilter]}
-              </span>
+              {t("crmDetails.filteringBy", { filter: kpiLabel(t, kpiFilter) })}
             </span>
             <button 
               onClick={() => setKpiFilter(null)}
@@ -817,7 +836,7 @@ export function FollowUps() {
         {viewMode === 'list' && leadReviews.length > 0 && !kpiFilter && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <a href="#recommended-tasks-heading" onClick={() => setLeadReviewsOnly(true)} className="text-sm font-medium text-purple-700 underline underline-offset-2">
-              Lead reviews ({leadReviews.length})
+              {t("crmDetails.leadReviews", { count: leadReviews.length })}
             </a>
           </div>
         )}
@@ -846,19 +865,19 @@ export function FollowUps() {
                     {t("crmUi.recommendedTasks")}
                   </h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-3" title="Rule-based priority using due dates, urgency, customer inquiries, and sales qualification.">
-                  Prioritized by due date, urgency, and customer intent
+                <p className="text-xs text-gray-500 mb-3" title={t("crmDetails.priorityHint")}>
+                  {t("crmDetails.prioritySummary")}
                 </p>
                 {!kpiFilter && leadReviews.length > 0 && leadReviews.length < replyTasks.length && (
                   <Button type="button" size="sm" variant="outline" className="mb-3"
                     aria-pressed={showOnlyLeadReviews} onClick={() => setLeadReviewsOnly(!showOnlyLeadReviews)}>
-                    Lead reviews only ({leadReviews.length})
+                    {t("crmDetails.leadReviewsOnly", { count: leadReviews.length })}
                   </Button>
                 )}
                 <div className="space-y-3">
                   {recommendedTasks.map(chat => (
                     <div key={chat.id} className="relative">
-                      <div className="absolute -left-2 top-4 w-1 h-8 bg-gradient-to-b from-purple-500 to-purple-300 rounded-full" />
+                      <div className="absolute -start-2 top-4 w-1 h-8 bg-gradient-to-b from-purple-500 to-purple-300 rounded-full" />
                       <TaskListItem
                         chat={chat}
                         onMarkDone={handleMarkDone}
@@ -873,7 +892,7 @@ export function FollowUps() {
                 {remainingReplies.length > 0 && (
                   <details className="mt-4 space-y-3">
                     <summary className="cursor-pointer text-sm font-semibold text-gray-700">
-                      More recommendations ({remainingReplies.length})
+                      {t("crmDetails.moreRecommendations", { count: remainingReplies.length })}
                     </summary>
                     {remainingReplies.map(chat => (
                       <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
@@ -889,10 +908,10 @@ export function FollowUps() {
               <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                 <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">{t("crmUi.noMatchingTasks")}</p>
-                <p className="text-sm text-gray-400 mt-1">No actionable contact tasks in the recent inbox for this view.</p>
+                <p className="text-sm text-gray-400 mt-1">{t("crmDetails.noTasks")}</p>
                 <Button className="mt-4 bg-brand-green hover:bg-emerald-700" data-testid="button-view-chats"
                   onClick={() => setLocation('/app/inbox')}>
-                  Go to Inbox
+                  {t("crmDetails.goInbox")}
                 </Button>
               </div>
             )}

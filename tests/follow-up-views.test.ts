@@ -11,9 +11,11 @@ import { parseHTML } from 'linkedom';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import en from '../client/src/locales/en.json';
+import he from '../client/src/locales/he.json';
+import es from '../client/src/locales/es.json';
 
 const i18n = createInstance();
-await i18n.init({ lng: 'en', resources: { en: { translation: en } } });
+await i18n.init({ lng: 'en', resources: { en: { translation: en }, he: { translation: he }, es: { translation: es } } });
 
 mkdirSync('work', { recursive: true });
 const scratch = mkdtempSync(resolve('work/follow-up-render-'));
@@ -166,4 +168,25 @@ test('Pipeline uses the same deal definition as KPI/List and preserves Realtor q
   assert.equal(document.querySelectorAll('[data-testid^="pipeline-card-"]').length, Number(document.querySelector('[data-testid="kpi-active-deals"] p')?.textContent));
   assert.equal(render('pipeline', 'needs-reply').querySelectorAll('[data-testid^="pipeline-card-"]').length, 0);
   assert.equal(state.writes, 0);
+});
+
+test('CRM directions and deal labels localize while filter and pipeline selectors stay canonical', async () => {
+  reset();
+  try {
+    for (const [language, messages] of Object.entries({ en, he, es })) {
+      await i18n.changeLanguage(language);
+      const document = render('pipeline', 'active-deals');
+      const activeDeals = document.querySelector('[data-testid="kpi-active-deals"]');
+      assert.equal(activeDeals?.getAttribute('aria-pressed'), 'true');
+      assert.ok(activeDeals?.textContent?.includes(messages.crmDetails.activeDeals));
+      assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"] h3')?.textContent,
+        messages.crmDetails.proposal);
+      assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"]')?.closest('[dir]')?.getAttribute('dir'),
+        language === 'he' ? 'rtl' : 'ltr');
+      assert.ok(document.querySelector('[data-testid="pipeline-card-deal"]'));
+    }
+    assert.equal(state.writes, 0);
+  } finally {
+    await i18n.changeLanguage('en');
+  }
 });

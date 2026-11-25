@@ -1,3 +1,4 @@
+import { crmChannelLabel, crmInquiryLabel, crmStageLabel, crmTagLabel } from "@/lib/crmPresentation";
 import { formatRegionalDate, formatRegionalRelativeTime } from "@/lib/regionalFormatting";
 import { useState, useMemo, useEffect } from "react";
 import { agentInquiryLabel } from "@shared/agent/agentPageInquiry";
@@ -48,7 +49,6 @@ import { isCrmDisplayTag, nextActiveAppointmentByContact } from "@shared/activeA
 import {
   CONTACTS_BULK_DELETE_MAX,
   contactHasActiveFollowUp,
-  describeContactDeletionExtraWarning,
 } from "@shared/contactDeletion";
 
 type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram" | "shopify" | "woocommerce";
@@ -84,17 +84,17 @@ interface Contact {
   customFields?: Record<string, unknown>;
 }
 
-const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
-  whatsapp: { icon: MessageCircle, color: "#25D366", label: "WhatsApp" },
-  instagram: { icon: Instagram, color: "#E4405F", label: "Instagram" },
-  facebook: { icon: Facebook, color: "#1877F2", label: "Messenger" },
-  sms: { icon: Smartphone, color: "#6B7280", label: "SMS" },
-  webchat: { icon: Globe, color: "#3B82F6", label: "Website Chat" },
-  telegram: { icon: Send, color: "#0088CC", label: "Telegram" },
-  shopify: { icon: ShoppingCart, color: "#96BF48", label: "Shopify" },
-  woocommerce: { icon: ShoppingCart, color: "#96588A", label: "WooCommerce" },
-  email: { icon: Mail, color: "#EA4335", label: "Email" },
-  [DISPLAY_CHANNEL_NONE]: { icon: Smartphone, color: "#9CA3AF", label: "No channel" },
+const CHANNEL_CONFIG: Record<string, { icon: any; color: string }> = {
+  whatsapp: { icon: MessageCircle, color: "#25D366" },
+  instagram: { icon: Instagram, color: "#E4405F" },
+  facebook: { icon: Facebook, color: "#1877F2" },
+  sms: { icon: Smartphone, color: "#6B7280" },
+  webchat: { icon: Globe, color: "#3B82F6" },
+  telegram: { icon: Send, color: "#0088CC" },
+  shopify: { icon: ShoppingCart, color: "#96BF48" },
+  woocommerce: { icon: ShoppingCart, color: "#96588A" },
+  email: { icon: Mail, color: "#EA4335" },
+  [DISPLAY_CHANNEL_NONE]: { icon: Smartphone, color: "#9CA3AF" },
 };
 
 function contactDisplayChannelKey(contact: Contact): string {
@@ -114,10 +114,6 @@ function getTagColor(tag: string) {
 
 function displayCrmTag(tag: string | undefined): string | null {
   return isCrmDisplayTag(tag) ? tag : null;
-}
-
-function formatBookedAt(iso: string): string {
-  return format(new Date(iso), "MMM d 'at' h:mm a");
 }
 
 function ChannelIcon({ channel, size = "w-3.5 h-3.5" }: { channel: string; size?: string }) {
@@ -160,11 +156,12 @@ function SortHeader({
   label: string; field: SortField; sortField: SortField; sortDir: SortDir;
   onSort: (f: SortField) => void;
 }) {
+  const { t } = useTranslation();
   const active = sortField === field;
   return (
     <button
       type="button"
-      aria-label={active ? `${label} (${sortDir === "asc" ? "ascending" : "descending"})` : label}
+      aria-label={!active ? label : sortDir === "asc" ? t("crmDetails.ascending", { label }) : t("crmDetails.descending", { label })}
       onClick={() => onSort(field)}
       className={cn(
         "flex items-center gap-1 text-xs font-medium uppercase tracking-wide transition-colors",
@@ -210,7 +207,7 @@ function ContactRowMenu({
           data-testid={`menu-delete-contact-${contact.id}`}
           onSelect={() => onDelete(contact)}
         >
-          <Trash2 className="w-4 h-4 mr-2" />
+          <Trash2 className="w-4 h-4 me-2" />
           {t("inboxUi.deleteContact")}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -301,7 +298,7 @@ export function Contacts() {
   const openContact = (id: string) => navigate(`/app/contacts/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(`/app/contacts${listSearch ? `?${listSearch}` : ""}`)}`);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
-  const [addError, setAddError] = useState("");
+  const [addError, setAddError] = useState<"" | "name" | "identity" | "session" | "request">("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<
     { mode: "single"; contact: Contact } | { mode: "bulk"; ids: string[] } | null
@@ -310,11 +307,12 @@ export function Contacts() {
   const [snapshotContact, setSnapshotContact] = useState<Contact | null>(null);
   const [snapshotText, setSnapshotText] = useState<string>("");
   const [snapshotLoading, setSnapshotLoading] = useState(false);
-  const [snapshotError, setSnapshotError] = useState("");
+  const [snapshotError, setSnapshotError] = useState(false);
 
   const [notesContact, setNotesContact] = useState<Contact | null>(null);
   const [notesList, setNotesList] = useState<any[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [notesFailed, setNotesFailed] = useState(false);
 
   const { data: notesSummary = {} } = useQuery<Record<string, number>>({
     queryKey: notesSummaryQueryKey,
@@ -330,12 +328,14 @@ export function Contacts() {
     setNotesContact(contact);
     setNotesList([]);
     setNotesLoading(true);
+    setNotesFailed(false);
     try {
       const res = await fetch(`/api/contacts/${contact.id}/notes`, { credentials: "include" });
+      if (!res.ok) throw new Error("Contact notes request failed");
       const data = await res.json();
       setNotesList(Array.isArray(data) ? data : []);
     } catch {
-      setNotesList([]);
+      setNotesFailed(true);
     } finally {
       setNotesLoading(false);
     }
@@ -389,8 +389,8 @@ export function Contacts() {
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to create contact");
+        const err = await res.json().catch(() => ({}));
+        throw new Error(res.status === 401 ? "session" : err.code === "insufficient_identity" ? "identity" : "request");
       }
       return res.json();
     },
@@ -401,7 +401,7 @@ export function Contacts() {
       setAddError("");
       openContact(contact.id);
     },
-    onError: (err: Error) => setAddError(err.message),
+    onError: (err: Error) => setAddError(err.message === "session" || err.message === "identity" ? err.message : "request"),
   });
 
   const removeContactsFromCache = (deletedIds: string[]) => {
@@ -435,10 +435,10 @@ export function Contacts() {
       removeContactsFromCache([contact.id]);
       invalidateQueriesAfterContactDeletion(queryClient);
       setDeleteTarget(null);
-      toast({ title: `${contact.name} deleted.` });
+      toast({ title: t("crmDetails.deletedContact", { name: contact.name }) });
     },
-    onError: (err: Error) => {
-      toast({ title: "Could not delete contact", description: err.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: t("crmDetails.deleteFailed"), variant: "destructive" });
     },
   });
 
@@ -461,11 +461,11 @@ export function Contacts() {
       invalidateQueriesAfterContactDeletion(queryClient);
       setDeleteTarget(null);
       toast({
-        title: deleted === 1 ? "1 contact deleted." : `${deleted} contacts deleted.`,
+        title: t("crmDetails.deletedContacts", { count: deleted }),
       });
     },
-    onError: (err: Error) => {
-      toast({ title: "Could not delete contacts", description: err.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: t("crmDetails.bulkDeleteFailed"), variant: "destructive" });
     },
   });
 
@@ -587,8 +587,15 @@ export function Contacts() {
         return c ? contactHasActiveFollowUp(c) : false;
       }),
     };
-    return describeContactDeletionExtraWarning(flags, deleteTarget.mode);
-  }, [deleteTarget, appointmentContactIds, contactsById]);
+    const risks = [
+      ...(flags.hasAppointments ? [t("crmDetails.appointments")] : []),
+      ...(flags.hasActiveCampaignEnrollment ? [t("crmDetails.campaignEnrollment")] : []),
+      ...(flags.hasActiveFollowUp ? [t("crmDetails.activeFollowUp")] : []),
+    ];
+    if (!risks.length) return null;
+    const items = new Intl.ListFormat(i18n.language).format(risks);
+    return deleteTarget.mode === "single" ? t("crmDetails.riskSingle", { items }) : t("crmDetails.riskBulk", { items });
+  }, [deleteTarget, appointmentContactIds, contactsById, t, i18n.language]);
 
   const deletePending = deleteSingleMutation.isPending || deleteBulkMutation.isPending;
 
@@ -598,15 +605,15 @@ export function Contacts() {
     e.stopPropagation();
     setSnapshotContact(contact);
     setSnapshotText("");
-    setSnapshotError("");
+    setSnapshotError(false);
     setSnapshotLoading(true);
     try {
       const res = await fetch(`/api/contacts/${contact.id}/snapshot`, { credentials: "include" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       setSnapshotText(data.snapshot || "");
-    } catch (err: any) {
-      setSnapshotError(err.message);
+    } catch {
+      setSnapshotError(true);
     } finally {
       setSnapshotLoading(false);
     }
@@ -634,7 +641,7 @@ export function Contacts() {
           webchatPublicPhone(c) || "",
           c.email || "",
           displayCrmTag(c.tag) || "",
-          appt ? formatBookedAt(appt.appointmentDate) : "",
+          appt ? format(new Date(appt.appointmentDate), "MMM d 'at' h:mm a") : "",
           c.pipelineStage,
           getContactDisplayChannelLabel(getContactDisplayChannel(c)),
           c.createdAt ? format(new Date(c.createdAt), "yyyy-MM-dd") : "",
@@ -694,12 +701,14 @@ export function Contacts() {
               <Input
                 placeholder={t("contacts.searchPlaceholder", "Search by name, phone or email…")}
                 value={search}
+                dir="auto"
                 onChange={(e) => setSearch(e.target.value)}
-                className="ps-9 h-9 bg-white"
+                aria-label={t("common.search")}
+                className="ps-9 pe-8 h-9 bg-white"
                 data-testid="input-contacts-search"
               />
               {search && (
-                <button onClick={() => setSearch("")} className="absolute end-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button aria-label={t("crmDetails.clearSearch")} onClick={() => setSearch("")} className="absolute end-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -722,11 +731,12 @@ export function Contacts() {
               value={filterTag}
               onChange={(e) => setFilterTag(e.target.value)}
               className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              aria-label={t("crmDetails.tagFilter")}
               data-testid="select-filter-tag"
             >
               <option value="">{t("contacts.allTags", "All Tags")}</option>
               {allTags.map((tag) => (
-                <option key={tag} value={tag}>{tag}</option>
+                <option key={tag} value={tag}>{crmTagLabel(t, tag)}</option>
               ))}
             </select>
 
@@ -735,11 +745,12 @@ export function Contacts() {
               value={filterStage}
               onChange={(e) => setFilterStage(e.target.value)}
               className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              aria-label={t("crmDetails.stageFilter")}
               data-testid="select-filter-stage"
             >
               <option value="">{t("contacts.allStages", "All Stages")}</option>
               {allStages.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{crmStageLabel(t, s)}</option>
               ))}
             </select>
 
@@ -748,11 +759,12 @@ export function Contacts() {
               value={filterChannel}
               onChange={(e) => setFilterChannel(e.target.value)}
               className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              aria-label={t("crmDetails.channelFilter")}
               data-testid="select-filter-channel"
             >
               <option value="">{t("contacts.allChannels", "All Channels")}</option>
-              {Object.entries(CHANNEL_CONFIG).map(([key, cfg]) => (
-                <option key={key} value={key}>{cfg.label}</option>
+              {Object.keys(CHANNEL_CONFIG).map((key) => (
+                <option key={key} value={key}>{crmChannelLabel(t, key)}</option>
               ))}
             </select>
 
@@ -769,13 +781,13 @@ export function Contacts() {
               >
                 <X className="w-3.5 h-3.5" />
                 {t("contacts.clearFilters", "Clear")}
-                <Badge className="ml-0.5 bg-gray-100 text-gray-600 text-xs px-1.5 py-0 h-4">
+                <Badge className="ms-0.5 bg-gray-100 text-gray-600 text-xs px-1.5 py-0 h-4">
                   {activeFiltersCount}
                 </Badge>
               </Button>
             )}
 
-            <span className="text-sm text-gray-400 sm:ml-auto" data-testid="contacts-result-count">
+            <span className="text-sm text-gray-400 sm:ms-auto" data-testid="contacts-result-count">
               {filtered.length === contacts.length
                 ? t("contacts.countAll", "{{count}} contacts", { count: contacts.length })
                 : t("contacts.countFiltered", "{{filtered}} of {{total}}", { filtered: filtered.length, total: contacts.length })}
@@ -788,9 +800,9 @@ export function Contacts() {
               data-testid="contacts-bulk-bar"
             >
               <p className="text-xs font-medium text-gray-800" data-testid="contacts-selected-count">
-                {selectedIds.size} selected
+                {t("crmDetails.selected", { count: selectedIds.size })}
               </p>
-              <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+              <div className="flex flex-wrap gap-1.5 sm:ms-auto">
                 <Button
                   type="button"
                   size="sm"
@@ -807,17 +819,17 @@ export function Contacts() {
                   variant="destructive"
                   className="h-8 text-xs"
                   disabled={selectedIds.size > CONTACTS_BULK_DELETE_MAX}
-                  title={selectedIds.size > CONTACTS_BULK_DELETE_MAX ? `Select at most ${CONTACTS_BULK_DELETE_MAX} contacts` : undefined}
+                  title={selectedIds.size > CONTACTS_BULK_DELETE_MAX ? t("crmDetails.maxDelete", { limit: CONTACTS_BULK_DELETE_MAX }) : undefined}
                   onClick={() => setDeleteTarget({ mode: "bulk", ids: [...selectedIds] })}
                   data-testid="button-delete-selected-contacts"
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  <Trash2 className="w-3.5 h-3.5 me-1" />
                   {t("crmUi.deleteSelected")}
                 </Button>
               </div>
               {selectedIds.size > CONTACTS_BULK_DELETE_MAX ? (
                 <p className="w-full text-[11px] text-amber-800" data-testid="contacts-bulk-max-hint">
-                  Select at most {CONTACTS_BULK_DELETE_MAX} contacts to delete at once.
+                  {t("crmDetails.maxDelete", { limit: CONTACTS_BULK_DELETE_MAX })}
                 </p>
               ) : null}
             </div>
@@ -877,7 +889,7 @@ export function Contacts() {
                 </div>
                 {filtered.map((contact) => {
                   const ch = contactDisplayChannelKey(contact);
-                  const cfg = channelUiConfig(ch);
+                  const inquirySource = agentInquiryLabel(contact);
                   const crmTag = displayCrmTag(contact.tag);
                   const bookedAppt = nextAppointmentByContact.get(contact.id);
                   const displayName = webchatSafeDisplayName(contact);
@@ -887,7 +899,7 @@ export function Contacts() {
                       key={contact.id}
                       role="link"
                       tabIndex={0}
-                      aria-label={`View ${displayName}`}
+                      aria-label={t("crmDetails.open", { name: displayName })}
                       onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openContact(contact.id); } }}
                       onClick={() => openContact(contact.id)}
                       className="flex items-center gap-3 px-4 py-3 active:bg-gray-50 cursor-pointer transition-colors"
@@ -900,7 +912,7 @@ export function Contacts() {
                         <Checkbox
                           checked={selectedIds.has(contact.id)}
                           onCheckedChange={(checked) => toggleContactSelected(contact.id, checked === true)}
-                          aria-label={`Select ${contact.name}`}
+                          aria-label={t("crmDetails.select", { name: displayName })}
                           data-testid={`checkbox-contact-${contact.id}`}
                         />
                       </div>
@@ -919,6 +931,7 @@ export function Contacts() {
                           {(notesSummary[contact.id] ?? 0) > 0 && (
                             <button
                               onClick={(e) => openNotesPopup(contact, e)}
+                              aria-label={t("crmDetails.teamNotes")}
                               data-testid={`btn-notes-${contact.id}`}
                               className="flex-shrink-0 text-amber-400"
                             >
@@ -927,6 +940,7 @@ export function Contacts() {
                           )}
                           <button
                             onClick={(e) => openSnapshot(contact, e)}
+                            aria-label={t("crmDetails.snapshot")}
                             data-testid={`btn-snapshot-${contact.id}`}
                             className="flex-shrink-0 text-violet-400"
                           >
@@ -937,7 +951,7 @@ export function Contacts() {
                           {/* Channel icon + label */}
                           <span className="flex items-center gap-1 text-xs text-gray-400">
                             <ChannelIcon channel={ch} size="w-3.5 h-3.5" />
-                            {agentInquiryLabel(contact) ?? cfg.label}
+                            {inquirySource ? crmInquiryLabel(t, inquirySource) : crmChannelLabel(t, ch)}
                           </span>
                           {/* Tag badge */}
                           {crmTag && (
@@ -945,13 +959,13 @@ export function Contacts() {
                               "inline-flex items-center px-1.5 py-0 rounded-full text-[11px] font-medium border",
                               getTagColor(crmTag),
                             )} data-testid={`badge-tag-${contact.id}`}>
-                              {crmTag}
+                              {crmTagLabel(t, crmTag)}
                             </span>
                           )}
                           {/* Stage */}
                           {contact.pipelineStage && (
                             <span className="text-[11px] text-gray-500" data-testid={`text-stage-${contact.id}`}>
-                              {contact.pipelineStage}
+                              {crmStageLabel(t, contact.pipelineStage)}
                             </span>
                           )}
                         </div>
@@ -968,7 +982,7 @@ export function Contacts() {
                           </p>
                         ) : classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS ? (
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {webchatLeadSourceLabel(contact)}
+                            {crmInquiryLabel(t, webchatLeadSourceLabel(contact))}
                           </p>
                         ) : null}
                         <LastIncomingActivity at={contact.lastIncomingAt} />
@@ -983,7 +997,7 @@ export function Contacts() {
                               data-testid={`text-appointment-${contact.id}`}
                             >
                               <CalendarCheck className="w-3 h-3 shrink-0" aria-hidden />
-                              {formatBookedAt(bookedAppt.appointmentDate)}
+                              {formatRegionalDate(new Date(bookedAppt.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "numeric" })}
                             </span>
                           ) : null}
                           <span className="text-[10px] text-gray-400" data-testid={`text-created-${contact.id}`}>
@@ -1026,7 +1040,7 @@ export function Contacts() {
                 {t("contacts.colChannel", "Channel")}
               </span>
               <SortHeader label={t("contacts.colAdded", "Added")} field="createdAt" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("crmDetails.actions")}</span>
             </div>
 
             {isLoading ? (
@@ -1061,7 +1075,7 @@ export function Contacts() {
               <div className="divide-y divide-gray-50">
                 {filtered.map((contact) => {
                   const ch = contactDisplayChannelKey(contact);
-                  const cfg = channelUiConfig(ch);
+                  const inquirySource = agentInquiryLabel(contact);
                   const crmTag = displayCrmTag(contact.tag);
                   const bookedAppt = nextAppointmentByContact.get(contact.id);
                   const displayName = webchatSafeDisplayName(contact);
@@ -1071,7 +1085,7 @@ export function Contacts() {
                       key={contact.id}
                       role="link"
                       tabIndex={0}
-                      aria-label={`View ${displayName}`}
+                      aria-label={t("crmDetails.open", { name: displayName })}
                       onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openContact(contact.id); } }}
                       onClick={() => openContact(contact.id)}
                       className={cn("grid gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group", CONTACTS_TABLE_COLS)}
@@ -1084,7 +1098,7 @@ export function Contacts() {
                         <Checkbox
                           checked={selectedIds.has(contact.id)}
                           onCheckedChange={(checked) => toggleContactSelected(contact.id, checked === true)}
-                          aria-label={`Select ${contact.name}`}
+                          aria-label={t("crmDetails.select", { name: displayName })}
                           data-testid={`checkbox-contact-${contact.id}`}
                         />
                       </div>
@@ -1100,7 +1114,8 @@ export function Contacts() {
                             {(notesSummary[contact.id] ?? 0) > 0 && (
                               <button
                                 onClick={(e) => openNotesPopup(contact, e)}
-                                title={`${notesSummary[contact.id]} note${notesSummary[contact.id] > 1 ? "s" : ""}`}
+                                title={t("crmDetails.teamNotes")}
+                                aria-label={t("crmDetails.teamNotes")}
                                 data-testid={`btn-notes-${contact.id}`}
                                 className="flex-shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
                               >
@@ -1109,7 +1124,8 @@ export function Contacts() {
                             )}
                             <button
                               onClick={(e) => openSnapshot(contact, e)}
-                              title="AI Snapshot"
+                              title={t("crmDetails.snapshot")}
+                              aria-label={t("crmDetails.snapshot")}
                               data-testid={`btn-snapshot-${contact.id}`}
                               className="flex-shrink-0 text-violet-400 hover:text-violet-600 transition-colors"
                             >
@@ -1130,7 +1146,7 @@ export function Contacts() {
                           )}
                           {!publicPhone && !contact.email && classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS && (
                             <p className="text-xs text-gray-400 truncate mt-0.5">
-                              {webchatLeadSourceLabel(contact)}
+                              {crmInquiryLabel(t, webchatLeadSourceLabel(contact))}
                             </p>
                           )}
                           <LastIncomingActivity at={contact.lastIncomingAt} />
@@ -1145,7 +1161,7 @@ export function Contacts() {
                             "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border",
                             getTagColor(crmTag),
                           )} data-testid={`badge-tag-${contact.id}`}>
-                            {crmTag}
+                            {crmTagLabel(t, crmTag)}
                           </span>
                         ) : (
                           <span className="text-gray-300 text-xs">—</span>
@@ -1160,7 +1176,7 @@ export function Contacts() {
                             data-testid={`text-appointment-${contact.id}`}
                           >
                             <CalendarCheck className="w-3.5 h-3.5 shrink-0" aria-hidden />
-                            {formatBookedAt(bookedAppt.appointmentDate)}
+                            {formatRegionalDate(new Date(bookedAppt.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "numeric" })}
                           </span>
                         ) : (
                           <span className="text-gray-300 text-xs">—</span>
@@ -1170,14 +1186,14 @@ export function Contacts() {
                       {/* Pipeline stage */}
                       <div>
                         <span className="text-sm text-gray-600 truncate block" data-testid={`text-stage-${contact.id}`}>
-                          {contact.pipelineStage || <span className="text-gray-300">—</span>}
+                          {contact.pipelineStage ? crmStageLabel(t, contact.pipelineStage) : <span className="text-gray-300">—</span>}
                         </span>
                       </div>
 
                       {/* Channel */}
                       <div className="flex items-center gap-1.5">
                         <ChannelIcon channel={ch} size="w-4 h-4" />
-                        <span className="text-sm text-gray-500 hidden sm:block">{agentInquiryLabel(contact) ?? cfg.label}</span>
+                        <span className="text-sm text-gray-500 hidden sm:block">{inquirySource ? crmInquiryLabel(t, inquirySource) : crmChannelLabel(t, ch)}</span>
                       </div>
 
                       {/* Created */}
@@ -1213,40 +1229,44 @@ export function Contacts() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div>
-              <Label>{t("contacts.fieldName", "Name")}</Label>
+              <Label htmlFor="new-contact-name">{t("contacts.fieldName", "Name")}</Label>
               <Input
+                dir="auto"
                 value={newContact.name}
                 onChange={(e) => setNewContact((p) => ({ ...p, name: e.target.value }))}
                 placeholder={t("crmUi.contactName")}
+                id="new-contact-name"
                 data-testid="input-new-contact-name"
               />
             </div>
             <div>
-              <Label>{t("contacts.fieldPhone", "Phone")}</Label>
+              <Label htmlFor="new-contact-phone">{t("contacts.fieldPhone", "Phone")}</Label>
               <Input
                 dir="ltr"
                 value={newContact.phone}
                 onChange={(e) => setNewContact((p) => ({ ...p, phone: e.target.value }))}
                 placeholder="+1234567890"
+                id="new-contact-phone"
                 data-testid="input-new-contact-phone"
               />
             </div>
             <div>
-              <Label>{t("contacts.fieldEmail", "Email")}</Label>
+              <Label htmlFor="new-contact-email">{t("contacts.fieldEmail", "Email")}</Label>
               <Input
                 type="email"
                 dir="ltr"
                 value={newContact.email}
                 onChange={(e) => setNewContact((p) => ({ ...p, email: e.target.value }))}
                 placeholder="email@example.com"
+                id="new-contact-email"
                 data-testid="input-new-contact-email"
               />
             </div>
-            {addError && <p className="text-sm text-red-500">{addError}</p>}
+            {addError && <p role="alert" className="text-sm text-red-500">{addError === "name" ? t("contacts.nameRequired") : addError === "identity" ? t("crmDetails.identityRequired") : addError === "session" ? t("crmDetails.expired") : t("crmDetails.createFailed")}</p>}
             <Button
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
               onClick={() => {
-                if (!newContact.name.trim()) { setAddError(t("contacts.nameRequired", "Name is required")); return; }
+                if (!newContact.name.trim()) { setAddError("name"); return; }
                 addMutation.mutate(newContact);
               }}
               disabled={addMutation.isPending}
@@ -1264,24 +1284,25 @@ export function Contacts() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <StickyNote className="w-4 h-4 text-amber-500" />
-              {notesContact?.name} — Team Notes
+              {t("crmDetails.teamNotesFor", { name: notesContact?.name })}
             </DialogTitle>
           </DialogHeader>
-          <div className="overflow-y-auto max-h-[420px] space-y-3 pr-1 py-1">
+          <div className="overflow-y-auto max-h-[420px] space-y-3 pe-1 py-1">
             {notesLoading && (
               <div className="flex items-center gap-2 text-gray-400 py-8 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">{t("crmUi.loadingNotes")}</span>
               </div>
             )}
-            {!notesLoading && notesList.length === 0 && (
+            {!notesLoading && notesFailed && <p role="alert">{t("crmUi.notesFailed")}</p>}
+            {!notesLoading && !notesFailed && notesList.length === 0 && (
               <div className="py-10 text-center text-gray-400 text-sm">{t("crmUi.noContactNotes")}</div>
             )}
             {!notesLoading && notesList.map((note: any) => (
               <div key={note.id} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                <p dir="auto" className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
                 <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
-                  <span className="font-semibold text-amber-600">{note.createdByName || "Team member"}</span>
+                  <span className="font-semibold text-amber-600">{note.createdByName || t("crmDetails.teamMember")}</span>
                   {note.createdAt && (
                     <span>· {formatRegionalRelativeTime(new Date(note.createdAt), i18n.language)}</span>
                   )}
@@ -1298,7 +1319,7 @@ export function Contacts() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-violet-500" />
-              Snapshot — {snapshotContact?.name}
+              {t("crmDetails.snapshotFor", { name: snapshotContact?.name })}
             </DialogTitle>
           </DialogHeader>
           <div className="py-3 min-h-[80px]">
@@ -1308,19 +1329,19 @@ export function Contacts() {
                 <span className="text-sm">{t("crmUi.generatingSnapshot")}</span>
               </div>
             ) : snapshotError ? (
-              <p className="text-sm text-red-500">{snapshotError}</p>
+              <p className="text-sm text-red-500">{t("crmDetails.snapshotFailed")}</p>
             ) : snapshotText ? (
-              <p className="text-gray-700 text-sm leading-relaxed">{snapshotText}</p>
+              <p dir="auto" className="text-gray-700 text-sm leading-relaxed">{snapshotText}</p>
             ) : (
               <p className="text-gray-400 text-sm italic">
-                No conversation or notes yet — nothing to summarise for this contact.
+                {t("crmDetails.noSnapshot")}
               </p>
             )}
           </div>
           {snapshotText && (
             <p className="text-xs text-gray-400 border-t pt-3 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-violet-400" />
-              AI-generated from recent conversation and team notes
+              {t("crmDetails.snapshotHint")}
             </p>
           )}
         </DialogContent>
@@ -1331,8 +1352,8 @@ export function Contacts() {
           <DialogHeader>
             <DialogTitle className="text-red-600">
               {deleteTarget?.mode === "single"
-                ? `Delete ${deleteTarget.contact.name}?`
-                : `Delete ${deleteTarget?.ids.length ?? 0} contacts?`}
+                ? t("crmDetails.deleteContact", { name: deleteTarget.contact.name })
+                : t("crmDetails.deleteContacts", { count: deleteTarget?.ids.length ?? 0 })}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
@@ -1367,7 +1388,7 @@ export function Contacts() {
                 }
               }}
             >
-              {deletePending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {deletePending ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : null}
               {deleteTarget?.mode === "single" ? t("inboxUi.deleteContact") : t("crmUi.deleteSelected")}
             </Button>
           </DialogFooter>
