@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { Lock, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { SavedPresetCampaignModals } from "@/components/SavedPresetCampaignModals";
@@ -103,8 +104,7 @@ export function Campaigns() {
             <CardHeader className="pb-2 pt-4 px-4 md:px-6">
               <CardTitle className="text-base md:text-lg">{t("campaignUi.yourCampaigns")}</CardTitle>
               <CardDescription className="text-sm">
-                Draft, Active, Paused, and Completed campaigns from general templates. Enroll contacts
-                from the inbox; the scheduler sends steps on each delay.
+                {t("campaignEditor.about")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 md:px-6 pb-4">
@@ -112,13 +112,18 @@ export function Campaigns() {
                 <div className="flex justify-center py-8">
                   <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
                 </div>
+              ) : workspace.savedCampaignsError ? (
+                <div role="alert" className="flex flex-wrap items-center gap-2 py-4">
+                  {t("outreachUi.loadCampaigns")}
+                  <Button variant="outline" size="sm" onClick={() => void workspace.retrySavedCampaigns()}>{t("common.tryAgain")}</Button>
+                </div>
               ) : workspace.savedPresetCampaigns.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4 text-center" data-testid="campaigns-empty">
                   {t("campaignUi.noCampaigns")}{" "}
                   <Link href="/app/templates">
-                    <a className="text-brand-green font-medium hover:underline">{t("campaignUi.chooseTemplate")}</a>
+                    <a className="text-brand-green font-medium hover:underline">{t("outreachUi.campaignDraftHelp")}</a>
                   </Link>{" "}
-                  to create a draft.
+
                 </p>
               ) : (
                 <SavedPresetCampaignsTable

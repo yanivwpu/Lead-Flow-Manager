@@ -3,6 +3,7 @@
  * Does not mutate production tenant settings.
  * Run: npx tsx --test tests/webchat-page-rule-aliases.test.ts
  */
+import en from "../client/src/locales/en.json";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -366,20 +367,25 @@ test("editor labels, alias controls, autosave, and save status stay accurate", (
   assert.equal(pageRuleUrlFieldLabel("pathname_prefix"), "Path prefix");
   assert.equal(pageRuleUrlFieldLabel(undefined), "URL contains");
   const website = read("client/src/pages/WebsiteWidget.tsx");
-  assert.match(website, /pageRuleUrlFieldLabel\(rule\.matchType\)/);
+  assert.match(website, /t\("outreachUi\.primaryPath"\)/);
+  assert.ok(en.outreachUi.primaryPath.includes("Primary path"));
   assert.match(read("shared/webchatPageRuleMatch.ts"), /Primary path/);
-  assert.match(website, /Additional paths/);
-  assert.match(website, /Add localized or alternate URLs that should use this same greeting, actions, and funnel\./);
+  assert.match(website, /t\("widgetAdmin\.aliases"\)/);
+  assert.ok(en.widgetAdmin.aliases.includes("Additional paths"));
+  assert.match(website, /t\("widgetAdmin\.aliasesHint"\)/);
+  assert.ok(en.widgetAdmin.aliasesHint.includes("Add localized or alternate URLs that should use this same greeting, actions, and funnel."));
   assert.match(website, /button-add-alias-\$\{index\}/);
   assert.match(website, /button-remove-alias-\$\{index\}-\$\{aliasIndex\}/);
   assert.match(website, /text-page-rules-save-status/);
-  assert.match(website, /Saving…/);
+  assert.match(website, /t\("widgetSettingsUi\.saving"\)/);
+  assert.ok(en.widgetSettingsUi.saving);
   assert.match(website, /button-page-rules-save-retry/);
   assert.match(website, /pageRulesHavePathInputIssues/);
   assert.match(website, /schedulePageRulesDebouncedSave/);
   assert.match(website, /aliases\.length \? \{ urlAliases: aliases \}/);
   assert.match(website, /filter\(Boolean\)\.slice\(0, WIDGET_PAGE_RULE_MAX_ALIASES\)/);
-  assert.match(website, /Additional paths apply only to Exact path matching and were cleared/);
+  assert.match(website, /t\("widgetAdmin\.aliasesCleared"\)/);
+  assert.ok(en.widgetAdmin.aliasesCleared.includes("Additional paths apply only to Exact path matching and were cleared."));
   assert.match(website, /overflow-x-hidden min-w-0/);
   assert.match(website, /builderLocalizedInputProps\("he"\)/);
   assert.match(website, /dir="ltr"/);

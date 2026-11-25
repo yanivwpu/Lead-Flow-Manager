@@ -16,9 +16,9 @@ These are route families. A comma-separated row shares the same recorded status,
 | `/app/search` | P | P | P | P | Search copy and result layout verified with synthetic data at two widths. Error and provider-specific payloads remain unverified. |
 | `/app/workflows` | P | P | P | P | Batch 3B covers workflow and sequence editors, trigger and action catalogs, and execution-history states. Live execution and uncommon provider failures remain unverified. |
 | `/app/chatbot` | P | P | P | P | Batch 3B covers builder controls, node and form editors, branching, and publishing feedback. Live sends and integration-specific states remain unverified. |
-| `/app/templates` | P | P | P | P | Foundation preset keys done. Approved library, sync, send and re-engagement UI pending |
-| `/app/campaigns/:id?` | ? | M | M | ? | Gates, enrollment and campaign views |
-| `/app/widget` | ? | P | P | P | Configuration and preview UI |
+| `/app/templates` | P | P | P | P | Batch 3C covers preset filters, Meta library and previews, sync, and re-engagement/send controls. Live provider behavior and uncommon send errors remain unverified. |
+| `/app/campaigns/:id?` | P | P | P | P | Batch 3C covers the dashboard, draft editor, reporting, and enrollment controls. Live scheduling and recipient actions remain unverified. |
+| `/app/widget` | P | P | P | P | Batch 3C covers widget settings, branding, page rules, preview, validation, and install. External embeds and uncommon upload failures remain unverified. |
 | `/app/website-widget` | — | — | — | — | Redirect to widget settings |
 | `/app/ai-brain` | ? | P | P | P | Modes, knowledge, tests and qualification |
 | `/app/sales-catalog` | ? | P | P | P | Offers, payments, catalog and guidance |
@@ -152,3 +152,12 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 - Localized the chatbot navigation, message and question editors, delay controls, quick replies and next-step controls, action selection, form editor and preview controls, and save and activation feedback. Catalog labels translate on display. Persisted defaults, trigger identifiers, authored messages, localized variants, and connections retain their original values.
 - The focused automated runs passed 35 tests. Synthetic Chromium covered the workflow editor and chatbot editor at 1366 and 390 px in all three languages. Equivalent configurations produced identical values. The fixtures intercepted every write and never executed a live workflow or sent a message.
 - Live runs, provider-specific errors, and uncommon legacy node and integration states remain unverified. Platform-native controls and provider or user-authored data retain their original source. The later Batch 3 modules remain separate.
+
+## Batch 3C templates, campaigns, and widget settings
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387) from `06ab97da`. The legacy count declined from **5,947 to 5,621** with no new fingerprints or increased counts.
+- Localized the approved library and its statuses and categories, sync and re-engagement feedback, previews, recipient and variable controls, and media and carousel requirements. Preset language filters start at All languages and stay independent of dashboard language. Meta continues to own approved template creation and approval.
+- Localized the campaign dashboard and editor, statuses, schedules, enrollment controls, reporting, previews, and confirmation dialogs. Template content, recipient language, delay values, and audience and activation gates retain their existing behavior.
+- Localized widget branding, settings, page-rule controls and validation, save feedback, preview controls, and installation and embed instructions. Visitor strings, locale precedence, aliases, matching modes, and physical positions keep their stored values.
+- All 48 targeted automated tests passed. Six synthetic Chromium runs at 1366 and 390 px verified EN, Hebrew RTL and Spanish LTR. The runs exercised a Meta template preview, preset draft creation, campaign editing and a widget-position save. Switching languages mid-edit produced no writes. Equivalent actions produced the same campaign and widget payloads. The Meta body, template language and saved widget visitor variants remained intact.
+- Live provider synchronization and sends, campaign execution and recipient enrollment, production embeds and clipboard integration on third-party sites remain unverified. Provider-supplied diagnostic text and authored values retain their source language. Later batches remain separate.

@@ -1,3 +1,4 @@
+import { templateStatusLabel, templateCategoryLabel } from "@/lib/outreachPresentation";
 import { useInboxDraftClaim, type ReplySnapshot } from "@/lib/useInboxCollaboration";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -82,8 +83,6 @@ import { formatRegionalRelativeTime } from "@/lib/regionalFormatting";
 import { automationSendGuardBlockUserMessage } from "@shared/automationSendGuardMessages";
 import {
   isWhatsAppSetupIncompleteError,
-  WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_DESCRIPTION,
-  WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_TITLE,
 } from "@shared/whatsappSetupMessages";
 import { isResendCoolingDown } from "@shared/reEngagement";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -358,7 +357,7 @@ function ReEngagementTemplatePicker({
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const pickInFlightRef = useRef(false);
-  const triggerLabel = recoveryMode ? "Try another template" : placeholder;
+  const triggerLabel = recoveryMode ? t("outreachUi.tryTemplate") : placeholder;
 
   return (
     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -368,7 +367,7 @@ function ReEngagementTemplatePicker({
           variant={recoveryMode ? "default" : buttonVariant}
           className={cn(
             "w-full justify-between gap-2 whitespace-normal sm:w-[220px]",
-            "min-h-[40px] shrink-0 py-2 text-left font-medium",
+            "min-h-[40px] shrink-0 py-2 text-start font-medium",
             recoveryMode
               ? "bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm"
               : null,
@@ -377,7 +376,7 @@ function ReEngagementTemplatePicker({
           data-testid={testId}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          aria-label={recoveryMode ? "Try another template — choose an approved template" : placeholder}
+          aria-label={recoveryMode ? t("outreachUi.tryTemplate") : placeholder}
         >
           <span className="truncate">{triggerLabel}</span>
           <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
@@ -411,7 +410,7 @@ function ReEngagementTemplatePicker({
               <DropdownMenuItem
                 key={template.id}
                 disabled={!support.selectable}
-                className="flex cursor-pointer flex-col items-start gap-1 rounded-sm px-2 py-2 text-left focus:bg-gray-100 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                className="flex cursor-pointer flex-col items-start gap-1 rounded-sm px-2 py-2 text-start focus:bg-gray-100 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
                 onSelect={() => {
                   if (!support.selectable) return;
                   if (pickInFlightRef.current) return;
@@ -429,7 +428,7 @@ function ReEngagementTemplatePicker({
                 <div className="flex w-full min-w-0 flex-wrap items-center gap-1">
                   <span className="truncate text-sm font-medium text-gray-900">{template.name}</span>
                   <Badge variant="outline" className={cn("text-[9px] font-normal px-1.5 py-0", catClass)}>
-                    {formatCategoryBadgeLabel(template.category)}
+                    {templateCategoryLabel(t, template.category, formatCategoryBadgeLabel(template.category))}
                   </Badge>
                   {layoutBadge ? (
                     <Badge
@@ -439,7 +438,7 @@ function ReEngagementTemplatePicker({
                       {layoutBadge}
                     </Badge>
                   ) : null}
-                  <span className="ml-auto shrink-0 font-mono text-[9px] text-gray-400">
+                  <span className="ms-auto shrink-0 font-mono text-[9px] text-gray-400">
                     {formatLanguageCode(template.language)}
                   </span>
                 </div>
@@ -447,15 +446,14 @@ function ReEngagementTemplatePicker({
                 lastFailedTemplateName &&
                 template.name.trim() === lastFailedTemplateName.trim() ? (
                   <p className="text-[10px] leading-snug text-amber-900/95">
-                    Last attempt — WhatsApp blocked delivery. You can still pick this template after others if you
-                    intentionally retry.
+                    {t("messageLibrary.blockedRetry")}
                   </p>
                 ) : null}
                 {!support.selectable && support.disabledReason ? (
                   <p className="text-[10px] leading-snug text-amber-900">{support.disabledReason}</p>
                 ) : libraryQuickSendMeta(template).blocked ? (
                   <p className="text-[10px] leading-snug text-gray-500">
-                    Opens send preview — add any required media, button URLs, or variables before sending.
+                    {t("messageLibrary.sendPreview")}
                   </p>
                 ) : null}
               </DropdownMenuItem>
@@ -602,7 +600,7 @@ export function GrowthEngineGalleryCard({
               disabled
               aria-disabled
             >
-              <Lock className="mr-2 h-3.5 w-3.5 shrink-0 opacity-60" />
+              <Lock className="me-2 h-3.5 w-3.5 shrink-0 opacity-60" />
               Coming soon
             </Button>
           ) : (
@@ -625,7 +623,7 @@ export function GrowthEngineGalleryCard({
               }
             >
               {ctaLabel}
-              <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
+              <ArrowRight className="ms-2 h-4 w-4 shrink-0" />
             </Button>
           )}
           {!isComingSoon && engine.detailHref ? (
@@ -1107,19 +1105,10 @@ export function Templates() {
       const count = (data?.inserted ?? 0) + (data?.updated ?? 0);
       const skipped = Number(data?.skipped ?? 0);
       const skipLog = Array.isArray(data?.skipLog) ? data.skipLog : [];
-      const firstSkip =
-        skipLog[0] &&
-        typeof skipLog[0].templateName === "string" &&
-        typeof skipLog[0].skipReason === "string"
-          ? `${skipLog[0].templateName}: ${skipLog[0].skipReason}`
-          : null;
-      const baseDesc = data?.message || `${count} template(s) synced successfully.`;
+      const baseDesc = t("outreachUi.syncCount", { count });
       toast({
-        title: "Templates synced",
-        description:
-          skipped > 0 && firstSkip
-            ? `${baseDesc} First skip — ${firstSkip.slice(0, 220)}${firstSkip.length > 220 ? "…" : ""}`
-            : baseDesc,
+        title: t("messageLibrary.synced"),
+        description: skipped > 0 ? t("outreachUi.syncSkipped", { summary: baseDesc, count: skipped }) : baseDesc,
         ...(skipped > 0 && count === 0 ? { variant: "destructive" as const } : {}),
       });
     },
@@ -1128,14 +1117,14 @@ export function Templates() {
       const clean = msg.replace(/^\d+:\s*/, "").replace(/^\{"error":"/, "").replace(/"\}$/, "");
       if (isWhatsAppSetupIncompleteError(clean)) {
         toast({
-          title: WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_TITLE,
-          description: WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_DESCRIPTION,
+          title: t("outreachUi.connectFirst"),
+          description: t("outreachUi.syncRetry"),
         });
         return;
       }
       toast({
-        title: "Sync couldn't finish",
-        description: clean || "Templates could not sync. Please review your WhatsApp connection in Settings and try again.",
+        title: t("messageLibrary.syncFailed"),
+        description: t("outreachUi.syncRetry"),
         variant: "destructive",
       });
     },
@@ -1245,7 +1234,7 @@ export function Templates() {
           /* keep clean */
         }
       }
-      setSendInlineError(clean || "Could not send this template.");
+      setSendInlineError(clean && clean !== "Send failed" ? clean : t("outreachUi.sendFailed"));
     },
   });
 
@@ -1355,7 +1344,7 @@ export function Templates() {
             disabled={syncTemplatesMutation.isPending}
             data-testid="button-sync-templates"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 me-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
             {t("templateLibrary.sync")}
           </Button>
         </div>
@@ -1366,23 +1355,23 @@ export function Templates() {
           <Tabs value={templatesMainTabValue} onValueChange={handleTemplatesMainTabChange} className="space-y-2 md:space-y-4">
           <TabsList className={`grid w-full ${hideGrowthEngine ? "grid-cols-3" : "grid-cols-4"} h-auto gap-0.5 p-0.5 sticky top-0 z-20 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm`}>
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
-              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:me-0" />
               <span>{t("templateLibrary.presets")}</span>
             </TabsTrigger>
             <TabsTrigger value="templates" data-testid="tab-templates" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
-              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:me-0" />
               <span className="text-center whitespace-normal break-words px-0.5">
-                <span className="hidden min-[420px]:inline">WhatsApp Library ({whatsappLibraryTemplates.length})</span>
-                <span className="min-[420px]:hidden">WA Lib. ({whatsappLibraryTemplates.length})</span>
+                <span className="hidden min-[420px]:inline">{t("outreachUi.whatsappLibrary", { count: whatsappLibraryTemplates.length })}</span>
+                <span className="min-[420px]:hidden">{t("outreachUi.shortLibrary", { count: whatsappLibraryTemplates.length })}</span>
               </span>
             </TabsTrigger>
             <TabsTrigger value="re-engagement" data-testid="tab-re-engagement" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
-              <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
-              <span>Re-engagement ({retargetableChats.length})</span>
+              <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:me-0" />
+              <span>{t("outreachUi.reengageCount", { count: retargetableChats.length })}</span>
             </TabsTrigger>
             {!hideGrowthEngine && (
             <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight relative">
-              <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:me-0" />
               <span className="text-center leading-tight">
                 <span className="hidden sm:inline">{t("nav.growthEngines")}</span>
                 <span className="sm:hidden">Growth</span>
@@ -1403,8 +1392,7 @@ export function Templates() {
                     {t("campaignUi.availableOnPro")}
                   </h2>
                   <p className="text-gray-500 max-w-md mb-6">
-                    Basic WhatsApp templates stay available on Free for 1:1 sends outside the 24-hour
-                    window. Preset campaigns, bulk enrollment, and automation sequences require Pro.
+                    {t("messageLibrary.freeHint")}
                   </p>
                   <InAppProUpgradeButton
                     canStartInternalTrial={canStartInternalTrial}
@@ -1424,8 +1412,7 @@ export function Templates() {
                 </CardTitle>
                 <CardDescription className="text-sm">
                   <span className="block">
-                    These gallery templates are shared starting points. <strong>{t("templates.useTemplate")}</strong> creates
-                    a draft campaign and opens it so you can edit and activate. Your changes never affect the originals.
+                    {t("outreachUi.sharedPresets")}
                   </span>
                 </CardDescription>
               </CardHeader>
@@ -1442,9 +1429,9 @@ export function Templates() {
 
           <TabsContent value="templates" className="space-y-3 md:space-y-4 mt-0">
             <div className="space-y-0.5 px-0.5">
-              <h2 className="text-base md:text-lg font-semibold text-gray-900">WhatsApp Approved Library</h2>
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">{t("messageLibrary.approvedLibrary")}</h2>
               <p className="text-sm text-gray-500">
-                Templates synced from Meta WhatsApp Manager and ready for compliant sending.
+                {t("messageLibrary.approvedHint")}
               </p>
             </div>
 
@@ -1456,16 +1443,16 @@ export function Templates() {
               <Card className="overflow-hidden">
                 <CardContent className="py-10 md:py-12 text-center px-4">
                   <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <h3 className="font-semibold text-gray-900 mb-2">No Templates Found</h3>
+                  <h3 className="font-semibold text-gray-900 mb-2">{t("messageLibrary.noTemplates")}</h3>
                   <p className="text-gray-500 text-sm mb-4 max-w-md mx-auto">
-                    Sync your approved templates from your WhatsApp provider to start sending messages.
+                    {t("messageLibrary.syncHint")}
                   </p>
                   <Button 
                     onClick={() => syncTemplatesMutation.mutate()}
                     disabled={syncTemplatesMutation.isPending}
                     className="bg-brand-green hover:bg-brand-green/90"
                   >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`h-4 w-4 me-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
                     {t("templateLibrary.sync")}
                   </Button>
                 </CardContent>
@@ -1498,14 +1485,14 @@ export function Templates() {
                               <>
                                 <CheckCircle2 className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                                 <span className="text-[10px] font-normal tracking-tight text-gray-600 whitespace-nowrap">
-                                  Approved
+                                  {t("messageLibrary.approved")}
                                 </span>
                               </>
                             ) : (
                               <>
                                 <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusColor}`} aria-hidden />
                                 <span className={`text-[10px] capitalize whitespace-nowrap ${statusColor}`}>
-                                  {template.status}
+                                  {templateStatusLabel(t, template.status)}
                                 </span>
                               </>
                             )}
@@ -1514,10 +1501,10 @@ export function Templates() {
 
                         <div className="flex flex-wrap gap-1.5">
                           <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-600">
-                            {syncMeta ? "Synced from Meta" : "Synced from Twilio"}
+                            {syncMeta ? t("messageLibrary.meta") : t("messageLibrary.twilio")}
                           </Badge>
                           <Badge variant="outline" className={`text-[10px] font-medium border ${catClass}`}>
-                            {formatCategoryBadgeLabel(template.category)}
+                            {templateCategoryLabel(t, template.category, formatCategoryBadgeLabel(template.category))}
                           </Badge>
                           <Badge variant="outline" className="text-[10px] font-mono font-normal border-gray-200 bg-gray-50 text-gray-700">
                             {formatLanguageCode(template.language)}
@@ -1526,20 +1513,20 @@ export function Templates() {
                             variant="outline"
                             className={qs.blocked ? MEDIA_TEMPLATE_KIND_BADGE_CLASS : QUICK_SEND_READY_BADGE_CLASS}
                           >
-                            {qs.blocked ? "Media template" : "Quick-send ready"}
+                            {qs.blocked ? t("messageLibrary.media") : t("messageLibrary.ready")}
                           </Badge>
                           {(template.variables?.length ?? 0) > 0 ? (
                             <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-700">
-                              Variables required
+                              {t("messageLibrary.variablesRequired")}
                             </Badge>
                           ) : null}
                           {templateHasDynamicMediaHeader(template) ? (
                             <Badge
                               variant="outline"
                               className="text-[10px] font-normal border-sky-200/90 bg-sky-50/90 text-sky-950"
-                              title="You can upload or pick different media for each send."
+                              title={t("messageLibrary.mediaHint")}
                             >
-                              Dynamic media
+                              {t("messageLibrary.dynamicMedia")}
                             </Badge>
                           ) : null}
                           <TemplateShapeIndicator template={template} />
@@ -1562,7 +1549,7 @@ export function Templates() {
                         ) : (
                           <div className="bg-gray-50 rounded-lg p-3 mb-3">
                             <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-6 break-words">
-                              {template.bodyText || "No body text"}
+                              {template.bodyText || t("outreachUi.noBody")}
                             </p>
                           </div>
                         )}
@@ -1584,8 +1571,8 @@ export function Templates() {
                             onClick={() => handleUseTemplate(template)}
                             data-testid={`button-use-template-${template.id}`}
                           >
-                            <Send className="h-3 w-3 mr-2 shrink-0" />
-                            Use Template
+                            <Send className="h-3 w-3 me-2 shrink-0" />
+                            {t("outreachUi.useTemplate")}
                           </Button>
                           <TooltipProvider delayDuration={200}>
                             <Tooltip>
@@ -1596,13 +1583,13 @@ export function Templates() {
                                   size="icon"
                                   className="h-9 w-9 shrink-0 border-gray-200"
                                   onClick={() => openPreviewDetails(template)}
-                                  aria-label="Quick preview"
+                                  aria-label={t("messageLibrary.quickPreview")}
                                   data-testid={`button-template-quick-preview-${template.id}`}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent side="top">Quick preview</TooltipContent>
+                              <TooltipContent side="top">{t("messageLibrary.quickPreview")}</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>
@@ -1618,10 +1605,9 @@ export function Templates() {
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-gray-500 shrink-0 mt-0.5" />
                   <div className="text-sm text-gray-700">
-                    <p className="font-medium mb-1 text-gray-900">About WhatsApp Templates</p>
+                    <p className="font-medium mb-1 text-gray-900">{t("messageLibrary.about")}</p>
                     <p className="leading-relaxed">
-                      Templates must be created and approved in your WhatsApp Business (Meta) or Twilio console before they appear here.
-                      Use &quot;Sync Templates&quot; to fetch your latest approved templates from your active provider.
+                      {t("messageLibrary.aboutHint")}
                     </p>
                   </div>
                 </div>
@@ -1631,24 +1617,23 @@ export function Templates() {
 
           <TabsContent value="re-engagement" className="space-y-3 md:space-y-4 mt-0">
             <div className="space-y-0.5 px-0.5">
-              <h2 className="text-base md:text-lg font-semibold text-gray-900">Re-engagement</h2>
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">{t("messageLibrary.reengage")}</h2>
               <p className="text-sm text-gray-500">
-                Follow up when Meta&apos;s messaging window has closed — track template outreach and avoid duplicate sends.
+                {t("messageLibrary.reengageHint")}
               </p>
             </div>
             <Card className="overflow-hidden border-gray-200/80">
               <CardHeader className="pb-2 px-3 pt-3 md:pb-2 md:px-4 md:pt-3.5">
                 <CardTitle className="text-base md:text-lg flex items-center gap-2">
                   <Target className="h-5 w-5 text-brand-green shrink-0" />
-                  Outside the reply window
+                  {t("messageLibrary.outside")}
                 </CardTitle>
                 <CardDescription className="text-sm leading-snug">
                   <span className="block">
-                    <strong>WhatsApp:</strong> send an approved template to reopen the thread when allowed. Meta may still block
-                    sends outside policy.
+                    {t("outreachUi.whatsappOutside")}
                   </span>
                   <span className="mt-1.5 block text-gray-600">
-                    <strong>Messenger &amp; Instagram:</strong> continue in Inbox — those channels do not use WhatsApp templates here.
+                    {t("outreachUi.socialOutside")}
                   </span>
                 </CardDescription>
               </CardHeader>
@@ -1660,9 +1645,9 @@ export function Templates() {
                 ) : retargetableChats.length === 0 ? (
                   <div className="text-center py-7 text-gray-500">
                     <Users className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium text-gray-800">No conversations outside the reply window</p>
+                    <p className="font-medium text-gray-800">{t("messageLibrary.noOutside")}</p>
                     <p className="text-sm mt-1 max-w-md mx-auto">
-                      Contacts that require approved templates or re-engagement actions will appear here.
+                      {t("messageLibrary.outsideHint")}
                     </p>
                   </div>
                 ) : (
@@ -1733,10 +1718,10 @@ export function Templates() {
                                 </p>
                                 {isWhatsApp && awaitingReply && (
                                   <div className="text-xs text-gray-700 space-y-0.5 pt-0.5 border-l-2 border-amber-200/90 pl-2">
-                                    <p className="font-medium text-gray-900">Template sent • awaiting reply</p>
+                                    <p className="font-medium text-gray-900">{t("messageLibrary.templateSent")}</p>
                                     {chat.lastTemplateName ? (
                                       <p className="text-gray-600">
-                                        Last template:{" "}
+                                        {t("messageLibrary.lastTemplate")}{" "}
                                         <span className="font-mono text-[11px] text-gray-800">{chat.lastTemplateName}</span>
                                       </p>
                                     ) : null}
@@ -1749,11 +1734,11 @@ export function Templates() {
                                   </div>
                                 )}
                                 {isWhatsApp && failedWa && (
-                                  <div className="text-xs text-red-700 space-y-1 pt-0.5 border-l-2 border-red-200 pl-2">
+                                  <div className="text-xs text-red-700 space-y-1 pt-0.5 border-s-2 border-red-200 ps-2">
                                     <p className="font-medium text-red-900">{t("campaignUi.failedDelivery")}</p>
                                     {chat.lastDeliveryErrorCode ? (
                                       <p className="text-red-800">
-                                        Error code{" "}
+                                        {t("messageLibrary.errorCode")}{" "}
                                         <span className="font-mono text-[11px]">{chat.lastDeliveryErrorCode}</span>
                                       </p>
                                     ) : null}
@@ -1761,30 +1746,23 @@ export function Templates() {
                                       <p className="text-red-800/95 leading-snug">{chat.lastDeliveryErrorHint}</p>
                                     ) : (
                                       <p className="text-red-700">
-                                        WhatsApp rejected this template message. Check the error in Inbox or try another
-                                        approved template.
+                                        {t("messageLibrary.blockedHint")}
                                       </p>
                                     )}
                                     {chat.lastDeliveryErrorCode === "131049" ? (
                                       <p className="text-[11px] text-amber-950/95 leading-snug pt-0.5">
-                                        <span className="font-medium">Recovery:</span> Meta often blocks the same or
-                                        aggressive template again. Prefer a softer, <strong>different</strong> approved
-                                        template — use <strong>Try another template</strong> on the right, then confirm
-                                        in the preview dialog (nothing sends until you confirm).
+                                        {t("outreachUi.safeRetry")}
                                       </p>
                                     ) : (
                                       <p className="text-[11px] text-gray-800 leading-snug pt-0.5">
-                                        <span className="font-medium">Next step:</span> use{" "}
-                                        <strong>Try another template</strong> for the full send preview (same as
-                                        Library). The failed template is not resent automatically; pick any approved
-                                        template, including the same one only if you choose it again after preview.
+                                        {t("outreachUi.explicitRetry")}
                                       </p>
                                     )}
                                   </div>
                                 )}
                                 {(ch === "facebook" || ch === "instagram") && (
                                   <p className="text-xs text-gray-600 pt-0.5">
-                                    Continue conversation in Inbox — this channel doesn&apos;t use WhatsApp templates here.
+                                    {t("outreachUi.otherChannel")}
                                   </p>
                                 )}
                                 {chat.lastMessagePreview ? (
@@ -1792,7 +1770,7 @@ export function Templates() {
                                     {chat.lastMessagePreview}
                                   </p>
                                 ) : (
-                                  <p className="text-sm text-gray-400 italic">No message preview</p>
+                                  <p className="text-sm text-gray-400 italic">{t("messageLibrary.noPreview")}</p>
                                 )}
                                 <p className="text-[11px] text-gray-400">
                                   {lastAtLabel
@@ -1819,19 +1797,19 @@ export function Templates() {
                                           }
                                         }}
                                       >
-                                        Resend template
+                                        {t("messageLibrary.resend")}
                                       </Button>
                                     </span>
                                   </TooltipTrigger>
                                   {resendCooldown ? (
-                                    <TooltipContent side="top">Recently sent</TooltipContent>
+                                    <TooltipContent side="top">{t("messageLibrary.recentlySent")}</TooltipContent>
                                   ) : null}
                                 </Tooltip>
                               ) : null}
 
                               {isWhatsApp && awaitingReply && !lastMatchedTemplate ? (
                                 <p className="text-[11px] text-amber-800 text-right">
-                                  Last template name not in library — pick a template below.
+                                  {t("messageLibrary.previousMissing")}
                                 </p>
                               ) : null}
 
@@ -1840,7 +1818,7 @@ export function Templates() {
                                   chat={chat}
                                   approvedTemplates={approvedReEngagementTemplates}
                                   triggerClass="w-full sm:w-[220px] min-h-[40px] shrink-0 border-gray-300"
-                                  placeholder="Choose template"
+                                  placeholder={t("messageLibrary.choose")}
                                   testId={`select-template-fallback-${chat.id}`}
                                   onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
                                 />
@@ -1857,14 +1835,12 @@ export function Templates() {
                                     recoveryMode
                                     lastFailedTemplateName={chat.lastTemplateName}
                                     triggerClass="w-full sm:w-[min(100%,260px)] min-h-[44px] shrink-0"
-                                    placeholder="Choose an approved template"
+                                    placeholder={t("messageLibrary.chooseApproved")}
                                     testId={`try-another-template-${chat.conversationId}`}
                                     onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
                                   />
                                   <p className="text-[10px] text-gray-500 leading-snug text-right max-w-[280px]">
-                                    Opens the unified send preview (variables, media, buttons, carousel). Other
-                                    templates are listed first; your last attempt appears at the bottom if you
-                                    intentionally retry it.
+                                    {t("messageLibrary.retryPreview")}
                                   </p>
                                 </div>
                               ) : null}
@@ -1893,7 +1869,7 @@ export function Templates() {
                                     )
                                   }
                                 >
-                                  Continue conversation in Inbox
+                                  {t("messageLibrary.continueInbox")}
                                 </Button>
                               ) : null}
                               {ch === "instagram" ? (
@@ -1908,7 +1884,7 @@ export function Templates() {
                                     )
                                   }
                                 >
-                                  Continue conversation in Inbox
+                                  {t("messageLibrary.continueInbox")}
                                 </Button>
                               ) : null}
                             </div>
@@ -1958,26 +1934,21 @@ export function Templates() {
               {!["send_in_progress","reviewed"].includes(templateClaim.conflict)&&<Button size="sm" variant="outline" onClick={()=>void loadTemplateReplyState(true)}>{t("inboxCollaboration.review")}</Button>}
             </div>}
             <DialogHeader>
-                  <DialogTitle className="text-left leading-snug pr-6">{selectedTemplate.name}</DialogTitle>
-                  <DialogDescription className="text-left">
+                  <DialogTitle className="text-start leading-snug pr-6">{selectedTemplate.name}</DialogTitle>
+                  <DialogDescription className="text-start">
                     {selectedChat ? (
                       <>
-                        Preview updates as you edit. Sending to{" "}
-                        <span className="font-medium text-foreground">{selectedChat.name}</span>
-                        {selectedChat.whatsappPhone ? (
-                          <> ({selectedChat.whatsappPhone})</>
-                        ) : null}
-                        .
+                        {t("outreachUi.sendingTo", { name: selectedChat.name })}
+                        {selectedChat.whatsappPhone && <bdi dir="ltr"> ({selectedChat.whatsappPhone})</bdi>}
                         {"conversationId" in selectedChat ? (
                           <span className="mt-1 block text-muted-foreground">
-                            Same full preview and WhatsApp send path as <strong className="text-foreground">Library</strong>{" "}
-                            — nothing is delivered until you confirm here.
+                            {t("outreachUi.restrictedPreview")}
                           </span>
                         ) : null}
                       </>
                     ) : (
                       <>
-                        Live preview below. Choose a WhatsApp contact, add any required media or variables, then send.
+                        {t("messageLibrary.livePreview")}
                       </>
                     )}
                   </DialogDescription>
@@ -1985,7 +1956,7 @@ export function Templates() {
                 <div className="space-y-4 py-4">
                   <div className="min-w-0 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
                     <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                      What your customer will see
+                      {t("messageLibrary.customerPreview")}
                     </p>
                     <WhatsAppTemplateRichPreview
                       key={selectedTemplate.id}
@@ -1997,7 +1968,7 @@ export function Templates() {
                     />
                     {previewUnresolvedTokens.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-1.5 items-center border-t border-gray-100 pt-3">
-                        <span className="text-[11px] text-gray-500">Still needs values:</span>
+                        <span className="text-[11px] text-gray-500">{t("messageLibrary.missingValues")}</span>
                         {previewUnresolvedTokens.map((t) => (
                           <Badge
                             key={t}
@@ -2060,9 +2031,9 @@ export function Templates() {
                   {requiredPlaceholders.length > 0 ? (
                     <div className="space-y-3">
                       <div className="flex flex-col gap-0.5">
-                        <Label>Variables</Label>
+                        <Label>{t("messageLibrary.variables")}</Label>
                         <p className="text-xs text-gray-500">
-                          Required fields from your approved template (body, header, buttons, or carousel cards).
+                          {t("messageLibrary.requiredFields")}
                         </p>
                       </div>
                       {requiredPlaceholders.map((ph) => {
@@ -2161,11 +2132,11 @@ export function Templates() {
                               </div>
                             ) : !selectedChat ? (
                               <p className="text-[11px] text-gray-400 pt-1">
-                                Select a contact below to load CRM suggestions, or enter values manually.
+                                {t("messageLibrary.selectForCrm")}
                               </p>
                             ) : variableAutofill?.contactId === null ? (
                               <p className="text-[11px] text-gray-400 pt-1">
-                                No CRM contact linked to this chat — enter values manually.
+                                {t("messageLibrary.noCrm")}
                               </p>
                             ) : null}
                           </div>
@@ -2174,19 +2145,18 @@ export function Templates() {
                     </div>
                   ) : selectedTemplate && isLibraryPlainTextOnlyTemplate(selectedTemplate) ? (
                     <p className="text-sm text-gray-600">
-                      This template has no text variables to fill. You can send it as-is when you’re ready.
+                      {t("messageLibrary.noVariables")}
                     </p>
                   ) : selectedTemplate && isLibraryRichTemplateWithNoTextVariables(selectedTemplate) ? (
                     <p className="text-sm text-gray-600">
-                      This template has no text variables. Review the approved layout and required media or button
-                      details before sending.
+                      {t("messageLibrary.reviewMedia")}
                     </p>
                   ) : null}
 
                   {missingPlaceholders.length > 0 ? (
                     <Alert className="border-amber-200 bg-amber-50 text-amber-950">
                       <AlertDescription className="text-sm">
-                        Fill every required variable before sending:{" "}
+                        {t("messageLibrary.fillRequired")}{" "}
                         <span className="font-mono">{missingPlaceholders.join(", ")}</span>
                       </AlertDescription>
                     </Alert>
@@ -2201,16 +2171,16 @@ export function Templates() {
                   {headerMediaBroken && resolvedHeaderMediaForPreview ? (
                     <Alert variant="destructive">
                       <AlertDescription className="text-sm">
-                        This preview couldn&apos;t load your image or video. Try another file or link.
+                        {t("messageLibrary.invalidPreview")}
                       </AlertDescription>
                     </Alert>
                   ) : null}
 
                   <div className="space-y-3 border-t border-gray-100 pt-4">
                     <div className="flex flex-col gap-0.5">
-                      <Label>WhatsApp recipient</Label>
+                      <Label>{t("messageLibrary.recipient")}</Label>
                       <p className="text-xs text-gray-500">
-                        Search your contacts with a WhatsApp number. Sending stays disabled until someone is selected.
+                        {t("messageLibrary.recipientHint")}
                       </p>
                     </div>
                     {selectedChat ? (
@@ -2245,7 +2215,7 @@ export function Templates() {
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                       <Input
                         className="pl-9"
-                        placeholder="Search by name or phone…"
+                        placeholder={t("messageLibrary.recipientSearch")}
                         value={contactSearch}
                         onChange={(e) => setContactSearch(e.target.value)}
                         data-testid="input-unified-send-contact-search"
@@ -2266,14 +2236,14 @@ export function Templates() {
                         if (waChats.length === 0) {
                           return (
                             <p className="px-2 py-6 text-center text-sm text-gray-500">
-                              No contacts with WhatsApp numbers found.
+                              {t("outreachUi.noWhatsappContacts")}
                             </p>
                           );
                         }
                         if (filtered.length === 0) {
                           return (
                             <p className="px-2 py-6 text-center text-sm text-gray-500">
-                              No contacts match your search.
+                              {t("messageLibrary.noMatches")}
                             </p>
                           );
                         }
@@ -2283,7 +2253,7 @@ export function Templates() {
                             <button
                               key={chat.id}
                               type="button"
-                              className={`flex w-full items-center gap-3 rounded-md border p-2.5 text-left transition-colors ${
+                              className={`flex w-full items-center gap-3 rounded-md border p-2.5 text-start transition-colors ${
                                 isSelected
                                   ? "border-emerald-300 bg-emerald-50/90"
                                   : "border-transparent hover:border-gray-200 hover:bg-white"
@@ -2376,21 +2346,21 @@ export function Templates() {
             {libraryModalTemplate ? (
               <>
                 <DialogHeader className="pb-3">
-                  <DialogTitle className="pr-8 text-left leading-snug">{libraryModalTemplate.name}</DialogTitle>
+                  <DialogTitle className="pr-8 text-start leading-snug">{libraryModalTemplate.name}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-wrap gap-1.5 pb-3">
                   {isApprovedTemplateStatus(libraryModalTemplate.status) ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-600">
                       <CheckCircle2 className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
-                      Approved
+                      {t("messageLibrary.approved")}
                     </span>
                   ) : (
                     <Badge variant="outline" className="text-[10px] capitalize">
-                      {libraryModalTemplate.status}
+                      {templateStatusLabel(t, libraryModalTemplate.status)}
                     </Badge>
                   )}
                   <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-600">
-                    {libraryModalTemplate.twilioSid?.startsWith("meta_") ? "Synced from Meta" : "Synced from Twilio"}
+                    {libraryModalTemplate.twilioSid?.startsWith("meta_") ? t("messageLibrary.meta") : t("messageLibrary.twilio")}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -2399,7 +2369,7 @@ export function Templates() {
                       "bg-gray-50 text-gray-700 border-gray-200"
                     }`}
                   >
-                    {formatCategoryBadgeLabel(libraryModalTemplate.category)}
+                    {templateCategoryLabel(t, libraryModalTemplate.category, formatCategoryBadgeLabel(libraryModalTemplate.category))}
                   </Badge>
                   <Badge variant="outline" className="text-[10px] font-mono font-normal border-gray-200 bg-gray-50 text-gray-700">
                     {formatLanguageCode(libraryModalTemplate.language)}
@@ -2412,14 +2382,14 @@ export function Templates() {
                         : QUICK_SEND_READY_BADGE_CLASS
                     }
                   >
-                    {libraryQuickSendMeta(libraryModalTemplate).blocked ? "Media template" : "Quick-send ready"}
+                    {libraryQuickSendMeta(libraryModalTemplate).blocked ? t("messageLibrary.media") : t("messageLibrary.ready")}
                   </Badge>
                   {templateHasDynamicMediaHeader(libraryModalTemplate) ? (
                     <Badge
                       variant="outline"
                       className="text-[10px] font-normal border-sky-200/90 bg-sky-50/90 text-sky-950"
                     >
-                      Dynamic media
+                      {t("messageLibrary.dynamicMedia")}
                     </Badge>
                   ) : null}
                   <TemplateShapeIndicator template={libraryModalTemplate} />
@@ -2451,7 +2421,7 @@ export function Templates() {
                       onClick={continuePreviewToSend}
                       data-testid="button-library-preview-use-template"
                     >
-                      <Send className="mr-2 h-4 w-4" />
+                      <Send className="me-2 h-4 w-4" />
                       Use Template
                     </Button>
                   ) : null}

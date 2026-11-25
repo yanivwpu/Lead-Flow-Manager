@@ -1,3 +1,5 @@
+import { campaignStatusLabel } from "@/lib/outreachPresentation";
+import { crmChannelLabel } from "@/lib/crmPresentation";
 import { useTranslation } from "react-i18next";
 import type { MouseEvent } from "react";
 import { formatRegionalDate, formatRegionalNumber } from "@/lib/regionalFormatting";
@@ -79,12 +81,6 @@ export function SavedPresetCampaignsTable({
             const updated = row.updatedAt
               ? formatRegionalDate(new Date(row.updatedAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })
               : "—";
-            const statusLabels: Record<string, string> = {
-              draft: t("automationUi.draft"),
-              active: t("automations.active"),
-              paused: t("automations.paused"),
-              completed: t("followups.completed"),
-            };
             return (
               <TableRow
                 key={row.id}
@@ -103,11 +99,11 @@ export function SavedPresetCampaignsTable({
                     variant="outline"
                     className="text-[11px] font-normal whitespace-normal max-w-[200px] text-start h-auto py-1"
                   >
-                    {statusLabels[row.status] ?? (row.statusLabel || row.status)}
+                    {campaignStatusLabel(t, row.status, row.statusLabel)}
                   </Badge>
                 </TableCell>
                 <TableCell className="hidden md:table-cell capitalize text-gray-700">
-                  {row.channel}
+                  {crmChannelLabel(t, row.channel)}
                 </TableCell>
                 <TableCell className="text-end tabular-nums">{formatRegionalNumber(steps, i18n.language)}</TableCell>
                 <TableCell className="text-end hidden sm:table-cell tabular-nums text-gray-700">

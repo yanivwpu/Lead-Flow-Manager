@@ -1,3 +1,7 @@
+import { campaignStatusLabel } from "@/lib/outreachPresentation";
+import { crmChannelLabel } from "@/lib/crmPresentation";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +48,6 @@ import {
   parsePresetCampaignMessagesArray,
   previewCampaignMessageSteps,
 } from "@shared/campaignPlaceholders";
-import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
 import { getLocalizedPresetDisplayName } from "@shared/localizedTemplates";
 import {
   ChevronDown,
@@ -60,7 +63,6 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -209,23 +211,6 @@ function placeholderKeysForDraft(draft: CampaignDraft): string[] {
   return [...new Set([...fromMsgs, ...fromObj])].sort();
 }
 
-function enrollmentLabel(status: string): string {
-  switch (status) {
-    case "active":
-      return "Active";
-    case "paused":
-      return "Paused";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
-    default:
-      return status;
-  }
-}
-
 function enrollmentMetaClass(status: string): string {
   switch (status) {
     case "active":
@@ -279,6 +264,7 @@ type Props = {
 };
 
 export function SavedPresetCampaignModals(props: Props) {
+  const { t, i18n } = useTranslation();
   const {
     savedCampaignModalOpen,
     setSavedCampaignModalOpen,
@@ -451,29 +437,28 @@ export function SavedPresetCampaignModals(props: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="truncate text-left text-sm font-medium text-brand-green hover:underline"
+              className="truncate text-start text-sm font-medium text-brand-green hover:underline"
               onClick={() => openInboxForContact(e.contactId)}
               data-testid={`saved-campaign-contact-${e.contactId}`}
             >
-              {e.contactName ?? "Unknown contact"}
-              <ExternalLink className="ml-1 inline h-3 w-3 opacity-60" aria-hidden />
+              {e.contactName ?? t("builderFeedback.unknownContact")}
+              <ExternalLink className="ms-1 inline h-3 w-3 opacity-60" aria-hidden />
             </button>
             <span className={`text-xs font-medium ${enrollmentMetaClass(e.status)}`}>
-              {enrollmentLabel(e.status)}
+              {campaignStatusLabel(t, e.status)}
             </span>
           </div>
           {showProgress && (
             <p className="text-xs text-gray-600">
-              {totalSteps > 0 ? <>Step {stepNum} of {totalSteps}</> : "—"}
+              {totalSteps > 0 ? t("outreachUi.stepOf", { current: stepNum, total: totalSteps }) : "—"}
             </p>
           )}
           {showNextSend && (
             <p className="flex items-center gap-1 text-xs text-gray-500">
               <Clock className="h-3 w-3 shrink-0" aria-hidden />
-              Next send ·{" "}
-              {!Number.isNaN(new Date(e.nextRunAt!).getTime())
-                ? format(new Date(e.nextRunAt!), "MMM d, yyyy p")
-                : "—"}
+              {t("outreachUi.nextSend", { date: !Number.isNaN(new Date(e.nextRunAt!).getTime())
+                ? formatRegionalDate(new Date(e.nextRunAt!), i18n.language, { dateStyle: "medium", timeStyle: "short" })
+                : "—" })}
             </p>
           )}
         </div>
@@ -490,7 +475,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   enrollmentMutation.mutate({ enrollmentId: e.id, action: "pause" })
                 }
               >
-                Pause
+                {t("campaignTable.pause")}
               </Button>
               <Button
                 type="button"
@@ -502,7 +487,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   enrollmentMutation.mutate({ enrollmentId: e.id, action: "cancel" })
                 }
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </>
           )}
@@ -518,7 +503,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   enrollmentMutation.mutate({ enrollmentId: e.id, action: "resume" })
                 }
               >
-                Resume
+                {t("campaignTable.resume")}
               </Button>
               <Button
                 type="button"
@@ -530,7 +515,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   enrollmentMutation.mutate({ enrollmentId: e.id, action: "cancel" })
                 }
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </>
           )}
@@ -550,7 +535,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   enrollmentMutation.mutate({ enrollmentId: e.id, action: "retry" })
                 }
               >
-                Retry
+                {t("common.tryAgain")}
               </Button>
               <Button
                 type="button"
@@ -562,7 +547,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   enrollmentMutation.mutate({ enrollmentId: e.id, action: "cancel" })
                 }
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </>
           )}
@@ -591,16 +576,15 @@ export function SavedPresetCampaignModals(props: Props) {
       >
         <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-xl">
           <div className="sticky top-0 z-10 shrink-0 border-b border-border/70 bg-background px-6 pb-3 pt-6 pr-14">
-            <DialogHeader className="space-y-2 text-left">
-              <DialogTitle>Your saved campaign</DialogTitle>
+            <DialogHeader className="space-y-2 text-start">
+              <DialogTitle>{t("campaignEditor.saved")}</DialogTitle>
               <DialogDescription className="space-y-1.5">
                 <p className="text-sm text-muted-foreground">
-                  This campaign is your editable copy. Changes here only affect your version. The original template
-                  remains unchanged.
+                  {t("campaignEditor.editableHint")}
                 </p>
                 {sourceTemplateTitle ? (
                   <p className="text-sm text-muted-foreground">
-                    Based on: <span className="font-medium text-foreground">{sourceTemplateTitle}</span>
+                    {t("campaignEditor.basedOn")} <span className="font-medium text-foreground">{sourceTemplateTitle}</span>
                   </p>
                 ) : null}
               </DialogDescription>
@@ -616,10 +600,9 @@ export function SavedPresetCampaignModals(props: Props) {
                 <div className="space-y-5">
                   {stepEditWarning && (
                     <Alert className="border-amber-200 bg-amber-50 text-amber-950">
-                      <AlertTitle className="text-sm">Active enrollments</AlertTitle>
+                      <AlertTitle className="text-sm">{t("campaignEditor.activeEnrollments")}</AlertTitle>
                       <AlertDescription className="text-xs text-amber-900">
-                        {inflightEnrollmentCount} enrollment(s) may still receive upcoming steps. Editing steps or
-                        defaults changes what gets sent next — already delivered messages stay as sent.
+                        {t("outreachUi.liveChanges", { count: inflightEnrollmentCount })}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -627,15 +610,14 @@ export function SavedPresetCampaignModals(props: Props) {
                   {isEditing && (
                     <Alert className="border-gray-200 bg-muted/40 text-muted-foreground">
                       <AlertDescription className="text-xs">
-                        To <strong>pause</strong> or <strong>resume</strong> the whole campaign, save your edits first,
-                        then use <strong>Pause campaign</strong> / <strong>Resume campaign</strong> in view mode.
+                        {t("outreachUi.pauseOrResume", { action: savedCampaignDetail.status === "paused" ? t("campaignEditor.resume") : t("campaignEditor.stop") })}
                       </AlertDescription>
                     </Alert>
                   )}
 
                   <div className="grid gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="sc-name">Name</Label>
+                      <Label htmlFor="sc-name">{t("common.name")}</Label>
                       {isEditing ? (
                         <Input
                           id="sc-name"
@@ -652,7 +634,7 @@ export function SavedPresetCampaignModals(props: Props) {
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label>Status</Label>
+                        <Label>{t("campaignTable.status")}</Label>
                         {isEditing ? (
                           <Select
                             value={draft?.status ?? "draft"}
@@ -666,19 +648,19 @@ export function SavedPresetCampaignModals(props: Props) {
                             <SelectContent>
                               {CAMPAIGN_STATUS_OPTIONS.map((s) => (
                                 <SelectItem key={s} value={s}>
-                                  {getPresetCampaignStatusLabel(s)}
+                                  {campaignStatusLabel(t, s)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
                           <p className="text-sm text-gray-800">
-                            {savedCampaignDetail.statusLabel || savedCampaignDetail.status}
+                            {campaignStatusLabel(t, savedCampaignDetail.status, savedCampaignDetail.statusLabel)}
                           </p>
                         )}
                       </div>
                       <div className="space-y-1.5">
-                        <Label>Channel</Label>
+                        <Label>{t("campaignTable.channel")}</Label>
                         {isEditing ? (
                           <Select
                             value={draft?.channel ?? "whatsapp"}
@@ -692,14 +674,14 @@ export function SavedPresetCampaignModals(props: Props) {
                             <SelectContent>
                               {CAMPAIGN_CHANNEL_OPTIONS.map((c) => (
                                 <SelectItem key={c} value={c}>
-                                  <span className="capitalize">{c.replace(/_/g, " ")}</span>
+                                  <span className="capitalize">{crmChannelLabel(t, c)}</span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
                           <p className="text-sm capitalize text-gray-800">
-                            {savedCampaignDetail.channel}
+                            {crmChannelLabel(t, savedCampaignDetail.channel)}
                           </p>
                         )}
                       </div>
@@ -707,7 +689,7 @@ export function SavedPresetCampaignModals(props: Props) {
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor="sc-lang">Language</Label>
+                        <Label htmlFor="sc-lang">{t("language.select")}</Label>
                         {isEditing ? (
                           <Input
                             id="sc-lang"
@@ -722,7 +704,7 @@ export function SavedPresetCampaignModals(props: Props) {
                       </div>
                       <div className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
                         <Label htmlFor="sc-ai" className="cursor-pointer">
-                          AI assistance
+                          {t("campaignEditor.ai")}
                         </Label>
                         {isEditing ? (
                           <Switch
@@ -734,7 +716,7 @@ export function SavedPresetCampaignModals(props: Props) {
                           />
                         ) : (
                           <span className="text-sm text-gray-700">
-                            {savedCampaignDetail.aiEnabled ? "On" : "Off"}
+                            {savedCampaignDetail.aiEnabled ? t("common.yes") : t("common.no")}
                           </span>
                         )}
                       </div>
@@ -744,7 +726,7 @@ export function SavedPresetCampaignModals(props: Props) {
                       (savedCampaignDetail.category || savedCampaignDetail.industry)) && (
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                          <Label htmlFor="sc-cat">Category</Label>
+                          <Label htmlFor="sc-cat">{t("templates.category")}</Label>
                           {isEditing ? (
                             <Input
                               id="sc-cat"
@@ -758,7 +740,7 @@ export function SavedPresetCampaignModals(props: Props) {
                           )}
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="sc-ind">Industry</Label>
+                          <Label htmlFor="sc-ind">{t("templates.industry")}</Label>
                           {isEditing ? (
                             <Input
                               id="sc-ind"
@@ -777,13 +759,14 @@ export function SavedPresetCampaignModals(props: Props) {
                     {savedCampaignDetail.executionStats && (
                       <div className="grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
                         <p>
-                          Enrollments · {savedCampaignDetail.executionStats.enrollmentCount} total ·{" "}
-                          {savedCampaignDetail.executionStats.activeEnrollments} active ·{" "}
-                          {savedCampaignDetail.executionStats.completedEnrollments} completed
+                          {t("outreachUi.enrollmentSummary", {
+                            total: savedCampaignDetail.executionStats.enrollmentCount,
+                            active: savedCampaignDetail.executionStats.activeEnrollments,
+                            completed: savedCampaignDetail.executionStats.completedEnrollments,
+                          })}
                         </p>
                         <p>
-                          Step sends · {savedCampaignDetail.executionStats.sentStepEvents} sent ·{" "}
-                          {savedCampaignDetail.executionStats.failedStepEvents} failed
+                          {t("outreachUi.sendSummary", { sent: savedCampaignDetail.executionStats.sentStepEvents, failed: savedCampaignDetail.executionStats.failedStepEvents })}
                         </p>
                       </div>
                     )}
@@ -791,7 +774,7 @@ export function SavedPresetCampaignModals(props: Props) {
                     <div className="space-y-2 border-t border-gray-100 pt-4">
                       <div className="flex items-center justify-between gap-2">
                         <Label className="text-xs uppercase tracking-wide text-gray-500">
-                          Steps
+                          {t("builderUi.steps")}
                         </Label>
                         {isEditing && (
                           <Button
@@ -801,8 +784,8 @@ export function SavedPresetCampaignModals(props: Props) {
                             className="h-8 text-xs"
                             onClick={addStep}
                           >
-                            <Plus className="mr-1 h-3 w-3" />
-                            Add step
+                            <Plus className="me-1 h-3 w-3" />
+                            {t("builderUi.addStep")}
                           </Button>
                         )}
                       </div>
@@ -827,7 +810,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                       className="h-8 w-8"
                                       disabled={idx === 0}
                                       onClick={() => moveStep(idx, -1)}
-                                      aria-label="Move step up"
+                                      aria-label={t("campaignEditor.moveUp")}
                                     >
                                       <ChevronUp className="h-4 w-4" />
                                     </Button>
@@ -838,7 +821,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                       className="h-8 w-8"
                                       disabled={idx >= displayDraft.messages.length - 1}
                                       onClick={() => moveStep(idx, 1)}
-                                      aria-label="Move step down"
+                                      aria-label={t("campaignEditor.moveDown")}
                                     >
                                       <ChevronDown className="h-4 w-4" />
                                     </Button>
@@ -850,13 +833,13 @@ export function SavedPresetCampaignModals(props: Props) {
                                       disabled={displayDraft.messages.length <= 1}
                                       onClick={() => removeStep(idx)}
                                     >
-                                      Remove
+                                      {t("workflowEditor.remove")}
                                     </Button>
                                   </div>
                                 )}
                               </div>
                               <div className="mb-2 space-y-1">
-                                <Label className="text-xs text-gray-500">Delay before this step</Label>
+                                <Label className="text-xs text-gray-500">{t("campaignEditor.delay")}</Label>
                                 {isEditing ? (
                                   <Input
                                     value={step.delay}
@@ -879,7 +862,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                 )}
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-xs text-gray-500">Message</Label>
+                                <Label className="text-xs text-gray-500">{t("builderUi.message")}</Label>
                                 {isEditing ? (
                                   <Textarea
                                     value={step.content}
@@ -917,12 +900,12 @@ export function SavedPresetCampaignModals(props: Props) {
                     {(isEditing || placeholderKeysForDraft(displayDraft).length > 0) && (
                       <div className="space-y-2 border-t border-gray-100 pt-4">
                         <Label className="text-xs uppercase tracking-wide text-gray-500">
-                          Placeholder defaults
+                          {t("campaignEditor.defaults")}
                         </Label>
                         <p className="text-xs text-gray-500">{CAMPAIGN_PLACEHOLDER_DEFAULTS_HELPER}</p>
                         <div className="space-y-2 rounded-lg border border-gray-100 bg-white p-2">
                           {placeholderKeysForDraft(displayDraft).length === 0 ? (
-                            <p className="text-xs text-gray-400">No placeholders detected.</p>
+                            <p className="text-xs text-gray-400">{t("campaignEditor.noDefaults")}</p>
                           ) : (
                             placeholderKeysForDraft(displayDraft).map((key) => (
                               <div key={key} className="flex flex-col gap-1 sm:flex-row sm:items-center">
@@ -955,18 +938,18 @@ export function SavedPresetCampaignModals(props: Props) {
                           disabled={!displayDraft.messages.some((m) => m.content.trim())}
                           data-testid="saved-campaign-preview-messages"
                         >
-                          <Eye className="mr-1.5 h-4 w-4" />
-                          Preview messages
+                          <Eye className="me-1.5 h-4 w-4" />
+                          {t("campaignEditor.preview")}
                         </Button>
                       </div>
                     )}
 
                     <div className="space-y-2 border-t border-gray-100 pt-4">
                       <Label className="text-xs uppercase tracking-wide text-gray-500">
-                        Active enrollments
+                        {t("campaignEditor.activeEnrollments")}
                       </Label>
                       {activeEnrollments.length === 0 ? (
-                        <p className="text-xs text-gray-500">No active, paused, or failed enrollments.</p>
+                        <p className="text-xs text-gray-500">{t("campaignEditor.noEnrollments")}</p>
                       ) : (
                         <div className="space-y-2">{activeEnrollments.map(renderEnrollmentRow)}</div>
                       )}
@@ -978,10 +961,10 @@ export function SavedPresetCampaignModals(props: Props) {
                           <Button
                             type="button"
                             variant="ghost"
-                            className="flex h-auto w-full justify-between px-0 py-2 text-left text-xs font-medium text-gray-700 hover:bg-transparent"
+                            className="flex h-auto w-full justify-between px-0 py-2 text-start text-xs font-medium text-gray-700 hover:bg-transparent"
                           >
                             <span>
-                              History ({historyEnrollments.length} completed / cancelled)
+                              {t("outreachUi.history", { count: historyEnrollments.length })}
                             </span>
                             <ChevronDown
                               className={`h-4 w-4 shrink-0 transition-transform ${historyOpen ? "rotate-180" : ""}`}
@@ -1007,7 +990,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                     {e.contactName ?? "Unknown"}
                                   </button>
                                   <span className={enrollmentMetaClass(e.status)}>
-                                    {enrollmentLabel(e.status)}
+                                    {campaignStatusLabel(t, e.status)}
                                   </span>
                                 </div>
                                 {e.status !== "cancelled" && totalSteps > 0 && (
@@ -1016,7 +999,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                   </p>
                                 )}
                                 {e.status === "cancelled" && (
-                                  <p className="mt-1 text-gray-500">Enrollment cancelled.</p>
+                                  <p className="mt-1 text-gray-500">{t("campaignEditor.enrollmentCancelled")}</p>
                                 )}
                               </div>
                             );
@@ -1029,7 +1012,7 @@ export function SavedPresetCampaignModals(props: Props) {
                       savedCampaignDetail.recentStepEvents.length > 0 && (
                         <div className="space-y-2 border-t border-gray-100 pt-4">
                           <Label className="text-xs uppercase tracking-wide text-gray-500">
-                            Recent step events
+                            {t("campaignEditor.events")}
                           </Label>
                           <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border border-gray-100 bg-white p-2 text-xs">
                             {savedCampaignDetail.recentStepEvents.slice(0, 30).map((ev) => (
@@ -1039,7 +1022,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                   <span className="text-gray-600 capitalize">{ev.status}</span>
                                   {ev.sentAt && (
                                     <span className="text-gray-500">
-                                      {format(new Date(ev.sentAt), "MMM d, HH:mm")}
+                                      {formatRegionalDate(new Date(ev.sentAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })}
                                     </span>
                                   )}
                                 </div>
@@ -1054,17 +1037,17 @@ export function SavedPresetCampaignModals(props: Props) {
 
                     <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
                       <p>
-                        Created{" "}
+                        {t("crmUi.created")}{" "}
                         {savedCampaignDetail.createdAt &&
                         !Number.isNaN(new Date(savedCampaignDetail.createdAt).getTime())
-                          ? format(new Date(savedCampaignDetail.createdAt), "MMM d, yyyy p")
+                          ? formatRegionalDate(new Date(savedCampaignDetail.createdAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })
                           : "—"}
                       </p>
                       <p>
-                        Updated{" "}
+                        {t("crmUi.updated")}{" "}
                         {savedCampaignDetail.updatedAt &&
                         !Number.isNaN(new Date(savedCampaignDetail.updatedAt).getTime())
-                          ? format(new Date(savedCampaignDetail.updatedAt), "MMM d, yyyy p")
+                          ? formatRegionalDate(new Date(savedCampaignDetail.updatedAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })
                           : "—"}
                       </p>
                     </div>
@@ -1077,7 +1060,7 @@ export function SavedPresetCampaignModals(props: Props) {
                   {isEditing ? (
                     <>
                       <Button variant="outline" onClick={cancelEdit} disabled={patchPresetCampaignMutation.isPending}>
-                        Cancel edit
+                        {t("campaignEditor.cancelEdit")}
                       </Button>
                       <Button
                         variant="outline"
@@ -1089,7 +1072,7 @@ export function SavedPresetCampaignModals(props: Props) {
                         onClick={saveAsDraft}
                         data-testid="saved-campaign-save-draft"
                       >
-                        Save draft
+                        {t("campaignEditor.saveDraft")}
                       </Button>
                       <Button
                         variant="default"
@@ -1102,7 +1085,7 @@ export function SavedPresetCampaignModals(props: Props) {
                         onClick={saveChanges}
                         data-testid="saved-campaign-save-changes"
                       >
-                        Save changes
+                        {t("crmUi.saveChanges")}
                       </Button>
                       {canActivateFromEditor && (
                         <Button
@@ -1115,15 +1098,15 @@ export function SavedPresetCampaignModals(props: Props) {
                           onClick={activateCampaignFromEditor}
                           data-testid="saved-campaign-activate"
                         >
-                          Activate campaign
+                          {t("campaignEditor.activate")}
                         </Button>
                       )}
                     </>
                   ) : (
                     <>
                       <Button variant="outline" onClick={startEdit}>
-                        <Pencil className="mr-1 h-4 w-4" />
-                        Edit campaign
+                        <Pencil className="me-1 h-4 w-4" />
+                        {t("campaignEditor.edit")}
                       </Button>
                       {(savedCampaignDetail.status === "active_pending" ||
                         savedCampaignDetail.status === "active") && (
@@ -1138,8 +1121,8 @@ export function SavedPresetCampaignModals(props: Props) {
                             })
                           }
                         >
-                          <Pause className="mr-1 h-4 w-4" />
-                          Pause campaign
+                          <Pause className="me-1 h-4 w-4" />
+                          {t("campaignEditor.stop")}
                         </Button>
                       )}
                       {savedCampaignDetail.status === "paused" && (
@@ -1154,8 +1137,8 @@ export function SavedPresetCampaignModals(props: Props) {
                             })
                           }
                         >
-                          <Play className="mr-1 h-4 w-4" />
-                          Resume campaign
+                          <Play className="me-1 h-4 w-4" />
+                          {t("campaignEditor.resume")}
                         </Button>
                       )}
                       <Button
@@ -1165,8 +1148,8 @@ export function SavedPresetCampaignModals(props: Props) {
                           savedCampaignModalId && duplicatePresetCampaignMutation.mutate(savedCampaignModalId)
                         }
                       >
-                        <Copy className="mr-1 h-4 w-4" />
-                        Duplicate
+                        <Copy className="me-1 h-4 w-4" />
+                        {t("campaignTable.duplicate")}
                       </Button>
                       <Button
                         variant="destructive"
@@ -1175,20 +1158,20 @@ export function SavedPresetCampaignModals(props: Props) {
                           savedCampaignModalId && setPendingDeleteCampaignId(savedCampaignModalId)
                         }
                       >
-                        <Trash2 className="mr-1 h-4 w-4" />
-                        Delete
+                        <Trash2 className="me-1 h-4 w-4" />
+                        {t("common.delete")}
                       </Button>
                     </>
                   )}
                 </div>
                 <Button variant="secondary" onClick={() => setSavedCampaignModalOpen(false)}>
-                  Close
+                  {t("common.close")}
                 </Button>
               </DialogFooter>
             </>
           ) : (
             <div className="flex min-h-[min(200px,35vh)] flex-1 items-center justify-center px-6 py-10">
-              <p className="text-center text-sm text-gray-500">Could not load campaign.</p>
+              <p className="text-center text-sm text-gray-500">{t("campaignEditor.loadFailed")}</p>
             </div>
           )}
         </DialogContent>
@@ -1196,16 +1179,15 @@ export function SavedPresetCampaignModals(props: Props) {
 
       <Dialog open={messagePreviewOpen} onOpenChange={setMessagePreviewOpen}>
         <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-6 py-4 text-left">
-            <DialogTitle>Message preview</DialogTitle>
+          <DialogHeader className="border-b px-6 py-4 text-start">
+            <DialogTitle>{t("campaignEditor.messagePreview")}</DialogTitle>
             <DialogDescription>
-              Sample contact “Alex” with your placeholder defaults. Real enrollments use each contact&apos;s fields
-              when available.
+              {t("campaignEditor.sampleContact")}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
             {previewSteps.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No messages to preview.</p>
+              <p className="text-sm text-muted-foreground">{t("campaignEditor.noMessages")}</p>
             ) : (
               previewSteps.map((step, idx) => (
                 <div key={idx} className="rounded-lg border bg-gray-50 p-3">
@@ -1225,7 +1207,7 @@ export function SavedPresetCampaignModals(props: Props) {
           </div>
           <DialogFooter className="border-t px-6 py-4">
             <Button type="button" variant="outline" onClick={() => setMessagePreviewOpen(false)}>
-              Close
+              {t("common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1237,20 +1219,20 @@ export function SavedPresetCampaignModals(props: Props) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
+            <AlertDialogTitle>{t("campaignEditor.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Deletes this saved campaign only. Your gallery templates stay the same. No messages are sent.
+              {t("campaignEditor.deleteHint")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
               onClick={() =>
                 pendingDeleteCampaignId && deletePresetCampaignMutation.mutate(pendingDeleteCampaignId)
               }
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

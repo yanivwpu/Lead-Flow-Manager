@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,11 +11,12 @@ export function usePresetCampaignWorkspace(options: {
   detailEnabled: boolean;
   onDeleted?: () => void;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [pendingDeleteCampaignId, setPendingDeleteCampaignId] = useState<string | null>(null);
 
-  const { data: savedPresetCampaigns = [], isLoading: savedCampaignsLoading } = useQuery<
+  const { data: savedPresetCampaigns = [], isLoading: savedCampaignsLoading, isError: savedCampaignsError, refetch: retrySavedCampaigns } = useQuery<
     PresetCampaignListItem[]
   >({
     queryKey: [PRESET_CAMPAIGNS_API],
@@ -53,10 +55,9 @@ export function usePresetCampaignWorkspace(options: {
     onSuccess: async () => {
       await invalidateListAndDetail();
     },
-    onError: (e: Error) => {
+    onError: () => {
       toast({
-        title: "Update failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: t("outreachUi.saveFailed"),
         variant: "destructive",
       });
     },
@@ -72,10 +73,9 @@ export function usePresetCampaignWorkspace(options: {
       await queryClient.refetchQueries({ queryKey: [PRESET_CAMPAIGNS_API] });
       options.onDeleted?.();
     },
-    onError: (e: Error) => {
+    onError: () => {
       toast({
-        title: "Delete failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: t("outreachUi.deleteFailed"),
         variant: "destructive",
       });
     },
@@ -96,10 +96,9 @@ export function usePresetCampaignWorkspace(options: {
     onSuccess: async () => {
       await invalidateListAndDetail();
     },
-    onError: (e: Error) => {
+    onError: () => {
       toast({
-        title: "Action failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: t("outreachUi.enrollmentFailed"),
         variant: "destructive",
       });
     },
@@ -114,10 +113,9 @@ export function usePresetCampaignWorkspace(options: {
       queryClient.invalidateQueries({ queryKey: [PRESET_CAMPAIGNS_API] });
       await queryClient.refetchQueries({ queryKey: [PRESET_CAMPAIGNS_API] });
     },
-    onError: (e: Error) => {
+    onError: () => {
       toast({
-        title: "Duplicate failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
+        title: t("outreachUi.copyFailed"),
         variant: "destructive",
       });
     },
@@ -126,6 +124,8 @@ export function usePresetCampaignWorkspace(options: {
   return {
     savedPresetCampaigns,
     savedCampaignsLoading,
+    savedCampaignsError,
+    retrySavedCampaigns,
     savedCampaignDetail,
     savedCampaignDetailLoading,
     pendingDeleteCampaignId,
