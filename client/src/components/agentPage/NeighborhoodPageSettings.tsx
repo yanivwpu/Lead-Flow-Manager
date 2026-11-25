@@ -304,7 +304,8 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
             <p className="mt-1 text-xs text-slate-500">{t("inboxUi.neighborhoodCountryExamples")}</p>
           </div>
-          <NeighborhoodBoundaryEditor key={active + ":" + mapEditorRevision} boundary={values.customBoundary}
+          <NeighborhoodBoundaryEditor key={active + ":" + mapEditorRevision} boundary={values.customBoundary} persistedBoundary={page?.customBoundary ?? null}
+            persistedVersion={page?.updatedAt ?? null} stale={stale}
             name={values.name} city={values.city} state={values.state} country={values.country ?? "US"}
             sessionKey={neighborhoodMapSessionKey(userId, active)}
             disabled={stale || save.isPending} onChange={editBoundary} />

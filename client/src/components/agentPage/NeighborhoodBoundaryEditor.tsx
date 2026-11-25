@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Maximize2, Minimize2, Minus, Plus } from "lucide-react";
+import { ChevronDown, Ellipsis, Maximize2, Minimize2, Minus, Plus, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
@@ -35,15 +35,18 @@ function initialCenter(boundary?: PolygonBoundary | null): Center {
 }
 
 export function NeighborhoodBoundaryEditor({
-  boundary, name, city, state, country, sessionKey, disabled, onChange,
+  boundary, persistedBoundary, persistedVersion, name, city, state, country, sessionKey, disabled, stale, onChange,
 }: {
   boundary?: PolygonBoundary | null;
+  persistedBoundary: PolygonBoundary | null;
+  persistedVersion: string | null;
   name: string;
   city: string;
   state: string;
   country: string;
   sessionKey: string;
   disabled: boolean;
+  stale: boolean;
   onChange: (next: PolygonBoundary | null) => void;
 }) {
   const { t } = useTranslation();
@@ -51,8 +54,9 @@ export function NeighborhoodBoundaryEditor({
     try { return readNeighborhoodMapSession(window.sessionStorage, sessionKey); }
     catch { return null; }
   }, [sessionKey]);
-  const savedKey = JSON.stringify(boundary ?? null);
-  const restoredCorners = restored?.boundaryKey === savedKey ? restored.vertices : null;
+  const boundaryKey = JSON.stringify(boundary ?? null);
+  const persistedKey = JSON.stringify(persistedBoundary);
+  const restoredCorners = restored?.boundaryKey === boundaryKey ? restored.vertices : null;
   const initial = useMemo(() => restored?.center ?? initialCenter(boundary), [sessionKey]);
   const [center, setCenter] = useState<Center>(initial);
   const [zoom, setZoom] = useState(restored?.zoom ?? (boundary ? 14 : 3));
@@ -65,6 +69,14 @@ export function NeighborhoodBoundaryEditor({
   const [locating, setLocating] = useState(false);
   const [open, setOpen] = useState(restored?.open ?? false);
   const [expanded, setExpanded] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [removal, setRemoval] = useState(restored?.boundaryKey === boundaryKey ? restored.removal : undefined);
+  const rememberedRemoval = !boundary && removal?.version === persistedVersion ? removal : undefined;
+  const restoreBoundary = !boundary ? rememberedRemoval?.boundary ?? persistedBoundary : null;
+  const panelId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
   const [dragging, setDragging] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, Pointer>());
@@ -127,29 +139,45 @@ export function NeighborhoodBoundaryEditor({
   useEffect(() => {
     try {
       writeNeighborhoodMapSession(window.sessionStorage, sessionKey, {
-        open, center, zoom, vertices, boundaryKey: savedKey,
+        open, center, zoom, vertices, boundaryKey, removal: rememberedRemoval,
       });
     } catch { /* storage may be blocked in private browsing */ }
-  }, [sessionKey, open, center, zoom, vertices, savedKey]);
+  }, [sessionKey, open, center, zoom, vertices, boundaryKey, rememberedRemoval]);
 
   useEffect(() => {
     if (!expanded) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setExpanded(false);
+    const keepFocusInPanel = (event: FocusEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) expandRef.current?.focus();
     };
-    window.addEventListener("keydown", closeOnEscape);
+    if (!panelRef.current?.contains(document.activeElement)) expandRef.current?.focus();
+    document.addEventListener("focusin", keepFocusInPanel);
     return () => {
+      document.removeEventListener("focusin", keepFocusInPanel);
       document.body.style.overflow = previous;
-      window.removeEventListener("keydown", closeOnEscape);
     };
   }, [expanded]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (moreOpen) {
+        setMoreOpen(false);
+        moreRef.current?.focus();
+      } else {
+        setExpanded(false);
+        expandRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [expanded, moreOpen]);
 
   // The parent can restore a saved page on Discard, or receive a newer save
   // from another browser tab. Do not leave stale, uncommitted map vertices
   // visible after its boundary prop changes.
-  const boundaryKey = savedKey;
   const previousBoundaryKey = useRef(boundaryKey);
   const locallyAppliedBoundary = useRef<string | null>(null);
   useEffect(() => {
@@ -159,12 +187,12 @@ export function NeighborhoodBoundaryEditor({
     previousBoundaryKey.current = boundaryKey;
     const saved = JSON.parse(boundaryKey) as PolygonBoundary | null;
     setVertices(saved?.coordinates[0]?.slice(0, -1) ?? []);
-    if (saved) moveTo(initialCenter(saved), 14);
-    if (locallyAppliedBoundary.current === boundaryKey) {
-      locallyAppliedBoundary.current = null;
-    } else {
+    if (locallyAppliedBoundary.current !== boundaryKey) {
+      if (saved) moveTo(initialCenter(saved), 14);
+      setRemoval(undefined);
       setStatus("");
     }
+    locallyAppliedBoundary.current = null;
   }, [boundaryKey]);
 
   async function locate() {
@@ -192,7 +220,47 @@ export function NeighborhoodBoundaryEditor({
   const shape: PolygonBoundary | null = vertices.length >= 3
     ? { type: "Polygon", coordinates: [[...vertices, vertices[0]]] } : null;
   const safeShape = shape && readCustomNeighborhoodBoundary(shape);
-  const pending = JSON.stringify(shape) !== JSON.stringify(boundary ?? null);
+  const formVertices = boundary?.coordinates[0]?.slice(0, -1) ?? [];
+  const drawingChanged = JSON.stringify(vertices) !== JSON.stringify(formVertices);
+  const boundaryStatus = stale ? "stale"
+    : boundaryKey !== persistedKey ? (boundary ? "applied" : "removalPending")
+    : boundary ? "saved" : rememberedRemoval ? "removed" : "optional";
+
+  function applyBoundary(next: PolygonBoundary | null) {
+    locallyAppliedBoundary.current = JSON.stringify(next);
+    onChange(next);
+    setVertices(next?.coordinates[0]?.slice(0, -1) ?? []);
+    setStatus("");
+  }
+
+  function centerManually() {
+    const lat = latInput.trim() ? Number(latInput) : NaN;
+    const lon = lonInput.trim() ? Number(lonInput) : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 85 || Math.abs(lon) > 180) {
+      setStatus(t("rgeMap.coordsInvalid"));
+      return;
+    }
+    moveTo({ lat, lon }, 14);
+    setStatus("");
+  }
+
+  function onPanelKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape" && moreOpen && !expanded) {
+      event.stopPropagation();
+      setMoreOpen(false);
+      moreRef.current?.focus();
+    } else if (event.key === "Tab" && expanded) {
+      const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]',
+      )).filter((element) => !element.closest("[hidden]"));
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey ? event.target === first : event.target === last) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+    }
+  }
+
   const [centerX, centerY] = project(center.lat, center.lon, zoom);
   const tiles: Array<{ id: string; left: number; top: number; url: string }> = [];
   const maxTile = 2 ** zoom;
@@ -326,109 +394,138 @@ export function NeighborhoodBoundaryEditor({
     <section className="rge-custom-map-section rounded-lg border border-slate-200 bg-white p-3"
       data-rge-custom-map="true">
       <button type="button" data-rge-map-toggle="true"
-        aria-expanded={open} className="flex w-full items-center gap-2 text-start text-sm font-semibold text-slate-800"
-        onClick={() => { setOpen((wasOpen) => !wasOpen); setExpanded(false); }}>
+        aria-expanded={open} aria-controls={open ? panelId : undefined}
+        className="flex w-full items-center gap-2 text-start text-sm font-semibold text-slate-800"
+        onClick={() => { setOpen((wasOpen) => !wasOpen); setExpanded(false); setMoreOpen(false); }}>
         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
           aria-hidden="true" />
-        <span>{t("rgeMap.title")} · {boundary ? t("rgeMap.saved") : t("rgeMap.optional")}</span>
+        <span>{t("rgeMap.title")} · {t(`rgeMap.${boundaryStatus}`)}</span>
       </button>
-      {open && <div className="mt-3 space-y-3">
-        <p className="text-xs text-slate-600">
-          {t("rgeMap.instructions")}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={disabled || locating}
-            onClick={() => void locate()}>{locating ? t("rgeMap.locating") : t("rgeMap.find")}</Button>
-          <p className="text-xs text-slate-500">{t("rgeMap.gestureHelp")}</p>
-        </div>
-        {status && <p role="status" aria-live="polite"
-          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{status}</p>}
+      {open && <>
         {expanded && <div className="fixed inset-0 z-[79] bg-slate-950/65" aria-hidden="true" />}
-        <div ref={mapRef}
+        <div id={panelId} ref={panelRef} data-rge-map-panel="true"
+          role={expanded ? "dialog" : undefined} aria-modal={expanded || undefined}
+          aria-label={t("rgeMap.title")} onKeyDown={onPanelKeyDown}
           className={expanded
-            ? "fixed inset-4 z-[80] overflow-hidden rounded-xl border border-slate-300 bg-slate-100 shadow-2xl"
-            : "relative w-full overflow-hidden rounded-md border bg-slate-100"}
-          style={{ height: expanded ? "calc(100dvh - 32px)" : MAP_HEIGHT }}
-          aria-label={t("rgeMap.map")}>
-          {tiles.map((tile) => <img key={tile.id} alt="" src={tile.url} width={TILE} height={TILE}
-            decoding="async" referrerPolicy="strict-origin-when-cross-origin" draggable={false}
-            style={{ position: "absolute", width: TILE, height: TILE, left: tile.left, top: tile.top, maxWidth: "none", pointerEvents: "none" }} />)}
-          <svg width="100%" height="100%" className="absolute inset-0 cursor-crosshair"
-            role="application" aria-label={t("rgeMap.clickCorners")} tabIndex={0}
-            style={{ touchAction: "none", cursor: dragging ? "grabbing" : "crosshair" }}
-            onPointerDown={onMapPointerDown} onPointerMove={onMapPointerMove}
-            onPointerUp={(event) => finishPointer(event)}
-            onPointerCancel={(event) => finishPointer(event, true)}
-            onKeyDown={onMapKeyDown}>
-            {points.length >= 3 && <polygon points={polygonPoints} fill="rgba(16,185,129,.16)" stroke="#047857" strokeWidth={2}/>}
-            {points.length === 2 && <polyline points={polygonPoints} fill="none" stroke="#047857" strokeWidth={2}/>}
-            {points.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={5} fill="#047857" stroke="white" strokeWidth={2}/>)}
-          </svg>
-          <div className="absolute right-3 top-3 z-20 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-sm"
-            role="group" aria-label={t("rgeMap.mapControls")}>
-            <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
-              aria-label={t("rgeMap.zoomIn")}
-              onClick={() => { const r = mapRef.current?.getBoundingClientRect();
-                if (r) zoomAt(zoom + 1, r.left + r.width / 2, r.top + r.height / 2); }}>
-              <Plus className="h-5 w-5" aria-hidden="true" />
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
-              aria-label={t("rgeMap.zoomOut")}
-              onClick={() => { const r = mapRef.current?.getBoundingClientRect();
-                if (r) zoomAt(zoom - 1, r.left + r.width / 2, r.top + r.height / 2); }}>
-              <Minus className="h-5 w-5" aria-hidden="true" />
-            </Button>
-            <div className="border-t border-slate-200" />
-            <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
-              aria-label={expanded ? t("rgeMap.collapse") : t("rgeMap.expand")}
-              onClick={() => setExpanded((value) => !value)}>
-              {expanded ? <Minimize2 className="h-5 w-5" aria-hidden="true" />
-                : <Maximize2 className="h-5 w-5" aria-hidden="true" />}
-            </Button>
+            ? "fixed inset-2 z-[80] flex flex-col overflow-hidden rounded-xl border bg-white shadow-2xl sm:inset-4"
+            : "relative mt-3 overflow-hidden rounded-md border bg-white"}>
+          <div className="max-h-[50dvh] shrink-0 overflow-y-auto border-b border-slate-200 p-2">
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("rgeMap.drawingControls")}>
+              <Button type="button" size="sm" variant="outline" disabled={disabled || locating}
+                onClick={() => void locate()}>{locating ? t("rgeMap.locating") : t("rgeMap.find")}</Button>
+              <Button type="button" size="sm" variant="outline" className="h-9 w-9 p-0"
+                aria-label={t("rgeMap.undo")} title={t("rgeMap.undo")} disabled={disabled || !vertices.length}
+                onClick={() => {
+                  setVertices((prior) => prior.slice(0, -1));
+                  setStatus("");
+                  if (vertices.length === 1) moreRef.current?.focus();
+                }}>
+                <Undo2 className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
+              </Button>
+              <Button type="button" size="sm" disabled={disabled || !safeShape || !drawingChanged}
+                onClick={() => {
+                  if (!safeShape) return;
+                  setRemoval(undefined);
+                  applyBoundary(safeShape);
+                  moreRef.current?.focus();
+                }}>
+                {t("rgeMap.apply")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="h-9 w-9 p-0" ref={moreRef}
+                aria-label={t("rgeMap.more")} title={t("rgeMap.more")} aria-expanded={moreOpen}
+                aria-controls={`${panelId}-more`} onClick={() => setMoreOpen(!moreOpen)}>
+                <Ellipsis className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+            <div id={`${panelId}-more`} hidden={!moreOpen} className="mt-2 space-y-2 rounded-md border p-2">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" disabled={disabled || !vertices.length}
+                  onClick={() => { setVertices([]); setStatus(""); moreRef.current?.focus(); }}>{t("rgeMap.restart")}</Button>
+                <Button type="button" size="sm" variant="outline" disabled={disabled || !drawingChanged}
+                  onClick={() => { setVertices(formVertices); setStatus(""); moreRef.current?.focus(); }}>{t("rgeMap.reset")}</Button>
+                {boundary && <Button type="button" size="sm" variant="outline" disabled={disabled}
+                  className="text-destructive" onClick={() => {
+                    if (!window.confirm(t("rgeMap.confirmRemove"))) return;
+                    setRemoval({ boundary, version: persistedVersion });
+                    applyBoundary(null);
+                    moreRef.current?.focus();
+                  }}>{t("rgeMap.remove")}</Button>}
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="space-y-1 text-xs">{t("rgeMap.latitude")}
+                  <Input className="w-28" dir="ltr" inputMode="decimal" value={latInput} onChange={(e) => setLatInput(e.target.value)} disabled={disabled} />
+                </label>
+                <label className="space-y-1 text-xs">{t("rgeMap.longitude")}
+                  <Input className="w-28" dir="ltr" inputMode="decimal" value={lonInput} onChange={(e) => setLonInput(e.target.value)} disabled={disabled} />
+                </label>
+                <Button type="button" size="sm" variant="outline" disabled={disabled}
+                  onClick={centerManually}>{t("rgeMap.center")}</Button>
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-600">{t("rgeMap.gestureHelp")}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
+              <span>{t("rgeMap.corners", { count: vertices.length, zoom })}</span>
+              <span role="status" data-rge-boundary-status="true" className="font-medium">
+                {drawingChanged && !stale
+                  ? `${t("rgeMap.unapplied")}${boundaryKey !== persistedKey ? ` · ${t(`rgeMap.${boundaryStatus}`)}` : ""}`
+                  : t(`rgeMap.${boundaryStatus}`)}
+              </span>
+              {restoreBoundary && <Button type="button" size="sm" variant="ghost" className="h-8" disabled={disabled}
+                onClick={() => {
+                  setRemoval(undefined);
+                  applyBoundary(restoreBoundary);
+                  moreRef.current?.focus();
+                }}>{t("rgeMap.undoRemoval")}</Button>}
+            </div>
+            {status && <p role="status" className="mt-1 text-sm text-slate-700">{status}</p>}
+            {shape && !safeShape && <p role="alert" className="mt-1 text-xs text-amber-700">{t("rgeMap.invalid")}</p>}
           </div>
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
-            className="absolute bottom-1 right-1 rounded bg-white/90 px-1 text-[10px] text-slate-800">
-            {t("rgeMap.attribution")}
-          </a>
+          <div ref={mapRef} className="relative min-h-0 w-full flex-1 overflow-hidden bg-slate-100"
+            style={expanded ? undefined : { height: MAP_HEIGHT }} aria-label={t("rgeMap.map")}>
+            {tiles.map((tile) => <img key={tile.id} alt="" src={tile.url} width={TILE} height={TILE}
+              decoding="async" referrerPolicy="strict-origin-when-cross-origin" draggable={false}
+              style={{ position: "absolute", width: TILE, height: TILE, left: tile.left, top: tile.top, maxWidth: "none", pointerEvents: "none" }} />)}
+            <svg width="100%" height="100%" className="absolute inset-0 cursor-crosshair"
+              role="application" aria-label={t("rgeMap.clickCorners")} tabIndex={0}
+              style={{ touchAction: "none", cursor: dragging ? "grabbing" : "crosshair" }}
+              onPointerDown={onMapPointerDown} onPointerMove={onMapPointerMove}
+              onPointerUp={(event) => finishPointer(event)}
+              onPointerCancel={(event) => finishPointer(event, true)}
+              onKeyDown={onMapKeyDown}>
+              {points.length >= 3 && <polygon points={polygonPoints} fill="rgba(16,185,129,.16)" stroke="#047857" strokeWidth={2}/>}
+              {points.length === 2 && <polyline points={polygonPoints} fill="none" stroke="#047857" strokeWidth={2}/>}
+              {points.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={5} fill="#047857" stroke="white" strokeWidth={2}/>)}
+            </svg>
+            <div className="absolute end-3 top-3 z-20 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-sm"
+              role="group" aria-label={t("rgeMap.mapControls")}>
+              <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
+                aria-label={t("rgeMap.zoomIn")} title={t("rgeMap.zoomIn")}
+                onClick={() => { const r = mapRef.current?.getBoundingClientRect();
+                  if (r) zoomAt(zoom + 1, r.left + r.width / 2, r.top + r.height / 2); }}>
+                <Plus className="h-5 w-5" aria-hidden="true" />
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
+                aria-label={t("rgeMap.zoomOut")} title={t("rgeMap.zoomOut")}
+                onClick={() => { const r = mapRef.current?.getBoundingClientRect();
+                  if (r) zoomAt(zoom - 1, r.left + r.width / 2, r.top + r.height / 2); }}>
+                <Minus className="h-5 w-5" aria-hidden="true" />
+              </Button>
+              <div className="border-t border-slate-200" />
+              <Button type="button" size="sm" variant="ghost" className="h-9 w-9 p-0"
+                ref={expandRef} aria-label={expanded ? t("rgeMap.collapse") : t("rgeMap.expand")}
+                title={expanded ? t("rgeMap.collapse") : t("rgeMap.expand")}
+                onClick={() => setExpanded((value) => !value)}>
+                {expanded ? <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                  : <Maximize2 className="h-5 w-5" aria-hidden="true" />}
+              </Button>
+            </div>
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
+              className="absolute bottom-1 end-1 rounded bg-white/90 px-1 text-[10px] text-slate-800">
+              {t("rgeMap.attribution")}
+            </a>
+          </div>
         </div>
-        <p className="text-xs text-slate-500">
-          {t("rgeMap.corners", { count: vertices.length, zoom })}
-        </p>
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="space-y-1 text-xs">{t("rgeMap.latitude")}
-            <Input className="w-32" inputMode="decimal" value={latInput} onChange={(e) => setLatInput(e.target.value)} disabled={disabled} />
-          </label>
-          <label className="space-y-1 text-xs">{t("rgeMap.longitude")}
-            <Input className="w-32" inputMode="decimal" value={lonInput} onChange={(e) => setLonInput(e.target.value)} disabled={disabled} />
-          </label>
-          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => {
-            const lat = Number(latInput), lon = Number(lonInput);
-            if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 85 || Math.abs(lon) > 180) {
-              setStatus(t("rgeMap.coordsInvalid")); return;
-            }
-            moveTo({ lat, lon }, 14);
-          }}>{t("rgeMap.center")}</Button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={disabled || vertices.length === 0}
-            onClick={() => { setVertices((p) => p.slice(0, -1)); setStatus(""); }}>{t("rgeMap.undo")}</Button>
-          <Button type="button" size="sm" variant="outline" disabled={disabled || vertices.length === 0}
-            onClick={() => { setVertices([]); setStatus(""); }}>{t("rgeMap.restart")}</Button>
-          <Button type="button" size="sm" disabled={disabled || !safeShape || !pending}
-            onClick={() => { locallyAppliedBoundary.current = JSON.stringify(safeShape!);
-              onChange(safeShape!); setStatus(t("rgeMap.applied")); }}>
-            {t("rgeMap.apply")}
-          </Button>
-          {boundary && <Button type="button" size="sm" variant="outline" disabled={disabled}
-            onClick={() => { locallyAppliedBoundary.current = "null";
-              onChange(null); setVertices([]); setStatus(t("rgeMap.removed")); }}>
-            {t("rgeMap.remove")}
-          </Button>}
-        </div>
-        {shape && !safeShape && <p role="alert" className="text-xs text-amber-700">
-          {t("rgeMap.invalid")}
-        </p>}
-      </div>}
+      </>}
     </section>
   );
 }

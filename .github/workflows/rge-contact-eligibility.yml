@@ -57,6 +57,7 @@ jobs:
       - name: Agent Page publication, property SEO and existing lead workflows
         env:
           AGENT_PAGE_BROWSER_TEST: "1"
+          RGE_MAP_SCREENSHOTS: "${{ runner.temp }}/rge-map-screenshots"
         run: >-
           node --import tsx --test
           tests/public-agent-page.test.ts
@@ -85,6 +86,12 @@ jobs:
           tests/rge-w4-no-reply-enrollment.test.ts
           tests/calendly-booking-message.test.ts
           tests/seller-consultation-booking.test.ts
+      - name: Upload Neighborhood Map Editor screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neighborhood-map-editor-screenshots
+          path: ${{ runner.temp }}/rge-map-screenshots/*.png
       - name: Compare TypeScript diagnostics against main
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

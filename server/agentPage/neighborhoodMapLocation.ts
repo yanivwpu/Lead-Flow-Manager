@@ -23,6 +23,16 @@ const GOOGLE_PLACES = "https://places.googleapis.com/v1/places:searchText";
 const GEO_TYPES = new Set(["neighborhood", "sublocality", "sublocality_level_1",
   "political", "locality", "administrative_area_level_3"]);
 const CITY_TYPES = new Set(["locality", "political", "administrative_area_level_3"]);
+const ADDRESS_TYPES = new Set(["street_address", "route", "intersection", "premise", "subpremise"]);
+
+function geocodePrecision(types: string[]): NeighborhoodMapLocation["precision"] | null {
+  if (types.some((type) => ADDRESS_TYPES.has(type))) return null;
+  if (types.some((type) => type === "locality" || type === "administrative_area_level_3")) return "city";
+  if (types.some((type) => type === "neighborhood" || /^sublocality(?:_level_[1-5])?$/.test(type))) {
+    return "neighborhood";
+  }
+  return null;
+}
 
 function safeCoordinates(latitude: unknown, longitude: unknown): NeighborhoodMapLocation | null {
   if (typeof latitude !== "number" || typeof longitude !== "number" ||
@@ -36,7 +46,7 @@ function comparable(value: string): string {
 }
 
 type Lookup = { location: NeighborhoodMapLocation | null; unavailable: boolean };
-async function googleGeocode(address: string, key: string, fetchFn: MapFetch): Promise<Lookup> {
+async function googleGeocode(address: string, scope: "neighborhood" | "city", key: string, fetchFn: MapFetch): Promise<Lookup> {
   const url = new URL(GOOGLE_GEOCODE);
   url.searchParams.set("address", address);
   url.searchParams.set("key", key);
@@ -49,10 +59,13 @@ async function googleGeocode(address: string, key: string, fetchFn: MapFetch): P
     };
     if (data.status === "ZERO_RESULTS") return { location: null, unavailable: false };
     if (data.status !== "OK") return { location: null, unavailable: true };
-    const first = data.results?.[0];
-    const point = safeCoordinates(first?.geometry?.location?.lat, first?.geometry?.location?.lng);
-    if (point && first?.types?.some((type) => type === "locality")) point.precision = "city";
-    return { location: point, unavailable: false };
+    for (const result of Array.isArray(data.results) ? data.results : []) {
+      const precision = geocodePrecision(result.types ?? []);
+      if (!precision || (scope === "city" && precision !== "city")) continue;
+      const point = safeCoordinates(result.geometry?.location?.lat, result.geometry?.location?.lng);
+      if (point) return { location: { ...point, precision }, unavailable: false };
+    }
+    return { location: null, unavailable: false };
   } catch { return { location: null, unavailable: true }; }
 }
 
@@ -77,7 +90,8 @@ async function googlePlacesSearch(
       const name = comparable(place.displayName?.text ?? "");
       const types = place.types ?? [];
       const allowed = scope === "neighborhood" ? GEO_TYPES : CITY_TYPES;
-      if (name !== expected || !types.some((type) => allowed.has(type))) continue;
+      if (name !== expected || types.some((type) => ADDRESS_TYPES.has(type)) ||
+          !types.some((type) => allowed.has(type))) continue;
       const point = safeCoordinates(place.location?.latitude, place.location?.longitude);
       if (point) return { location: { ...point, precision: scope }, unavailable: false };
     }
@@ -94,9 +108,9 @@ export async function findNeighborhoodMapLocation(
   const cityQuery = [city, state, country].join(", ");
   let unavailable = false;
   const lookups: Array<() => Promise<Lookup>> = [
-    () => googleGeocode(neighborhoodQuery, apiKey, fetchFn),
+    () => googleGeocode(neighborhoodQuery, "neighborhood", apiKey, fetchFn),
     () => googlePlacesSearch(neighborhoodQuery, country, name, "neighborhood", apiKey, fetchFn),
-    () => googleGeocode(cityQuery, apiKey, fetchFn),
+    () => googleGeocode(cityQuery, "city", apiKey, fetchFn),
     () => googlePlacesSearch(cityQuery, country, city, "city", apiKey, fetchFn),
   ];
   for (let i = 0; i < lookups.length; i++) {
