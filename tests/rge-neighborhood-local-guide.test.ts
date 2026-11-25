@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isOwnedNeighborhoodGuidePhotoUrl, neighborhoodPhotoMarker } from "../shared/agent/neighborhoodPages";
+import { isOwnedNeighborhoodGuidePhotoUrl, neighborhoodContentComplete, neighborhoodPhotoMarker } from "../shared/agent/neighborhoodPages";
 import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
 import {
   EMPTY_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts, sameNeighborhoodContent,
@@ -11,6 +11,18 @@ const owner = "e3078bc6-e9a0-4bf3-ad73-b849e1a84a44";
 const other = "a2978bc6-e9a0-4bf3-ad73-b849e1a84a44";
 const base = "https://images.example.test";
 const photo = `${base}/media/${owner}/neighborhood-guide/2e089653-eaa7-4bee-abce-a3f6f4aa99b3.jpg`;
+
+test("one meaningful paragraph can publish without mandatory headings or photos", () => {
+  const prose = "Lake Santa Barbara offers waterfront living in Pompano Beach with nearby coastal amenities, boating access, local restaurants, and places to enjoy the shoreline. Buyers exploring the area can learn about the surrounding streets, canals, and everyday neighborhood lifestyle from this local guide.";
+  assert.ok(prose.length >= 240);
+  assert.equal(neighborhoodContentComplete(prose), true);
+  assert.equal(neighborhoodContentComplete("## Waterfront Living\n\n" + prose), true);
+  assert.equal(neighborhoodContentComplete("## Waterfront Living"), false);
+  assert.equal(neighborhoodContentComplete("[[photo:2e089653-eaa7-4bee-abce-a3f6f4aa99b3]]"), false);
+  assert.equal(neighborhoodContentComplete("A short teaser about the neighborhood."), false);
+  const chunks = [prose.slice(0, 75), prose.slice(75, 155), prose.slice(155)];
+  assert.equal(neighborhoodContentComplete(chunks.join("\n\n")), true);
+});
 
 test("gallery URLs must point to the owner’s durable neighborhood-guide storage only", () => {
   assert.equal(isOwnedNeighborhoodGuidePhotoUrl(photo, owner, base), true);
