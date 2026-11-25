@@ -1,7 +1,8 @@
 import test from "node:test";
 import { build } from "esbuild";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { readCustomNeighborhoodBoundary } from "../shared/agent/neighborhoodCustomBoundary";
 import { coordinateWithinNeighborhood, type PolygonBoundary } from "../shared/agent/neighborhoodListingGeo";
 import { resolveNeighborhoodBoundary } from "../server/agentPage/neighborhoodBoundaryService";
@@ -99,7 +100,9 @@ test("owner endpoints, public HTML, persistence and map editing retain custom-ar
   assert.ok(editor.includes('t("rgeMap.attribution")'));
   for (const locale of ["en", "he", "es"]) {
     const labels = JSON.parse(readFileSync(`client/src/locales/${locale}.json`, "utf8")).rgeMap;
-    assert.ok(labels.apply && labels.remove && labels.attribution);
+    for (const key of ["apply", "remove", "attribution", "more", "reset", "unapplied", "applied", "removalPending", "undoRemoval", "confirmRemove", "stale"]) {
+      assert.ok(labels[key], `${locale} includes ${key}`);
+    }
   }
   assert.match(migration, /ADD COLUMN IF NOT EXISTS custom_boundary jsonb/);
 });
@@ -116,17 +119,30 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   const harness = [
     'import React from "react";',
     'import { createRoot } from "react-dom/client";',
+    'import i18n from "i18next";',
+    'import { initReactI18next } from "react-i18next";',
+    'import english from "./client/src/locales/en.json";',
+    'import spanish from "./client/src/locales/es.json";',
+    'import hebrew from "./client/src/locales/he.json";',
+    'i18n.use(initReactI18next).init({lng:"keys", keySeparator:".", resources:{en:{translation:{rgeMap:english.rgeMap}},es:{translation:{rgeMap:spanish.rgeMap}},he:{translation:{rgeMap:hebrew.rgeMap}}}});',
+    'window.__mapLanguage = (lang) => { document.documentElement.dir = lang === "he" ? "rtl" : "ltr"; return i18n.changeLanguage(lang); };',
     'import { NeighborhoodBoundaryEditor } from "./client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx";',
     'const original = ' + JSON.stringify(square) + ';',
     'function Harness() {',
     ' const [saved, setSaved] = React.useState(original);',
+    ' const [formBoundary, setFormBoundary] = React.useState(original);',
+    ' const [version, setVersion] = React.useState(0);',
+    ' const [stale, setStale] = React.useState(false);',
+    ' window.__mapValues = { saved, formBoundary };',
+    ' window.__saveBoundary = (ok) => { if (ok) { setSaved(formBoundary); setVersion((v) => v+1); } };',
+    ' window.__markBoundaryStale = setStale;',
     ' const [show, setShow] = React.useState(true);',
     ' const [revision, setRevision] = React.useState(0);',
-    ' window.__replaceBoundary = (boundary) => setSaved(boundary);',
+    ' window.__replaceBoundary = (boundary) => { setSaved(boundary); setFormBoundary(boundary); setVersion((v) => v+1); };',
     ' window.__switchDashboardTab = () => setShow((old) => !old);',
-    ' window.__discardNewMap = () => { sessionStorage.removeItem("rge-test-map-view"); setSaved(null); setRevision((v) => v + 1); };',
-    ' return show ? <NeighborhoodBoundaryEditor key={revision} boundary={saved} name="Victoria Park" city="Fort Lauderdale"',
-    '  state="FL" country="US" sessionKey="rge-test-map-view" disabled={false} onChange={setSaved} />',
+    ' window.__discardNewMap = () => { sessionStorage.removeItem("rge-test-map-view"); setSaved(null); setFormBoundary(null); setRevision((v) => v + 1); };',
+    ' return show ? <NeighborhoodBoundaryEditor key={revision} boundary={formBoundary} persistedBoundary={saved} persistedVersion={String(version)} stale={stale} name="Victoria Park" city="Fort Lauderdale"',
+    '  state="FL" country="US" sessionKey="rge-test-map-view" disabled={stale} onChange={setFormBoundary} />',
     ' : <p id="other-dashboard-tab">Other page</p>;',
     '}',
     'createRoot(document.getElementById("root")).render(<Harness />);',
@@ -142,20 +158,27 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   assert.ok(js, "map editor browser harness bundles");
   const page = await browser.newPage({ viewport: { width: 960, height: 800 } });
   t.after(() => page.close());
-  await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
-  // The production dashboard supplies Tailwind. This isolated esbuild harness
-  // intentionally loads no CSS, so supply the small positioning rules needed
-  // to exercise real map overlays and the expanded view in Chromium.
-  const mapCss = [
-    "div[aria-label='rgeMap.map'] { position: relative; width: 100%; overflow: hidden; box-sizing: border-box; }",
-    "svg.cursor-crosshair { position: absolute; inset: 0; z-index: 1; }",
-    "div[role='group'][aria-label='rgeMap.mapControls'] { position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; gap: 4px; }",
-    "div[aria-label='rgeMap.map'][class*='fixed'] { position: fixed; inset: 16px; width: auto; z-index: 80; }",
-  ].join("\n");
+  const screenshots = process.env.RGE_MAP_SCREENSHOTS;
+  await page.route("https://tile.openstreetmap.org/**", (route) => screenshots
+    ? route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
+      <rect width="256" height="256" fill="#eeece3"/>
+      <path d="M12 16h54v57H12zM138 81h81v60h-81zM16 190h70v53H16z" fill="#dfebd2"/>
+      <path d="M0 75h256M0 153h256M0 186h256M73 0v186M126 0v256M229 0v256M38 75v111M176 153v103" stroke="#fff" stroke-width="5"/>
+      <path d="M0 34h256M0 225h256" stroke="#ddd8c7" stroke-width="2"/>
+      </svg>` })
+    : route.abort());
+  const { compile } = await import("@tailwindcss/node");
+  const { Scanner } = await import("@tailwindcss/oxide");
+  const candidates = new Scanner({ sources: [] }).scanFiles([
+    "client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx",
+    "client/src/components/ui/button.tsx",
+    "client/src/components/ui/input.tsx",
+  ].map(file => ({ content: readFileSync(file, "utf8"), extension: "tsx" })));
+  const style = await compile(readFileSync("client/src/index.css", "utf8"), { base: process.cwd(), onDependency() {} });
   await page.route("https://rge-editor.test/**", (route) => route.fulfill({
     status: 200, contentType: "text/html",
-    body: '<!doctype html><html><head><style>' + mapCss +
-      '</style></head><body><div id="root"></div></body></html>',
+    body: `<!doctype html><html class="wcs-hide-static-marketing" data-authenticated-layout><head><style>${style.build(candidates)}</style></head>
+      <body style="padding:16px"><div id="root"></div></body></html>`,
   }));
   await page.goto("https://rge-editor.test/");
   await page.addScriptTag({ content: js.text });
@@ -172,6 +195,18 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   await map.waitFor();
   const circles = map.locator("circle");
   assert.equal(await circles.count(), 4, "the saved four-corner area is visible");
+  if (screenshots) {
+    mkdirSync(screenshots, { recursive: true });
+    await page.evaluate(() => (window as any).__mapLanguage("en"));
+    await page.getByRole("button", { name: "Find on map" }).waitFor();
+    await page.locator('[data-rge-custom-map="true"]').screenshot({ path: join(screenshots, "neighborhood-map-normal.png") });
+    await page.getByRole("button", { name: "Expand map" }).click();
+    await page.getByRole("button", { name: "More map options" }).click();
+    await page.getByRole("dialog").screenshot({ path: join(screenshots, "neighborhood-map-expanded.png") });
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => (window as any).__mapLanguage("keys"));
+  }
   await map.click({ position: { x: 250, y: 160 } });
   assert.equal(await circles.count(), 5, "unapplied local edit appears on the map");
   await page.evaluate((newBoundary) => (window as any).__replaceBoundary(newBoundary), updated);
@@ -263,6 +298,96 @@ test("map editor visibly restores saved geometry when draft is discarded or chan
   assert.equal(await circles.count(), 4, "unapplied map work remains in the same browser tab");
   assert.equal(await page.locator("input").first().inputValue(), beforeSwitch,
     "the map center survives dashboard tab switching");
+
+  // New behavior: the toolbar works inside the expanded panel on a phone,
+  // with the original geometry protected until an explicitly saved form change.
+  const control = (key: string) => page.getByRole("button", { name: `rgeMap.${key}`, exact: true });
+  const boundaryStatus = page.locator("[data-rge-boundary-status]");
+  const formValues = () => page.evaluate(() => (window as any).__mapValues);
+  await page.setViewportSize({ width: 390, height: 680 });
+  await control("expand").click();
+  const panel = page.getByRole("dialog", { name: "rgeMap.title" });
+  const drawingToolbar = panel.getByRole("group", { name: "rgeMap.drawingControls" });
+  assert.equal(await drawingToolbar.getByRole("button").count(), 4);
+  assert.equal(await control("undo").getAttribute("title"), "rgeMap.undo");
+  assert.equal(await control("undo").textContent(), "");
+  await panel.getByRole("link").focus();
+  await page.keyboard.press("Tab");
+  assert.equal(await control("find").evaluate(el => el === document.activeElement), true);
+  await control("more").focus();
+  await page.keyboard.press("Enter");
+  await control("restart").click();
+  assert.equal(await circles.count(), 0);
+  assert.match(await boundaryStatus.textContent() ?? "", /rgeMap.unapplied/);
+  assert.deepEqual(await formValues(), { saved: square, formBoundary: square });
+  assert.equal(await control("apply").isEnabled(), false);
+  await control("reset").click();
+  assert.equal(await circles.count(), 4);
+  assert.equal(await boundaryStatus.textContent(), "rgeMap.saved");
+
+  // A whitespace coordinate must never send the viewport to zero latitude.
+  await page.getByLabel("rgeMap.latitude", { exact: true }).fill(" ");
+  await control("center").click();
+  await page.getByText("rgeMap.coordsInvalid", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("rgeMap.latitude", { exact: true }).inputValue(), " ");
+
+  page.once("dialog", dialog => dialog.dismiss());
+  await control("remove").click();
+  assert.deepEqual(await formValues(), { saved: square, formBoundary: square });
+  page.once("dialog", dialog => dialog.accept());
+  await control("remove").click();
+  assert.deepEqual(await formValues(), { saved: square, formBoundary: null });
+  assert.equal(await boundaryStatus.textContent(), "rgeMap.removalPending");
+  await page.evaluate(() => (window as any).__saveBoundary(false));
+  assert.equal(await control("undoRemoval").isEnabled(), true, "a save failure preserves Undo removal");
+  await page.evaluate(() => (window as any).__markBoundaryStale(true));
+  await page.getByText("rgeMap.stale", { exact: true }).waitFor();
+  assert.equal(await control("undoRemoval").isEnabled(), false, "a stale form cannot undo or apply");
+  await page.evaluate(() => (window as any).__markBoundaryStale(false));
+  await control("undoRemoval").click();
+  assert.deepEqual(await formValues(), { saved: square, formBoundary: square });
+
+  await control("restart").click();
+  await page.keyboard.press("Escape");
+  assert.equal(await control("more").getAttribute("aria-expanded"), "false");
+  await page.keyboard.press("Escape");
+  assert.equal(await panel.count(), 0);
+  await map.click({ position: { x: 105, y: 100 } });
+  await map.click({ position: { x: 200, y: 100 } });
+  assert.equal(await control("apply").isEnabled(), false);
+  await map.click({ position: { x: 190, y: 215 } });
+  assert.equal(await control("apply").isEnabled(), true);
+  await control("apply").click();
+  assert.equal(await boundaryStatus.textContent(), "rgeMap.applied");
+  const applied = await formValues();
+  assert.deepEqual(applied.saved, square);
+  assert.equal(applied.formBoundary.coordinates[0].length, 4);
+
+  await control("more").click();
+  page.once("dialog", dialog => dialog.accept());
+  await control("remove").click();
+  await page.evaluate(() => (window as any).__switchDashboardTab());
+  await page.locator("#other-dashboard-tab").waitFor();
+  await page.evaluate(() => (window as any).__switchDashboardTab());
+  await control("undoRemoval").click();
+  assert.deepEqual((await formValues()).formBoundary, applied.formBoundary,
+    "Undo removal restores the previous applied shape across dashboard tab changes");
+  await page.evaluate(() => (window as any).__saveBoundary(true));
+  await page.getByText("rgeMap.saved", { exact: true }).waitFor();
+
+  await page.evaluate(() => (window as any).__mapLanguage("es"));
+  await page.getByRole("button", { name: "Aplicar área" }).waitFor();
+  await page.evaluate(() => (window as any).__mapLanguage("he"));
+  await page.getByRole("button", { name: "החלת האזור" }).waitFor();
+  assert.equal(await page.locator("html").getAttribute("dir"), "rtl");
+  await page.evaluate(() => (window as any).__mapLanguage("keys"));
+  await control("more").click();
+  page.once("dialog", dialog => dialog.accept());
+  await control("remove").click();
+  await page.evaluate(() => (window as any).__saveBoundary(true));
+  await page.getByText("rgeMap.optional", { exact: true }).waitFor();
+  assert.equal(await control("undoRemoval").count(), 0, "a successful save finalizes removal");
+  assert.deepEqual(await formValues(), { saved: null, formBoundary: null });
 
   await page.evaluate(() => (window as any).__discardNewMap());
   await disclosure.waitFor();

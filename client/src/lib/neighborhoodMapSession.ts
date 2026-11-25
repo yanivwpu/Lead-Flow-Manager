@@ -1,4 +1,5 @@
-import type { Position } from "@shared/agent/neighborhoodListingGeo";
+import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
+import type { PolygonBoundary, Position } from "@shared/agent/neighborhoodListingGeo";
 
 export type NeighborhoodMapSession = {
   open: boolean;
@@ -6,6 +7,7 @@ export type NeighborhoodMapSession = {
   zoom: number;
   vertices: Position[];
   boundaryKey: string;
+  removal?: { boundary: PolygonBoundary; version: string | null };
 };
 const MAX_SESSION_BYTES = 20000;
 
@@ -34,7 +36,13 @@ export function readNeighborhoodMapSession(storage: Pick<Storage, "getItem"> | u
       typeof data.zoom !== "number" || !Number.isInteger(data.zoom) || data.zoom < 2 || data.zoom > 17 ||
       !Array.isArray(data.vertices) || data.vertices.length > 128 ||
       !data.vertices.every(validPosition)) return null;
-    return data as NeighborhoodMapSession;
+    const { removal, ...view } = data as NeighborhoodMapSession;
+    const removedBoundary = readCustomNeighborhoodBoundary(removal?.boundary);
+    if (removedBoundary && removal &&
+        (removal.version === null || (typeof removal.version === "string" && removal.version.length <= 40))) {
+      return { ...view, removal: { boundary: removedBoundary, version: removal.version } };
+    }
+    return view;
   } catch { return null; }
 }
 

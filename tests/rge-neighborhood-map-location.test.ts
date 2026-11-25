@@ -70,6 +70,24 @@ test("Find neighborhood discloses an approximate city center rather than inventi
   assert.equal(result.unavailable, false);
 });
 
+test("street-level geocoding results fall through to geographic lookup", async () => {
+  const decisions: string[] = [];
+  const fetchFn: typeof fetch = async (resource) => {
+    const url = new URL(String(resource));
+    const address = url.searchParams.get("address");
+    decisions.push(address ?? "Places");
+    if (!address) return json({ places: [] });
+    return json({ status: "OK", results: [address.startsWith("Doctor Phillips") ? {
+      types: ["street_address", "political"], geometry: { location: { lat: 28.1, lng: -81.1 } },
+    } : {
+      types: ["locality", "political"], geometry: { location: { lat: 28.5, lng: -81.4 } },
+    }] });
+  };
+  const result = await findNeighborhoodMapLocation(query, "test-key", fetchFn);
+  assert.deepEqual(decisions, ["Doctor Phillips, Orlando, Florida, US", "Places", "Orlando, Florida, US"]);
+  assert.deepEqual(result.location, { latitude: 28.5, longitude: -81.4, precision: "city" });
+});
+
 test("Map search rejects named businesses and fails transparently on unavailable providers", async () => {
   const business = (async (resource: RequestInfo | URL) => {
     if (String(resource).includes("geocode/json")) return json({ status: "ZERO_RESULTS" });
