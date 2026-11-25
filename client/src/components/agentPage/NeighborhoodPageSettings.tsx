@@ -401,7 +401,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
               photo.url === url ? { ...photo, alt } : photo))}
             onUploadPhoto={(file, placement) => uploadPhoto(file, { placement })} />
-          <p className="text-xs text-slate-600">Write 240+ characters of useful local information across two distinct paragraphs, or one detailed paragraph with a section heading.
+          <p className="text-xs text-slate-600">Add at least 240 characters of useful local information. One paragraph is fine; headings, extra paragraphs, and photos are optional.
             Changing the neighborhood name may change its URL.</p>
 
 
@@ -481,11 +481,15 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             </div>
           </details>
           {data && !data.canPublish && <p className="text-xs text-muted-foreground">Enable your public Agent Page before publishing.</p>}
-          {dirty && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
+          {page && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
             <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Add more guide text before updating: use two informative paragraphs (240+ characters total),
-              or one detailed paragraph (240+ characters) followed by a section heading.
-              Your browser keeps these edits until you publish or discard them.
+              Add at least 240 characters of useful neighborhood guide text to publish. One paragraph is enough; headings and photos are optional.
+              Your browser keeps unsaved edits until you publish or discard them.
+            </p>
+          )}
+          {page && neighborhoodContentComplete(values.content) && (
+            <p className="text-xs text-slate-500">
+              SEO tip (optional): Add local amenities, useful details, headings, or photos to help visitors explore the neighborhood.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
