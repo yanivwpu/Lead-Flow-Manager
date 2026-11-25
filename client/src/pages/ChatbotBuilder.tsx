@@ -1805,7 +1805,7 @@ export function ChatbotBuilder() {
                             opts[oi] = { ...opts[oi], label: e.target.value };
                             updateStep(selectedStep.id, { options: opts });
                           }} placeholder={t("builderFeedback.optionNumber", { number: oi + 1 })} className="text-sm flex-1 border-gray-200" data-testid={`input-option-${selectedStep.id}-${oi}`} />
-                          <button onClick={() => {
+                          <button aria-label={t("builderFeedback.removeQuickReply")} onClick={() => {
                             const opts = (selectedStep.data.options || []).filter((_, i) => i !== oi);
                             updateStep(selectedStep.id, { options: opts });
                           }} className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
