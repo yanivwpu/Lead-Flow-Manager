@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * Step 4: the questions the assistant asks a customer.
  *
@@ -73,6 +74,7 @@ function QuestionCard({
   onDelete: () => void;
   index: number;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(question);
   const on = isOn(question);
@@ -97,8 +99,8 @@ function QuestionCard({
           className="h-8 text-sm"
           value={draft.question}
           onChange={(e) => setDraft((d) => ({ ...d, question: e.target.value }))}
-          placeholder="What should AI ask?"
-          aria-label="Question"
+          placeholder={t("brain3d.questionPrompt")}
+          aria-label={t("brain3d.question")}
           data-testid={`input-question-text-${index}`}
           autoFocus
         />
@@ -107,8 +109,8 @@ function QuestionCard({
             className="h-7 w-full text-xs sm:w-44"
             value={draft.label}
             onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
-            placeholder="Short name"
-            aria-label="Short name"
+            placeholder={t("brain3d.shortName")}
+            aria-label={t("brain3d.shortName")}
             data-testid={`input-question-label-${index}`}
           />
           <button
@@ -122,7 +124,7 @@ function QuestionCard({
             )}
             data-testid={`button-toggle-required-${index}`}
           >
-            {draft.required ? "Required" : "Optional"}
+            {draft.required ? t("brain3d.required") : t("brain3d.optional")}
           </button>
           <div className="ml-auto flex items-center gap-1">
             <Button
@@ -133,7 +135,7 @@ function QuestionCard({
               onClick={commit}
               data-testid={`button-save-question-${index}`}
             >
-              Done
+              {t("brain3d.done")}
             </Button>
             <Button
               type="button"
@@ -142,7 +144,7 @@ function QuestionCard({
               className="h-7 px-2 text-xs text-slate-600"
               onClick={() => setEditing(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -168,7 +170,7 @@ function QuestionCard({
             : "border-slate-300 bg-white text-transparent hover:border-slate-400",
         )}
         aria-pressed={on}
-        aria-label={on ? "Turn this question off" : "Turn this question on"}
+        aria-label={on ? t("brain3d.disableQuestion") : t("brain3d.enableQuestion")}
         data-testid={`button-toggle-question-${index}`}
       >
         <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
@@ -195,9 +197,9 @@ function QuestionCard({
               question.required ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-500",
             )}
           >
-            {question.required ? "Required" : "Optional"}
+            {question.required ? t("brain3d.required") : t("brain3d.optional")}
           </span>
-          {!on && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">Off</span>}
+          {!on && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600">{t("brain3d.off")}</span>}
         </div>
       </div>
 
@@ -208,7 +210,7 @@ function QuestionCard({
           size="sm"
           className="h-7 px-1.5 text-slate-500 hover:text-violet-800"
           onClick={beginEdit}
-          aria-label="Edit this question"
+          aria-label={t("brain3d.editQuestion")}
           data-testid={`button-edit-question-${index}`}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -219,7 +221,7 @@ function QuestionCard({
           size="sm"
           className="hidden h-7 px-1.5 text-slate-500 hover:text-violet-800 sm:inline-flex"
           onClick={onDuplicate}
-          aria-label="Duplicate this question"
+          aria-label={t("brain3d.duplicateQuestion")}
           data-testid={`button-duplicate-question-${index}`}
         >
           <Copy className="h-3.5 w-3.5" />
@@ -230,7 +232,7 @@ function QuestionCard({
           size="sm"
           className="h-7 px-1.5 text-slate-500 hover:text-red-700"
           onClick={onDelete}
-          aria-label="Delete this question"
+          aria-label={t("brain3d.deleteQuestion")}
           data-testid={`button-delete-question-${index}`}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -251,6 +253,7 @@ export function CustomerQuestions({
   onChange: (next: CustomerQuestion[]) => void;
   industry?: string | null;
 }) {
+  const { t } = useTranslation();
   const [adding, setAdding] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
@@ -284,8 +287,8 @@ export function CustomerQuestions({
     // Appended, never merged over: an edited question is the merchant's, not ours.
     onChange([...questions, ...next.map((s) => ({ ...s, enabled: true }))]);
     toast({
-      title: `${next.length === 1 ? "1 question" : `${next.length} questions`} added`,
-      description: "Edit or remove anything that does not fit.",
+      title: t("brain3d.questionsAdded", { count: next.length }),
+      description: t("brain3d.editSuggestions"),
     });
   }
 
@@ -295,19 +298,19 @@ export function CustomerQuestions({
   return (
     <Step
       index={4}
-      title="What AI should ask customers"
-      description="AI generated these questions from your business. Edit, remove or add your own."
+      title={t("brain3d.questionsTitle")}
+      description={t("brain3d.questionsDescription")}
       state={state}
       status={
         questions.length === 0
-          ? "None yet"
-          : `${activeCount} of ${questions.length} in use`
+          ? t("brain3d.noneYet")
+          : t("brain3d.questionsInUse", { active: activeCount, total: questions.length })
       }
       isLast
     >
       {questions.length === 0 ? (
         <div className="space-y-3">
-          <Hint>No qualification questions yet.</Hint>
+          <Hint>{t("brain3d.noQuestions")}</Hint>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -316,7 +319,7 @@ export function CustomerQuestions({
               data-testid="button-generate-questions"
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Generate questions
+              {t("brain3d.generate")}
             </Button>
             <Button
               type="button"
@@ -325,7 +328,7 @@ export function CustomerQuestions({
               onClick={() => setAdding(true)}
               data-testid="button-add-question-manually"
             >
-              Add manually
+              {t("brain3d.addManually")}
             </Button>
           </div>
         </div>
@@ -372,7 +375,7 @@ export function CustomerQuestions({
               data-testid="button-add-question"
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add question
+              {t("brain3d.addQuestion")}
             </Button>
           )}
           {missing.length > 0 && (
@@ -385,7 +388,7 @@ export function CustomerQuestions({
               data-testid="button-regenerate-questions"
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Regenerate suggested questions
+              {t("brain3d.regenerate")}
             </Button>
           )}
         </div>
@@ -394,12 +397,11 @@ export function CustomerQuestions({
       <AlertDialog open={confirmRegenerate} onOpenChange={setConfirmRegenerate}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Add suggestions from your latest knowledge?</AlertDialogTitle>
+            <AlertDialogTitle>{t("brain3d.addSuggestions")}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
-                  Your questions stay exactly as they are. These would be added to the end of the
-                  list:
+                  {t("brain3d.suggestionsHelp")}
                 </p>
                 <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-slate-600">
                   {missing.map((s) => (
@@ -410,12 +412,12 @@ export function CustomerQuestions({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep as is</AlertDialogCancel>
+            <AlertDialogCancel>{t("brain3d.keepQuestions")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => applySuggestions(missing)}
               data-testid="button-confirm-regenerate"
             >
-              Add {missing.length === 1 ? "question" : `${missing.length} questions`}
+              {t("brain3d.addQuestionCount", { count: missing.length })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -431,6 +433,7 @@ function NewQuestionRow({
   onAdd: (q: CustomerQuestion) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [label, setLabel] = useState("");
   const [question, setQuestion] = useState("");
   const [required, setRequired] = useState(true);
@@ -456,8 +459,8 @@ function NewQuestionRow({
         onKeyDown={(e) => {
           if (e.key === "Enter") submit();
         }}
-        placeholder="What should AI ask?"
-        aria-label="New question"
+        placeholder={t("brain3d.questionPrompt")}
+        aria-label={t("brain3d.newQuestion")}
         data-testid="input-new-question"
         autoFocus
       />
@@ -466,8 +469,8 @@ function NewQuestionRow({
           className="h-7 w-full text-xs sm:w-44"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="Short name"
-          aria-label="Short name for the new question"
+          placeholder={t("brain3d.shortName")}
+          aria-label={t("brain3d.newQuestionName")}
           data-testid="input-new-question-label"
         />
         <button
@@ -481,7 +484,7 @@ function NewQuestionRow({
           )}
           data-testid="button-new-question-required"
         >
-          {required ? "Required" : "Optional"}
+          {required ? t("brain3d.required") : t("brain3d.optional")}
         </button>
         <div className="ml-auto flex items-center gap-1">
           <Button
@@ -492,7 +495,7 @@ function NewQuestionRow({
             onClick={submit}
             data-testid="button-confirm-add-question"
           >
-            Add
+            {t("common.add")}
           </Button>
           <Button
             type="button"
@@ -500,7 +503,7 @@ function NewQuestionRow({
             size="sm"
             className="h-7 px-2 text-xs text-slate-600"
             onClick={onCancel}
-            aria-label="Cancel"
+            aria-label={t("common.cancel")}
           >
             <X className="h-3.5 w-3.5" />
           </Button>

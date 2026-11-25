@@ -1,3 +1,4 @@
+import { formatRegionalNumber } from "@/lib/regionalFormatting";
 /**
  * Settings → Offers & Payment Links
  * Workspace-admin editor for structured offers used by AI Brain Live Business Data.
@@ -131,7 +132,15 @@ export function OffersPaymentLinksSettings({
 }: {
   catalog?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const cadenceLabels: Record<string, string> = {
+    once: t("offerUi.oneTime"),
+    week: t("offerUi.weekly"),
+    month: t("offerUi.monthly"),
+    quarter: t("offerUi.quarterly"),
+    year: t("offerUi.yearly"),
+    custom: t("offerUi.custom"),
+  };
   const { user, sessionAligned } = useAuth();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -226,11 +235,11 @@ export function OffersPaymentLinksSettings({
       setCreating(false);
       setEditingId(null);
       setForm(EMPTY_FORM);
-      toast({ title: "Offer saved" });
+      toast({ title: t("catalog3d.saved") });
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not save offer",
+        title: t("catalog3d.saveError"),
         description: err.message,
         variant: "destructive",
       });
@@ -252,11 +261,11 @@ export function OffersPaymentLinksSettings({
         setEditingId(null);
         setForm(EMPTY_FORM);
       }
-      toast({ title: "Offer archived" });
+      toast({ title: t("catalog3d.archived") });
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not archive offer",
+        title: t("catalog3d.archiveError"),
         description: err.message,
         variant: "destructive",
       });
@@ -276,7 +285,7 @@ export function OffersPaymentLinksSettings({
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not reorder",
+        title: t("catalog3d.reorderError"),
         description: err.message,
         variant: "destructive",
       });
@@ -314,9 +323,7 @@ export function OffersPaymentLinksSettings({
               {t("manualCatalog.title")}
             </h2>
             <p className="text-sm leading-relaxed text-gray-600">
-              Structured packages AI can quote accurately — prices, benefits,
-              and checkout links you control. Website scans stay marketing
-              context only.
+              {t("catalog3d.structured")}
             </p>
             <p className="text-xs text-gray-500">
               {catalog
@@ -325,8 +332,8 @@ export function OffersPaymentLinksSettings({
                     "Payment links require human approval before send.",
                   )
                 : activeCount === 0
-                  ? "Not configured — add an active offer for AI pricing answers."
-                  : `${activeCount} active offer${activeCount === 1 ? "" : "s"} · payment links require human approval before send`}
+                  ? t("catalog3d.notConfigured")
+                  : t("catalog3d.activeOffers", { count: activeCount, total: formatRegionalNumber(activeCount, i18n.language) })}
             </p>
           </div>
         </div>
@@ -388,7 +395,7 @@ export function OffersPaymentLinksSettings({
       )}
       {offersQuery.isError && (
         <div role="alert" className="mt-4 text-sm text-red-700">
-          {offersQuery.error.message}{" "}
+          {t("catalog3d.loadError")}{" "}
           <Button variant="outline" onClick={() => void offersQuery.refetch()}>
             {t("salesCatalog.retry", "Retry")}
           </Button>
@@ -417,19 +424,17 @@ export function OffersPaymentLinksSettings({
               data-testid={`offer-row-${offer.id}`}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-gray-900">
+                <p dir="auto" className="truncate font-medium text-gray-900">
                   {offer.displayName}
                 </p>
                 <p className="truncate text-xs text-gray-500">
                   {[
                     offer.priceDisplay,
-                    offer.billingCadence !== "once"
-                      ? offer.billingCadence
-                      : null,
+                    offer.billingCadence === "once" ? null : cadenceLabels[offer.billingCadence] ?? offer.billingCadence,
                   ]
                     .filter(Boolean)
-                    .join(" · ") || "No price set"}
-                  {offer.checkoutUrl ? " · Checkout set" : " · No checkout URL"}
+                    .join(" · ") || t("catalog3d.noPrice")}
+                  {offer.checkoutUrl ? t("catalog3d.checkoutSet") : t("catalog3d.noCheckout")}
                 </p>
               </div>
               <span
@@ -443,8 +448,8 @@ export function OffersPaymentLinksSettings({
                 {offer.archivedAt
                   ? t("salesCatalog.archived", "Archived")
                   : offer.active
-                    ? "Active"
-                    : "Inactive"}
+                    ? t("salesCatalog.active")
+                    : t("salesCatalog.inactive")}
               </span>
               <div className="flex items-center gap-0.5">
                 {!catalog && (
@@ -498,7 +503,7 @@ export function OffersPaymentLinksSettings({
                       onClick={() => {
                         if (
                           window.confirm(
-                            `Archive “${offer.displayName}”? AI will stop using it.`,
+                            t("catalog3d.archiveConfirm", { name: offer.displayName }),
                           )
                         ) {
                           archiveMutation.mutate(offer.id);
@@ -526,7 +531,7 @@ export function OffersPaymentLinksSettings({
             {t("salesCatalog.previous", "Previous")}
           </Button>
           <span className="text-sm text-gray-500">
-            {t("salesCatalog.page", "Page")} {Math.floor(offset / 25) + 1}
+            {t("salesCatalog.page", "Page")} {formatRegionalNumber(Math.floor(offset / 25) + 1, i18n.language)}
           </span>
           <Button
             variant="outline"
@@ -551,7 +556,7 @@ export function OffersPaymentLinksSettings({
                 id="offer-display-name"
                 value={form.displayName}
                 onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                placeholder="Featured Business"
+                placeholder={t("catalog3d.exampleName")}
                 data-testid="input-offer-display-name"
               />
             </div>
@@ -570,7 +575,7 @@ export function OffersPaymentLinksSettings({
                 id="offer-category"
                 value={form.category}
                 onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                placeholder="Advertising"
+                placeholder={t("catalog3d.exampleCategory")}
               />
             </div>
             <div className="space-y-1.5">
@@ -593,12 +598,12 @@ export function OffersPaymentLinksSettings({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="once">{t("offerUi.oneTime")}</SelectItem>
-                  <SelectItem value="week">{t("offerUi.weekly")}</SelectItem>
-                  <SelectItem value="month">{t("offerUi.monthly")}</SelectItem>
-                  <SelectItem value="quarter">{t("offerUi.quarterly")}</SelectItem>
-                  <SelectItem value="year">{t("offerUi.yearly")}</SelectItem>
-                  <SelectItem value="custom">{t("offerUi.custom")}</SelectItem>
+                  <SelectItem value="once">{cadenceLabels.once}</SelectItem>
+                  <SelectItem value="week">{cadenceLabels.week}</SelectItem>
+                  <SelectItem value="month">{cadenceLabels.month}</SelectItem>
+                  <SelectItem value="quarter">{cadenceLabels.quarter}</SelectItem>
+                  <SelectItem value="year">{cadenceLabels.year}</SelectItem>
+                  <SelectItem value="custom">{cadenceLabels.custom}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -612,7 +617,7 @@ export function OffersPaymentLinksSettings({
                 data-testid="input-offer-checkout-url"
               />
               <p className="text-[11px] text-gray-500">
-                Public payment links only — not Stripe <code className="text-[10px]">price_…</code> IDs.
+                {t("catalog3d.paymentHelp", { example: "price_…" })}
               </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
@@ -631,7 +636,7 @@ export function OffersPaymentLinksSettings({
                 value={form.benefitsText}
                 onChange={(e) => setForm((f) => ({ ...f, benefitsText: e.target.value }))}
                 rows={4}
-                placeholder={"Homepage placement\nPriority support"}
+                placeholder={t("catalog3d.benefitsExample")}
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
@@ -650,7 +655,7 @@ export function OffersPaymentLinksSettings({
                 value={form.aiGuidance}
                 onChange={(e) => setForm((f) => ({ ...f, aiGuidance: e.target.value }))}
                 rows={2}
-                placeholder="Recommend this for businesses that want more visibility…"
+                placeholder={t("catalog3d.exampleGuidance")}
               />
             </div>
             <div className="space-y-1.5">

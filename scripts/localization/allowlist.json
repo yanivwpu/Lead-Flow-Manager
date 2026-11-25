@@ -4,6 +4,81 @@
   "dynamicKeys": {
     "client/src/components/InboxWorkspaceSelector.tsx": {
       "`teamInvite.${w.role}`": ["teamInvite.owner", "teamInvite.admin", "teamInvite.member"]
+    },
+    "client/src/pages/AIBrain.tsx": {
+      "o.labelKey": [
+        "brain3d.realEstate",
+        "brain3d.travel",
+        "brain3d.contractor",
+        "brain3d.ecommerce",
+        "brain3d.healthcare",
+        "brain3d.education",
+        "brain3d.finance",
+        "brain3d.hospitality",
+        "brain3d.automotive",
+        "brain3d.other"
+      ],
+      "assistTier": [
+        "brain3d.assistPro",
+        "brain3d.assistBasic",
+        "brain3d.assist"
+      ],
+      "line": [
+        "brain3d.trialReplies",
+        "brain3d.trialInbox",
+        "brain3d.trialModes",
+        "brain3d.trialDecisions",
+        "brain3d.starterReplies",
+        "brain3d.starterInbox",
+        "brain3d.starterMode",
+        "brain3d.starterAutomation",
+        "brain3d.proReplies",
+        "brain3d.proInbox",
+        "brain3d.proModes",
+        "brain3d.proAutomation"
+      ],
+      "mode.tooltipKey": [
+        "brain3d.modeOffHelp",
+        "brain3d.modeSuggestHelp",
+        "brain3d.modeAutoHelp"
+      ],
+      "mode.labelKey": [
+        "brain3d.off",
+        "brain3d.suggest",
+        "brain3d.auto"
+      ],
+      "persona.labelKey": [
+        "brain3d.professional",
+        "brain3d.friendly",
+        "brain3d.casual"
+      ],
+      "f": [
+        "brain3d.premiumLayer",
+        "brain3d.knowledge",
+        "brain3d.qualification",
+        "brain3d.leadScoring",
+        "brain3d.copilot",
+        "brain3d.automation",
+        "brain3d.handoffRules",
+        "brain3d.growth"
+      ]
+    },
+    "client/src/components/aibrain/BusinessKnowledgeSteps.tsx": {
+      "change.labelKey": [
+        "knowledge3d.newBadge",
+        "knowledge3d.changedBadge",
+        "knowledge3d.removingBadge",
+        "knowledge3d.suggestedBadge",
+        "knowledge3d.publishedBadge"
+      ]
+    },
+    "client/src/components/aibrain/MarketingMaterialsSettings.tsx": {
+      "opt.labelKey": [
+        "brain3d.allLanguages",
+        "brain3d.english",
+        "brain3d.spanish",
+        "brain3d.hebrew"
+      ]
     }
   },
   "spelledOutCount": ["he:pricingPage.trialState.daysRemaining_one", "he:trial.modal.daysLeft_one", "he:trial.pill.daysLeftTooltip_one"]

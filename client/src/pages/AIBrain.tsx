@@ -87,66 +87,66 @@ interface SubscriptionData {
 }
 
 const AI_MODE_SEGMENTS = [
-  { value: "off", label: "Off", tooltip: "AI is disabled" },
-  { value: "suggest_only", label: "Suggest", tooltip: "AI suggests replies, you send" },
-  { value: "full_auto", label: "Auto", tooltip: "AI replies automatically with safeguards" },
+  { value: "off", labelKey: "brain3d.off", tooltipKey: "brain3d.modeOffHelp" },
+  { value: "suggest_only", labelKey: "brain3d.suggest", tooltipKey: "brain3d.modeSuggestHelp" },
+  { value: "full_auto", labelKey: "brain3d.auto", tooltipKey: "brain3d.modeAutoHelp" },
 ] as const;
 
 const INDUSTRY_OPTIONS = [
-  { value: "real_estate", label: "Real Estate" },
-  { value: "travel", label: "Travel & Tourism" },
-  { value: "contractor", label: "Contractor / Home Services" },
-  { value: "ecommerce", label: "E-commerce" },
-  { value: "healthcare", label: "Healthcare" },
-  { value: "education", label: "Education" },
-  { value: "finance", label: "Finance & Insurance" },
-  { value: "hospitality", label: "Hospitality" },
-  { value: "automotive", label: "Automotive" },
-  { value: "other", label: "Other" },
+  { value: "real_estate", labelKey: "brain3d.realEstate" },
+  { value: "travel", labelKey: "brain3d.travel" },
+  { value: "contractor", labelKey: "brain3d.contractor" },
+  { value: "ecommerce", labelKey: "brain3d.ecommerce" },
+  { value: "healthcare", labelKey: "brain3d.healthcare" },
+  { value: "education", labelKey: "brain3d.education" },
+  { value: "finance", labelKey: "brain3d.finance" },
+  { value: "hospitality", labelKey: "brain3d.hospitality" },
+  { value: "automotive", labelKey: "brain3d.automotive" },
+  { value: "other", labelKey: "brain3d.other" },
 ] as const;
 
 /** Premium intelligence layer — business context, not quota marketing. */
 const AI_BRAIN_HIGHLIGHTS = [
-  "premium intelligence layer",
-  "business knowledge",
-  "qualifying questions",
-  "lead scoring",
-  "Copilot recommendations",
-  "automation intelligence",
-  "handoff rules",
-  "Growth Engine intelligence",
+  "brain3d.premiumLayer",
+  "brain3d.knowledge",
+  "brain3d.qualification",
+  "brain3d.leadScoring",
+  "brain3d.copilot",
+  "brain3d.automation",
+  "brain3d.handoffRules",
+  "brain3d.growth",
 ] as const;
 
 function assistTierLabel(plan: string, trialProAi: boolean): string {
-  if (trialProAi || plan === "pro" || plan === "enterprise") return "AI Assist Basic + Pro workflows";
-  if (plan === "starter") return "AI Assist Basic";
-  return "AI Assist";
+  if (trialProAi || plan === "pro" || plan === "enterprise") return "brain3d.assistPro";
+  if (plan === "starter") return "brain3d.assistBasic";
+  return "brain3d.assist";
 }
 
 /** No numeric limits — product copy only. */
 function assistPlanBullets(plan: string, trialProAi: boolean): string[] {
   if (trialProAi) {
     return [
-      "Smart reply suggestions tuned to each thread",
-      "Inbox assistance and Copilot-style help",
-      "Suggest and Auto modes on your trial",
-      "Automation-aware context for faster decisions",
+      "brain3d.trialReplies",
+      "brain3d.trialInbox",
+      "brain3d.trialModes",
+      "brain3d.trialDecisions",
     ];
   }
   if (plan === "starter") {
     return [
-      "Smart reply suggestions you can send in one tap",
-      "Inbox assistance to move conversations forward",
-      "Suggest mode — you stay in control of every send",
-      "Light automation-aware help in context",
+      "brain3d.starterReplies",
+      "brain3d.starterInbox",
+      "brain3d.starterMode",
+      "brain3d.starterAutomation",
     ];
   }
   if (plan === "pro" || plan === "enterprise") {
     return [
-      "Smart reply suggestions with deeper thread context",
-      "Inbox assistance across your team workflow",
-      "Suggest and Auto modes when your plan allows",
-      "Automation-aware help for workflows and follow-ups",
+      "brain3d.proReplies",
+      "brain3d.proInbox",
+      "brain3d.proModes",
+      "brain3d.proAutomation",
     ];
   }
   return [];
@@ -161,6 +161,7 @@ function LockedFeatureTeaser({
   description: string;
   preview?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -172,7 +173,7 @@ function LockedFeatureTeaser({
     >
       <span
         className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200/80 bg-white/90 text-violet-500 shadow-sm"
-        title="Unlock with AI Brain"
+        title={t("brain3d.unlock")}
         aria-hidden
       >
         <Lock className="h-3.5 w-3.5" strokeWidth={2} />
@@ -198,7 +199,7 @@ function AIBrainContent() {
   const aiBrainHighlights = useMemo(
     () =>
       hideGrowthEngine
-        ? AI_BRAIN_HIGHLIGHTS.filter((h) => h !== "Growth Engine intelligence")
+        ? AI_BRAIN_HIGHLIGHTS.filter((h) => h !== "brain3d.growth")
         : [...AI_BRAIN_HIGHLIGHTS],
     [hideGrowthEngine],
   );
@@ -256,9 +257,9 @@ function AIBrainContent() {
         const opened = await openShopifyManagedPricing(shopHint);
         if (!opened) {
           toast({
-            title: "Choose plan in Shopify",
+            title: t("brain3d.chooseShopify"),
             description:
-              "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+              t("brain3d.checkoutInstructions"),
           });
         }
         return;
@@ -284,13 +285,13 @@ function AIBrainContent() {
     } catch (error: any) {
       if (error.message === "session_expired") return;
       toast({
-        title: isShopify ? "Choose plan in Shopify" : "Checkout Error",
+        title: isShopify ? t("brain3d.chooseShopify") : t("brain3d.checkoutError"),
         description: isShopify
           ? shopifyManagedPricingInstructions(
               { error: error?.message },
-              "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+              t("brain3d.checkoutInstructions"),
             )
-          : error.message || "Failed to start checkout. Please try again.",
+          : error.message || t("brain3d.checkoutRetry"),
         variant: isShopify ? "default" : "destructive",
       });
     } finally {
@@ -364,7 +365,7 @@ function AIBrainContent() {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
+      toast({ title: t("common.error"), description: t("brain3d.settingsError"), variant: "destructive" });
     },
   });
 
@@ -384,7 +385,7 @@ function AIBrainContent() {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to save. Please try again.", variant: "destructive" });
+      toast({ title: t("common.error"), description: t("brain3d.saveError"), variant: "destructive" });
     },
   });
 
@@ -578,7 +579,7 @@ function AIBrainContent() {
             <SelectContent>
               {INDUSTRY_OPTIONS.map((o) => (
                 <SelectItem key={o.value} value={o.value}>
-                  {o.label}
+                  {t(o.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -631,21 +632,19 @@ function AIBrainContent() {
               {effectiveHasAIBrain && privatePilot && <AiTestChat/>}
               <div className="max-w-lg text-sm leading-relaxed text-slate-600">
                 <p>
-                  <span className="font-medium text-slate-900">AI Assist</span> is included with your plan — smart
-                  suggestions, inbox help, and modes your tier allows.
+                  <span className="font-medium text-slate-900">AI Assist</span> {t("brain3d.assistIncluded")}
                 </p>
                 <p className="mt-1.5">
-                  <span className="font-medium text-violet-900">{t("aiBrain.title")}</span> is the premium intelligence layer — full
-                  business context for your inbox and automations.
+                  <span className="font-medium text-violet-900">{t("aiBrain.title")}</span> {t("brain3d.premium")}
                 </p>
               </div>
               {showTrialFullSuite && (
                 <p className="text-sm text-violet-700/90">
-                  Trial includes AI Assist Basic, Pro workflow access, and AI Brain. Subscribe before it ends to keep them.
+                  {t("brain3d.trial")}
                 </p>
               )}
               {effectiveHasAIBrain && !showTrialFullSuite && (
-                <p className="text-sm text-emerald-800/90">AI Brain is active — your intelligence layer is unlocked below.</p>
+                <p className="text-sm text-emerald-800/90">{t("brain3d.active")}</p>
               )}
             </div>
           </div>
@@ -663,19 +662,19 @@ function AIBrainContent() {
             <div className="flex flex-wrap items-baseline gap-2">
               <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI Assist</CardTitle>
               <span className="rounded-full border border-violet-100 bg-violet-50/90 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800">
-                {assistTier}
+                {t(assistTier)}
               </span>
             </div>
             <CardDescription className="text-slate-500 text-sm">
-              {limits?.planName ?? "Your plan"} · included with your subscription
+              {limits?.planName ?? t("brain3d.yourPlan")} {t("brain3d.included")}
             </CardDescription>
           </CardHeader>
           <CardContent className="pb-6 pt-0">
             <ul className="text-sm text-slate-600 space-y-2">
               {assistBullets.map((line) => (
-                <li key={line} className="flex gap-2.5">
+                <li key={t(line)} className="flex gap-2.5">
                   <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-violet-400/80" aria-hidden />
-                  <span>{line}</span>
+                  <span>{t(line)}</span>
                 </li>
               ))}
             </ul>
@@ -691,8 +690,7 @@ function AIBrainContent() {
                 <CardTitle className="text-lg font-semibold tracking-tight text-violet-950">{t("aiBrain.title")}</CardTitle>
               </div>
               <CardDescription className="text-base leading-relaxed text-slate-600">
-                The premium intelligence layer for your inbox and automations — memory, scoring, Copilot depth, and
-                workflow context built around your business.
+                {t("brain3d.premiumDetails")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-8 pb-6">
@@ -702,12 +700,12 @@ function AIBrainContent() {
                     <span className="mt-0.5 font-medium text-violet-500 select-none" aria-hidden>
                       ✦
                     </span>
-                    <span>{f}</span>
+                    <span>{t(f)}</span>
                   </li>
                 ))}
               </ul>
               {hidePaidBrainCta ? (
-                <p className="text-sm font-medium text-violet-800">Included in your trial — no separate checkout.</p>
+                <p className="text-sm font-medium text-violet-800">{t("brain3d.trialIncluded")}</p>
               ) : (
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div className="space-y-2">
@@ -723,12 +721,12 @@ function AIBrainContent() {
                       disabled={isCheckingOut}
                       data-testid="button-ai-brain-primary-cta"
                     >
-                      {isCheckingOut ? t("testChat.processing") : isShopify ? "Choose plan in Shopify" : "Upgrade to Pro"}
+                      {isCheckingOut ? t("testChat.processing") : isShopify ? t("brain3d.chooseShopify") : t("brain3d.upgrade")}
                     </Button>
                     <p className="text-xs text-slate-500">
                       {isShopify
-                        ? "Choose Pro in Shopify to include AI Brain."
-                        : "AI Brain is included with Pro."}
+                        ? t("brain3d.shopifyPro")
+                        : t("brain3d.proIncluded")}
                     </p>
                   </div>
                 </div>
@@ -744,21 +742,21 @@ function AIBrainContent() {
         >
           <div className="h-0.5 bg-gradient-to-r from-violet-300/40 via-brand-green/35 to-emerald-400/35" aria-hidden />
           <CardHeader className="pb-4 space-y-1 pt-5">
-            <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI behavior</CardTitle>
-            <CardDescription className="text-slate-500">Mode and tone for replies</CardDescription>
+            <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">{t("brain3d.behavior")}</CardTitle>
+            <CardDescription className="text-slate-500">{t("brain3d.modeTone")}</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-col gap-8 sm:flex-row sm:gap-0">
               <div className="flex-1 space-y-2.5 min-w-0">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Mode</Label>
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("brain3d.mode")}</Label>
                 {(settings.aiMode === "full_auto" || settings.aiMode === "auto") &&
                   (aiSettings as AISettings | undefined)?.webchatServerAi &&
                   (aiSettings as AISettings).webchatServerAi?.unattendedEligible !== true && (
                     <p className="text-xs text-amber-800" data-testid="text-unattended-auto-paused">
-                      Auto is selected. Web Chat replies while Inbox is closed are paused until unattended Auto is enabled for this workspace.
+                      {t("brain3d.autoPaused")}
                     </p>
                   )}
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="AI mode">
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("brain3d.aiMode")}>
                   {AI_MODE_SEGMENTS.map((mode) => {
                     const selected = settings.aiMode === mode.value;
                     const autoLocked = mode.value === "full_auto" && autoModeLocked;
@@ -770,8 +768,8 @@ function AIBrainContent() {
                         aria-checked={selected}
                         title={
                           autoLocked
-                            ? "Auto mode requires AI Brain on this workspace."
-                            : mode.tooltip
+                            ? t("brain3d.autoLocked")
+                            : t(mode.tooltipKey)
                         }
                         onClick={() => {
                           if (settings.aiMode === mode.value) return;
@@ -784,15 +782,14 @@ function AIBrainContent() {
                         className={cn(segmentTabClass(selected), autoLocked && "opacity-45 cursor-not-allowed")}
                         data-testid={`ai-mode-${mode.value}`}
                       >
-                        {mode.label}
+                        {t(mode.labelKey)}
                       </button>
                     );
                   })}
                 </div>
                 {starterOnly && (
                   <p className="text-xs text-slate-500">
-                    <span className="font-medium text-slate-700">Auto</span> is part of Pro workflow access. On AI Assist
-                    Basic, use <span className="font-medium text-slate-700">Suggest</span> to review every send.
+                    {t("brain3d.autoPlan")}
                   </p>
                 )}
               </div>
@@ -800,12 +797,12 @@ function AIBrainContent() {
               <div className="hidden sm:block w-px bg-gradient-to-b from-transparent via-slate-200/90 to-transparent shrink-0 mx-7 self-stretch" aria-hidden />
 
               <div className="flex-1 space-y-2.5 min-w-0 sm:pt-0 pt-4 border-t border-slate-100 sm:border-t-0">
-                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Persona</Label>
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("brain3d.persona")}</Label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { value: "professional", label: "Professional" },
-                    { value: "friendly", label: "Friendly" },
-                    { value: "casual", label: "Casual" },
+                    { value: "professional", labelKey: "brain3d.professional" },
+                    { value: "friendly", labelKey: "brain3d.friendly" },
+                    { value: "casual", labelKey: "brain3d.casual" },
                   ].map((persona) => (
                     <button
                       key={persona.value}
@@ -820,7 +817,7 @@ function AIBrainContent() {
                       className={segmentTabClass(settings.aiPersona === persona.value)}
                       data-testid={`ai-persona-${persona.value}`}
                     >
-                      {persona.label}
+                      {t(persona.labelKey)}
                     </button>
                   ))}
                 </div>
@@ -852,23 +849,23 @@ function AIBrainContent() {
               <CardHeader className="pb-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 space-y-1">
-                    <CardTitle className="text-base font-semibold text-slate-900">Booking &amp; next steps</CardTitle>
+                    <CardTitle className="text-base font-semibold text-slate-900">{t("brain3d.booking")}</CardTitle>
                     <CardDescription className="text-slate-600">
-                      Used when AI suggests scheduling or follow-ups.
+                      {t("brain3d.bookingHelp")}
                     </CardDescription>
                   </div>
                   <div className="shrink-0 sm:pt-0.5">
                     {knowledge.calendlyBookingConnected ? (
                       <Badge className="border border-emerald-200/90 bg-emerald-50 text-emerald-900 text-xs font-medium gap-1 pr-2">
                         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                        Connected
+                        {t("brain3d.connected")}
                       </Badge>
                     ) : (
                       <Badge
                         variant="secondary"
                         className="border border-amber-200/90 bg-amber-50/90 text-amber-950 text-xs font-medium"
                       >
-                        Not connected
+                        {t("brain3d.notConnected")}
                       </Badge>
                     )}
                   </div>
@@ -876,8 +873,7 @@ function AIBrainContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm leading-relaxed text-slate-700">
-                  Connect Calendly in Integrations so AI can send your booking link and sync confirmed meetings
-                  automatically.
+                  {t("brain3d.calendlyHelp")}
                 </p>
                 <Link href="/app/integrations" className="inline-flex w-full sm:w-auto">
                   <Button
@@ -889,7 +885,7 @@ function AIBrainContent() {
                         : "w-full bg-brand-green hover:bg-brand-green/90 text-white"
                     }
                   >
-                    {knowledge.calendlyBookingConnected ? "Manage integration" : "Connect Calendly"}
+                    {knowledge.calendlyBookingConnected ? t("brain3d.manageIntegration") : t("brain3d.connectCalendly")}
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Button>
                 </Link>
@@ -902,9 +898,9 @@ function AIBrainContent() {
         {effectiveHasAIBrain ? (
           <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold text-slate-900">Human handoff phrases</CardTitle>
+              <CardTitle className="text-base font-semibold text-slate-900">{t("brain3d.handoff")}</CardTitle>
               <CardDescription className="text-slate-600">
-                Part of AI Brain—when a message matches these phrases, AI pauses so your team can take over.
+                {t("brain3d.handoffHelp")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -919,7 +915,7 @@ function AIBrainContent() {
                       type="button"
                       onClick={() => handleRemoveKeyword(keyword)}
                       className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                      aria-label={`Remove ${keyword}`}
+                      aria-label={t("brain3d.removeKeyword", { keyword })}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -930,7 +926,7 @@ function AIBrainContent() {
                 <Input
                   value={newKeyword}
                   onChange={(e) => setNewKeyword(e.target.value)}
-                  placeholder="Add keyword"
+                  placeholder={t("brain3d.addKeyword")}
                   className="h-9 text-sm"
                   onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
                   data-testid="input-handoff-keyword"
@@ -951,48 +947,47 @@ function AIBrainContent() {
           <div className="space-y-8">
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">{t("aiBrain.title")}</p>
-              <h2 className="text-lg font-semibold tracking-tight text-violet-950">Unlock the intelligence layer</h2>
+              <h2 className="text-lg font-semibold tracking-tight text-violet-950">{t("brain3d.unlockLayer")}</h2>
               <p className="max-w-2xl text-sm leading-relaxed text-slate-700">
-                Premium context on top of AI Assist — scoring, Copilot, automations, and handoffs. Your drafts stay saved
-                when you upgrade.
+                {t("brain3d.unlockHelp")}
               </p>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <LockedFeatureTeaser
-                title="Business knowledge"
-                description="A living profile of what you sell, how you sound, and what customers should always hear — so replies stay unmistakably yours."
-                preview="Services · tone · FAQs · policies"
+                title={t("brain3d.knowledge")}
+                description={t("brain3d.knowledgeTeaser")}
+                preview={t("brain3d.knowledgePreview")}
               />
               <LockedFeatureTeaser
-                title="Qualifying questions"
-                description="Structured discovery that captures intent, urgency, and fit before your team invests time."
-                preview="Budget · timeline · use case"
+                title={t("brain3d.qualification")}
+                description={t("brain3d.questionTeaser")}
+                preview={t("brain3d.questionPreview")}
               />
               <LockedFeatureTeaser
-                title="Lead scoring"
-                description="What the customer says rolls up into clearer priority so you focus on the right leads first."
-                preview="Hot, warm, and nurture leads"
+                title={t("brain3d.leadScoring")}
+                description={t("brain3d.scoringTeaser")}
+                preview={t("brain3d.scoringPreview")}
               />
               <LockedFeatureTeaser
-                title="Copilot recommendations"
-                description="Richer next-reply and next-step ideas grounded in your business profile, not generic templates."
-                preview="Thread-aware suggestions"
+                title={t("brain3d.copilot")}
+                description={t("brain3d.copilotTeaser")}
+                preview={t("brain3d.copilotPreview")}
               />
               <LockedFeatureTeaser
-                title="Automation intelligence"
-                description="Connects chat context to workflows — smarter nudges when a sequence or playbook should kick in."
-                preview="Workflow-aware hints"
+                title={t("brain3d.automation")}
+                description={t("brain3d.automationTeaser")}
+                preview={t("brain3d.automationPreview")}
               />
               <LockedFeatureTeaser
-                title="Handoff rules"
-                description="Phrase-based guardrails that pause AI when a human should take over — calm, explicit control."
-                preview="“Agent” · “call me” · custom phrases"
+                title={t("brain3d.handoffRules")}
+                description={t("brain3d.handoffTeaser")}
+                preview={t("brain3d.handoffPreview")}
               />
               {!hideGrowthEngine && (
               <LockedFeatureTeaser
-                title="Growth Engine intelligence"
-                description="Where your plan supports it, unlocks deeper industry playbooks and accelerators built on the same memory layer."
-                preview="Industry-ready depth (plan-dependent)"
+                title={t("brain3d.growth")}
+                description={t("brain3d.growthTeaser")}
+                preview={t("brain3d.growthPreview")}
               />
               )}
             </div>
@@ -1009,7 +1004,7 @@ function AIBrainContent() {
                 >
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">{t("automationUi.advanced")}</p>
-                    <p className="text-sm text-slate-600 mt-1">Optional extra guidance for the model</p>
+                    <p className="text-sm text-slate-600 mt-1">{t("brain3d.extraGuidance")}</p>
                   </div>
                   <ChevronRight
                     className={cn("w-4 h-4 text-slate-400 transition-transform shrink-0", advancedOpen && "rotate-90")}
@@ -1019,7 +1014,7 @@ function AIBrainContent() {
               <CollapsibleContent>
                 <CardContent className="pt-0 pb-5 px-5 space-y-1.5">
                   <Label htmlFor="custom-instr" className="text-xs font-medium text-slate-500">
-                    Custom instructions
+                    {t("brain3d.instructions")}
                   </Label>
                   <Textarea
                     id="custom-instr"
@@ -1027,7 +1022,7 @@ function AIBrainContent() {
                     rows={3}
                     value={knowledge.customInstructions}
                     onChange={(e) => setKnowledge((prev) => ({ ...prev, customInstructions: e.target.value }))}
-                    placeholder="Anything specific the AI should know or how it should behave"
+                    placeholder={t("brain3d.instructionsPlaceholder")}
                     data-testid="textarea-custom-instructions"
                   />
                 </CardContent>

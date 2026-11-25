@@ -20,8 +20,8 @@ These are route families. A comma-separated row shares the same recorded status,
 | `/app/campaigns/:id?` | P | P | P | P | Batch 3C covers the dashboard, draft editor, reporting, and enrollment controls. Live scheduling and recipient actions remain unverified. |
 | `/app/widget` | P | P | P | P | Batch 3C covers widget settings, branding, page rules, preview, validation, and install. External embeds and uncommon upload failures remain unverified. |
 | `/app/website-widget` | — | — | — | — | Redirect to widget settings |
-| `/app/ai-brain` | ? | P | P | P | Modes, knowledge, tests and qualification |
-| `/app/sales-catalog` | ? | P | P | P | Offers, payments, catalog and guidance |
+| `/app/ai-brain` | P | P | P | P | Batch 3D covers modes, personas, knowledge, qualification, marketing materials and preview labels. Provider diagnostics and uncommon review states remain. |
+| `/app/sales-catalog` | P | P | P | P | Batch 3D covers manual offers, pricing display, payment links, guidance and archive feedback. Shopify merchant functionality remains in Batch 5. |
 | `/app/templates/realtor-growth-engine`, `/app/templates/realtor-growth-engine/onboarding`, `/app/templates/realtor-growth-engine/status` | ? | P | P | P | Launch, qualification, MLS, agent and neighborhood settings and editor |
 | `/app/templates/ecommerce-growth-engine` | — | — | — | — | Redirect to dashboard details |
 | `/app/ecommerce-growth-engine` | ? | P | P | P | Setup, overview, catalog, orders, AI Shopping, recovery, readiness, consent and post-purchase |
@@ -161,3 +161,12 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 - Localized widget branding, settings, page-rule controls and validation, save feedback, preview controls, and installation and embed instructions. Visitor strings, locale precedence, aliases, matching modes, and physical positions keep their stored values.
 - All 48 targeted automated tests passed. Six synthetic Chromium runs at 1366 and 390 px verified EN, Hebrew RTL and Spanish LTR. The runs exercised a Meta template preview, preset draft creation, campaign editing and a widget-position save. Switching languages mid-edit produced no writes. Equivalent actions produced the same campaign and widget payloads. The Meta body, template language and saved widget visitor variants remained intact.
 - Live provider synchronization and sends, campaign execution and recipient enrollment, production embeds and clipboard integration on third-party sites remain unverified. Provider-supplied diagnostic text and authored values retain their source language. Later batches remain separate.
+
+## Batch 3D AI Brain and manual Sales Catalog
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387) from `62d1d66c`. The legacy count declined from **5,621 to 5,361** with no new fingerprints or increased counts.
+- AI Brain covers reply modes and personas, tier and plan copy, business-profile controls, knowledge sources and review, live data fallback labels, qualification question controls, marketing materials and test-chat display labels. Dashboard translations leave saved instructions, question text, keywords and reply-language policy independent of the dashboard locale.
+- Manual Sales Catalog covers offer statuses and cadence labels, forms and guidance, archive confirmation, payment link instructions, and load and save feedback. Counts use regional formatting. Authored price strings, URLs, offer identifiers and cadence values are preserved.
+- Focused regressions covered RTL/LTR layout, reply-language isolation and catalog tenant and record behavior. The broader knowledge scan suite reached a pricing-page fixture assertion unrelated to the changed routes. Synthetic fixture requests are intercepted locally.
+- Provider-supplied diagnostics, some knowledge freshness and publish-detail feedback, and uncommon subscription or upload failures remain outstanding. Live AI dispatch, customer messaging, checkout and production catalog writes were outside verification.
+- Batch 3E handoff should use the accumulated draft PR, the shrink-only baseline, and the verified synthetic fixtures to review integration across Batch 3. Shopify merchant functionality is tracked for Batch 5.

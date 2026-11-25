@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * Workspace Marketing Materials — approved flyers, brochures, images, and PDFs
  * the Website Chat AI may send. Files stay on existing tenant object storage.
@@ -54,10 +55,10 @@ type MarketingAsset = {
 };
 
 const LANGUAGE_OPTIONS = [
-  { value: "all", label: "All languages" },
-  { value: "en", label: "English" },
-  { value: "es", label: "Spanish" },
-  { value: "he", label: "Hebrew" },
+  { value: "all", labelKey: "brain3d.allLanguages" },
+  { value: "en", labelKey: "brain3d.english" },
+  { value: "es", labelKey: "brain3d.spanish" },
+  { value: "he", labelKey: "brain3d.hebrew" },
 ] as const;
 
 function formatSize(bytes: number): string {
@@ -85,6 +86,7 @@ function MarketingAssetRow({
   onPatch: (id: string, body: Record<string, unknown>) => Promise<void>;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const confirmedRef = useRef<AssetDraft>({
     displayName: asset.displayName,
     description: asset.description || "",
@@ -248,14 +250,14 @@ function MarketingAssetRow({
         <div className="min-w-0 flex-1 space-y-2">
           <Input
             value={displayName}
-            aria-label="Display name"
+            aria-label={t("brain3d.materialName")}
             data-testid={`input-marketing-rename-${asset.id}`}
             onChange={(e) => setDisplayName(e.target.value)}
             onBlur={saveName}
           />
           <Textarea
             value={description}
-            aria-label="Description"
+            aria-label={t("brain3d.description")}
             className="min-h-[56px]"
             data-testid={`input-marketing-describe-${asset.id}`}
             onChange={(e) => setDescription(e.target.value)}
@@ -275,15 +277,15 @@ function MarketingAssetRow({
               <SelectContent>
                 {LANGUAGE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Input
               value={topicsText}
-              aria-label="Topics"
-              placeholder="topics, tags"
+              aria-label={t("brain3d.topics")}
+              placeholder={t("brain3d.topicsExample")}
               data-testid={`input-marketing-tags-${asset.id}`}
               onChange={(e) => setTopicsText(e.target.value)}
               onBlur={saveTopics}
@@ -295,11 +297,11 @@ function MarketingAssetRow({
             aria-live="polite"
           >
             {saveState === "saving"
-              ? "Saving"
+              ? t("brain3d.saving")
               : saveState === "saved"
-                ? "Saved"
+                ? t("brain3d.materialSaved")
                 : saveState === "error"
-                  ? "Couldn't save"
+                  ? t("brain3d.materialSaveFailed")
                   : "\u00a0"}
           </p>
           <p className="text-xs text-slate-500">
@@ -311,13 +313,13 @@ function MarketingAssetRow({
             {asset.originalFilename} · {formatSize(asset.size)}
           </p>
           <p className="text-[11px] text-slate-500" data-testid={`text-marketing-history-${asset.id}`}>
-            Disabling or deleting stops future AI sends. Past Website Chat messages keep their file.
+            {t("brain3d.materialDisable")}
           </p>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end">
           <div className="flex items-center gap-2">
             <Label htmlFor={`enabled-${asset.id}`} className="text-xs text-slate-600">
-              Enabled
+              {t("brain3d.enabled")}
             </Label>
             <Switch
               id={`enabled-${asset.id}`}
@@ -338,7 +340,7 @@ function MarketingAssetRow({
             data-testid={`btn-marketing-delete-${asset.id}`}
           >
             <Trash2 className="mr-1 h-4 w-4" />
-            Delete
+            {t("common.delete")}
           </Button>
         </div>
       </div>
@@ -347,6 +349,7 @@ function MarketingAssetRow({
 }
 
 export function MarketingMaterialsSettings() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState("");
@@ -363,7 +366,7 @@ export function MarketingMaterialsSettings() {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!pendingFile) throw new Error("Choose a JPG, PNG, WebP, or PDF file");
+      if (!pendingFile) throw new Error(t("brain3d.chooseFile"));
       const form = new FormData();
       form.append("file", pendingFile);
       form.append("displayName", displayName.trim() || pendingFile.name);
@@ -377,7 +380,7 @@ export function MarketingMaterialsSettings() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Upload failed");
+        throw new Error(body.error || t("brain3d.materialUploadError"));
       }
       return res.json();
     },
@@ -389,10 +392,10 @@ export function MarketingMaterialsSettings() {
       setLanguage("all");
       setPendingFile(null);
       if (fileRef.current) fileRef.current.value = "";
-      toast({ title: "Marketing material added" });
+      toast({ title: t("brain3d.materialAdded") });
     },
     onError: (err: Error) => {
-      toast({ title: err.message || "Upload failed", variant: "destructive" });
+      toast({ title: err.message || t("brain3d.materialUploadError"), variant: "destructive" });
     },
   });
 
@@ -405,7 +408,7 @@ export function MarketingMaterialsSettings() {
       queryClient.invalidateQueries({ queryKey: ["/api/marketing-assets"] });
     },
     onError: (err: Error) => {
-      toast({ title: err.message || "Update failed", variant: "destructive" });
+      toast({ title: err.message || t("brain3d.materialUpdateError"), variant: "destructive" });
     },
   });
 
@@ -417,10 +420,10 @@ export function MarketingMaterialsSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketing-assets"] });
       setDeleteId(null);
-      toast({ title: "Material removed. Past chat messages are unchanged." });
+      toast({ title: t("brain3d.materialRemoved") });
     },
     onError: (err: Error) => {
-      toast({ title: err.message || "Delete failed", variant: "destructive" });
+      toast({ title: err.message || t("brain3d.materialDeleteError"), variant: "destructive" });
     },
   });
 
@@ -430,26 +433,26 @@ export function MarketingMaterialsSettings() {
       data-testid="marketing-materials"
     >
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold text-slate-900">Marketing Materials</CardTitle>
+        <CardTitle className="text-base font-semibold text-slate-900">{t("brain3d.materials")}</CardTitle>
         <CardDescription className="text-slate-600" data-testid="text-marketing-send-modes">
-          Upload approved flyers, brochures, images, and PDFs. In Auto mode, Website Chat AI may send an enabled file only when a visitor asks for it. Suggest and Manual never send a file automatically — review the draft in Inbox and send it yourself if you want.
+          {t("brain3d.materialHelp")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="marketing-name">Display name</Label>
+              <Label htmlFor="marketing-name">{t("brain3d.materialName")}</Label>
               <Input
                 id="marketing-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Summer brochure"
+                placeholder={t("brain3d.brochure")}
                 data-testid="input-marketing-name"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Language</Label>
+              <Label>{t("brain3d.language")}</Label>
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger data-testid="select-marketing-language">
                   <SelectValue />
@@ -457,7 +460,7 @@ export function MarketingMaterialsSettings() {
                 <SelectContent>
                   {LANGUAGE_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
+                      {t(opt.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -465,23 +468,23 @@ export function MarketingMaterialsSettings() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="marketing-description">Short description (optional)</Label>
+            <Label htmlFor="marketing-description">{t("brain3d.shortDescription")}</Label>
             <Textarea
               id="marketing-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Pricing flyer for new listings"
+              placeholder={t("brain3d.pricingFlyer")}
               className="min-h-[64px]"
               data-testid="input-marketing-description"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="marketing-topics">Topics / tags</Label>
+            <Label htmlFor="marketing-topics">{t("brain3d.topicTags")}</Label>
             <Input
               id="marketing-topics"
               value={topicsText}
               onChange={(e) => setTopicsText(e.target.value)}
-              placeholder="pricing, brochure, listings"
+              placeholder={t("brain3d.tagExamples")}
               data-testid="input-marketing-topics"
             />
           </div>
@@ -501,7 +504,7 @@ export function MarketingMaterialsSettings() {
               data-testid="btn-marketing-choose-file"
             >
               <Plus className="mr-1.5 h-4 w-4" />
-              {pendingFile ? pendingFile.name : "Choose JPG, PNG, WebP, or PDF"}
+              {pendingFile ? pendingFile.name : t("brain3d.chooseMaterial")}
             </Button>
             <Button
               type="button"
@@ -510,20 +513,20 @@ export function MarketingMaterialsSettings() {
               data-testid="btn-marketing-upload"
             >
               {uploadMutation.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              Upload
+              {t("common.upload")}
             </Button>
           </div>
-          <p className="text-xs text-slate-500">Images up to 5 MB. PDFs up to 16 MB. Past chats keep files even after you delete or disable them here.</p>
+          <p className="text-xs text-slate-500">{t("brain3d.materialLimits")}</p>
         </div>
 
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading materials…
+            {t("brain3d.loadingMaterials")}
           </div>
         ) : assets.length === 0 ? (
           <p className="text-sm text-slate-500" data-testid="text-marketing-empty">
-            No approved materials yet. Upload a flyer or PDF to let AI send it in Website Chat.
+            {t("brain3d.noMaterials")}
           </p>
         ) : (
           <ul className="space-y-3">
@@ -544,19 +547,19 @@ export function MarketingMaterialsSettings() {
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this marketing material?</AlertDialogTitle>
+            <AlertDialogTitle>{t("brain3d.deleteMaterial")}</AlertDialogTitle>
             <AlertDialogDescription>
-              AI will no longer be able to send it. Messages already delivered in Website Chat keep their copy of the file.
+              {t("brain3d.deleteMaterialHelp")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="btn-marketing-delete-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="btn-marketing-delete-cancel">{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
               onClick={() => deleteId && deleteMutation.mutate(deleteId)}
               data-testid="btn-marketing-delete-confirm"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
