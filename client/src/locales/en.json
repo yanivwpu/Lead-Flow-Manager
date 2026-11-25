@@ -2546,6 +2546,13 @@
     "movePipeline": "Move Pipeline Stage"
   },
   "builderFeedback": {
+    "continueFlow": "Continue the flow",
+    "unknownMember": "Member ({{id}})",
+    "stepNumber": "Step {{number}}",
+    "activeCount": "Active: {{count}}",
+    "stepActions": "Step actions",
+    "removeQuickReply": "Remove quick reply",
+    "statusExample": "Configure the value using open, resolved, or pending.",
     "afterDelay": "After {{delay}}",
     "openStatus": "Open",
     "pendingStatus": "Pending",

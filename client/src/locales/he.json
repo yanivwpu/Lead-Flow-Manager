@@ -2561,6 +2561,13 @@
     "movePipeline": "שינוי שלב בתהליך המכירה"
   },
   "builderFeedback": {
+    "continueFlow": "המשך תהליך השיחה",
+    "unknownMember": "חבר צוות ({{id}})",
+    "stepNumber": "שלב {{number}}",
+    "activeCount": "פעילים: {{count}}",
+    "stepActions": "פעולות לשלב",
+    "removeQuickReply": "הסרת תגובה מהירה",
+    "statusExample": "הגדירו ערך באמצעות open, resolved או pending.",
     "afterDelay": "אחרי {{delay}}",
     "openStatus": "פתוח",
     "pendingStatus": "בהמתנה",

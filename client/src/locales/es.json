@@ -2561,6 +2561,13 @@
     "movePipeline": "Cambiar etapa del embudo"
   },
   "builderFeedback": {
+    "continueFlow": "Continuar el flujo",
+    "unknownMember": "Miembro ({{id}})",
+    "stepNumber": "Paso {{number}}",
+    "activeCount": "Activos: {{count}}",
+    "stepActions": "Acciones del paso",
+    "removeQuickReply": "Quitar respuesta rápida",
+    "statusExample": "Configura el valor con open, resolved o pending.",
     "afterDelay": "Después de {{delay}}",
     "openStatus": "Abierto",
     "pendingStatus": "Pendiente",

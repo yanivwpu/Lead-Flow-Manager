@@ -1883,7 +1883,7 @@ export function Workflows() {
                       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3.5">
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            {i === 0 ? t("builderUi.firstMessage") : `Step ${i + 1}`}
+                            {i === 0 ? t("builderUi.firstMessage") : t("builderFeedback.stepNumber", { number: i + 1 })}
                           </p>
                           {campaignSteps.length > 1 && (
                             <button onClick={() => removeStep(i)} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors">
@@ -2139,8 +2139,8 @@ export function Workflows() {
                             {!campaign.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">{t("automations.paused")}</Badge>}
                           </div>
                           <p className="text-xs text-gray-500">
-                            {campaign.steps?.length || 0} step{(campaign.steps?.length || 0) !== 1 ? "s" : ""}
-                            {campaign.enrollments?.filter(e => e.status === "active").length ? ` · ${campaign.enrollments.filter(e => e.status === "active").length} active` : ""}
+                            {t("builderFeedback.stepCount", { count: campaign.steps?.length || 0 })}
+                            {campaign.enrollments?.filter(e => e.status === "active").length ? ` · ${t("builderFeedback.activeCount", { count: campaign.enrollments.filter(e => e.status === "active").length })}` : ""}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">

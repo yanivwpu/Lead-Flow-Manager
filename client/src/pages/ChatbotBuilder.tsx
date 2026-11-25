@@ -1383,7 +1383,7 @@ export function ChatbotBuilder() {
                             <DropdownMenuTrigger asChild>
                               <button onClick={(e) => e.stopPropagation()}
                                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
-                                data-testid={`step-more-${node.id}`}>
+                                aria-label={t("builderFeedback.stepActions")} data-testid={`step-more-${node.id}`}>
                                 <MoreHorizontal className="h-3.5 w-3.5" />
                               </button>
                             </DropdownMenuTrigger>
@@ -1411,7 +1411,7 @@ export function ChatbotBuilder() {
                       <div className="w-px h-4 bg-gray-200" />
                       <AddStepPicker
                         onAdd={addStep}
-                        hint={index < selectedFlow.nodes.length - 1 ? "Add step" : "Continue the flow"}
+                        hint={index < selectedFlow.nodes.length - 1 ? t("builderUi.addStep") : t("builderFeedback.continueFlow")}
                       />
                       {index < selectedFlow.nodes.length - 1 && (
                         <div className="w-px h-4 bg-gray-200" />
@@ -1903,7 +1903,7 @@ export function ChatbotBuilder() {
                               !teamMembers.some((m) => m.memberId === selectedStep.data.action?.value) && (
                               <SelectItem value={selectedStep.data.action!.value!}>
                                 {selectedStep.data.action?.memberName?.trim() ||
-                                  `Member (${selectedStep.data.action!.value})`}
+                                  t("builderFeedback.unknownMember", { id: selectedStep.data.action!.value })}
                               </SelectItem>
                             )}
                             {teamMembers.map((m) => (
@@ -1926,7 +1926,7 @@ export function ChatbotBuilder() {
                         onChange={(e) => updateStep(selectedStep.id, { action: { type: selectedStep.data.action?.type || "set_tag", value: e.target.value } })}
                         placeholder={
                           selectedStep.data.action?.type === "set_tag" ? t("builderFeedback.tagExample") :
-                          selectedStep.data.action?.type === "set_status" ? "open / resolved / pending" :
+                          selectedStep.data.action?.type === "set_status" ? t("builderFeedback.statusExample") :
                           selectedStep.data.action?.type === "set_pipeline" ? t("builderFeedback.stageNameOrId") :
                           t("builderFeedback.enterValue")
                         }
