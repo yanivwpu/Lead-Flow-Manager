@@ -2434,6 +2434,13 @@
     "suggestionCount_other": "{{count}} sugerencias",
     "previewAttachment": "Vista previa de {{filename}}"
   },
+  "rgeNeighborhoodUpload": {
+    "keepPhoto": "Guarda o actualiza la página para conservar la imagen.",
+    "offer": "Elige una foto para crear un borrador sin publicar con tus cambios y subirla a la biblioteca.",
+    "requiredLocation": "Primero indica el vecindario, la ciudad, la región y el código de país de dos letras.",
+    "articleTooLong": "Reduce el artículo a 5.000 caracteres antes de crear el borrador.",
+    "choosePhoto": "Elegir foto y crear borrador"
+  },
   "rgeMap": {
     "title": "Mapa personalizado del vecindario",
     "saved": "Guardada",

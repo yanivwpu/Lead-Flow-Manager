@@ -2422,6 +2422,13 @@
     "suggestionCount_other": "{{count}} suggestions",
     "previewAttachment": "Preview {{filename}}"
   },
+  "rgeNeighborhoodUpload": {
+    "keepPhoto": "Save or update the page to keep the image.",
+    "offer": "Choose a photo to create an unpublished draft with your current edits and upload it to the library.",
+    "requiredLocation": "Enter the neighborhood, city, region, and a two-letter country code first.",
+    "articleTooLong": "Shorten the article to 5,000 characters before creating the draft.",
+    "choosePhoto": "Choose photo and create draft"
+  },
   "rgeMap": {
     "title": "Custom neighborhood map",
     "saved": "Saved",

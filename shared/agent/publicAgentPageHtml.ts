@@ -475,14 +475,14 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .agent-header { display: grid; gap: 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 10px; }
     @media (min-width: 640px) { .agent-header { grid-template-columns: auto 1fr; align-items: start; gap: 24px; } }
     .agent-profile-col { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
-    @media (min-width: 640px) { .agent-profile-col { align-items: flex-start; text-align: left; } }
+    @media (min-width: 640px) { .agent-profile-col { align-items: flex-start; text-align: start; } }
     .agent-avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #f1f5f9; flex-shrink: 0; }
     @media (min-width: 640px) { .agent-avatar { width: 120px; height: 120px; } }
     .agent-avatar.placeholder { display: flex; align-items: center; justify-content: center; background: #e2e8f0; font-size: 2rem; font-weight: 700; color: #475569; }
     @media (min-width: 640px) { .agent-avatar.placeholder { font-size: 2.25rem; } }
-    .agent-brokerage-block { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 140px; }
-    @media (min-width: 640px) { .agent-brokerage-block { align-items: flex-start; } }
-    .agent-logo { max-height: 36px; max-width: 120px; object-fit: contain; }
+    .agent-brokerage-block { max-inline-size: 100%; }
+    .agent-logo { display: block; inline-size: auto; block-size: auto; max-inline-size: min(100%, clamp(132px, 46vw, 160px)); max-block-size: 70px; object-fit: contain; }
+    @media (min-width: 640px) { .agent-logo { max-inline-size: min(100%, 208px); max-block-size: 88px; } }
     .agent-name { margin: 0 0 4px; font-size: 1.75rem; font-weight: 800; }
     .agent-heading { margin-bottom: 10px; overflow-wrap: anywhere; }
     .agent-byline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-weight: 600; }
@@ -766,7 +766,6 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-agent-person-info p { font-size: .8rem; color: #64748b; margin: 4px 0 0; }
     .neighborhood-agent-person-info .agent-heading-phone { display: inline-block; font-size: .88rem; font-weight: 600; }
     .neighborhood-agent-logo { padding: 12px 0; border-bottom: 1px solid var(--border); }
-    .neighborhood-agent-logo .agent-logo { max-height: 28px; width: auto; max-width: 100%; }
     .neighborhood-agent-intro { font-size: .91rem; line-height: 1.55; color: #475569; margin: 14px 0; }
     .neighborhood-agent-actions { display: flex; flex-direction: column; align-items: stretch; gap: 9px; }
     .neighborhood-agent-actions .btn { width: 100%; min-height: 43px; justify-content: center; text-align: center; }
