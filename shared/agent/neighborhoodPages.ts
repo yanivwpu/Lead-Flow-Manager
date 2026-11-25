@@ -37,18 +37,14 @@ export function buildNeighborhoodUrl(agentSlug: string, neighborhoodSlug: string
 }
 
 export function neighborhoodContentComplete(content: string): boolean {
-  const sections = content.trim().split(/\n\s*\n/).map((part) => part.trim());
-  const paragraphs = [...new Set(sections
+  // Headings, photo markers and formatting are optional. Count real guide
+  // prose without requiring authors to use a particular paragraph structure.
+  const prose = content.trim().split(/\n\s*\n/)
+    .map((part) => part.trim())
     .filter((part) => !part.startsWith("## ") && !/^\[\[photo:[a-f0-9-]{36}(?:\|\d{2,3})?\]\]$/i.test(part))
-    .map((part) => part.replace(/\*+/g, "").replace(/\s+/g, " ").toLowerCase())
-    .filter((part) => part.length >= 60))];
-  const proseLength = paragraphs.join(" ").length;
-  const meaningfulHeading = sections.some((part) => part.startsWith("## ") && part.slice(3).trim().length >= 6);
-  // Two informative paragraphs are ideal, but a substantial introduction with
-  // a meaningful section heading can also be published while the agent expands
-  // the guide. A heading or photo alone never counts as prose.
-  return proseLength >= 240 && (paragraphs.length >= 2 ||
-    (paragraphs.length === 1 && paragraphs[0].length >= 240 && meaningfulHeading));
+    .map((part) => part.replace(/\*+/g, "").replace(/\s+/g, " "))
+    .filter(Boolean).join(" ");
+  return prose.length >= 240;
 }
 
 /** Only permanent, tenant-scoped R2 images may be published on neighborhood guides. */
