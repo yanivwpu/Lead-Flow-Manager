@@ -2427,7 +2427,12 @@
     "offer": "Choose a photo to create an unpublished draft with your current edits and upload it to the library.",
     "requiredLocation": "Enter the neighborhood, city, region, and a two-letter country code first.",
     "articleTooLong": "Shorten the article to 5,000 characters before creating the draft.",
-    "choosePhoto": "Choose photo and create draft"
+    "choosePhoto": "Choose photo and create draft",
+    "reopenPicker": "Select the insertion point and reopen the photo chooser.",
+    "inlineDraft": "Uploading creates an unpublished draft and inserts the photo here.",
+    "inlineTooLong": "Shorten the article to make room for this photo.",
+    "inlineLibraryOnly": "The photo is in the library. Select a spot in the current article to insert it.",
+    "inlineInserted": "Photo inserted in the article"
   },
   "rgeMap": {
     "title": "Custom neighborhood map",

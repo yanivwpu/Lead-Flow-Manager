@@ -79,7 +79,7 @@ test("shared logo scales on both public pages at desktop and mobile widths in LT
   }
 });
 
-test("library uploads wait for an unpublished draft and preserve the article and boundary", { timeout: 90_000 }, async (t) => {
+test("library and article uploads preserve draft identity, placement, and map", { timeout: 90_000 }, async (t) => {
   if (process.env.AGENT_PAGE_BROWSER_TEST !== "1") { t.skip("Browser checks run in Agent Page CI"); return; }
   const { chromium } = await import("playwright");
   const browser = await chromium.launch(browserOptions);
@@ -92,9 +92,14 @@ test("library uploads wait for an unpublished draft and preserve the article and
     'import i18n from "i18next";',
     'import { initReactI18next } from "react-i18next";',
     'import english from "./client/src/locales/en.json";',
+    'import { useToast } from "./client/src/hooks/use-toast";',
     'import { NeighborhoodPageSettings } from "./client/src/components/agentPage/NeighborhoodPageSettings";',
     'i18n.use(initReactI18next).init({lng:"en", resources:{en:{translation:english}}});',
-    'createRoot(document.querySelector("#root")).render(<QueryClientProvider client={new QueryClient()}><NeighborhoodPageSettings publicPageUrl="https://rge-ux.test/agents/jane-morgan"/></QueryClientProvider>);',
+    'function Harness() { const [visible, setVisible] = React.useState(true); const { toasts } = useToast();',
+    '  window.__toggleNeighborhoodSettings = () => setVisible(value => !value);',
+    '  return <>{visible && <NeighborhoodPageSettings publicPageUrl="https://rge-ux.test/agents/jane-morgan"/>}',
+    '    <output data-testid="fixture-toast">{toasts[0]?.title}</output></>; }',
+    'createRoot(document.querySelector("#root")).render(<QueryClientProvider client={new QueryClient()}><Harness/></QueryClientProvider>);',
   ].join("\n");
   const bundled = await build({
     stdin: { contents: harness, resolveDir: process.cwd(), sourcefile: "rge-upload-harness.tsx", loader: "tsx" },
@@ -119,10 +124,13 @@ test("library uploads wait for an unpublished draft and preserve the article and
     style = css.build(candidates);
   }
   const id = "7a4670e2-e86d-43e1-9df8-cdcde30ae940";
+  let targetId = id;
+  let rejectNextImage = false;
+  let detachPickerOnUpload = false;
   const polygon = { type: "Polygon", coordinates: [[[-80.15, 26.12], [-80.14, 26.12], [-80.14, 26.13], [-80.15, 26.12]]] };
   const mapView = { open: false, center: { lat: 26.125, lon: -80.145 }, zoom: 15,
     vertices: [...polygon.coordinates[0].slice(0, -1), [-80.149, 26.128]], boundaryKey: JSON.stringify(polygon) };
-  const guide = "Walk to local parks and find shaded streets near downtown.";
+  const guide = "Walk to local parks and find shaded streets near downtown.\n\n## Around the block\n\nVisit the neighborhood park on a quiet morning.";
   const image = (i: number) => images + "/media/fixture/neighborhood-guide/bb4db2d6-de94-4895-bb4c-827ba082390" + i + ".png";
   let saved: NeighborhoodPageSettings | undefined;
   const creates: NeighborhoodPageSettings[] = [];
@@ -139,15 +147,22 @@ test("library uploads wait for an unpublished draft and preserve the article and
       const body = request.postDataJSON();
       creates.push(body);
       if (creates.length === 1) return route.fulfill({ status: 400, json: { error: "Fixture draft error" } });
-      saved = { ...body, id, slug: "victoria-park", published: false, publicUrl: null, updatedAt: "2026-11-25T01:25:00.000Z" };
+      saved = { ...body, id: targetId, slug: "victoria-park", published: false, publicUrl: null, updatedAt: "2026-11-25T01:25:00.000Z" };
       return route.fulfill({ status: 201, json: saved });
     }
-    if (path === api + "/" + id + "/photos" && method === "POST") {
+    if (path === api + "/" + targetId + "/photos" && method === "POST") {
       uploads.push(path);
-      if (uploads.length === 2) return route.fulfill({ status: 503, json: { error: "Fixture upload error" } });
+      if (uploads.length === 2 || rejectNextImage) {
+        rejectNextImage = false;
+        return route.fulfill({ status: 503, json: { error: "Fixture upload error" } });
+      }
+      if (detachPickerOnUpload) {
+        detachPickerOnUpload = false;
+        await page.evaluate(() => document.querySelector('[data-inline-photo-picker="true"]')?.remove());
+      }
       return route.fulfill({ status: 201, json: { url: image(uploads.length) } });
     }
-    if (path === api + "/" + id && method === "PUT") {
+    if (path === api + "/" + targetId && method === "PUT") {
       const body = request.postDataJSON();
       updates.push(body);
       saved = { ...saved!, ...body, updatedAt: "2026-11-25T01:26:00.000Z" };
@@ -229,4 +244,97 @@ test("library uploads wait for an unpublished draft and preserve the article and
   assert.equal(updates[1].content, guide);
   assert.deepEqual(updates[1].customBoundary, polygon);
   assert.deepEqual(updates[1].photos?.map(photo => photo.url), [image(1), image(3)]);
+
+  const editor = page.getByRole("textbox", { name: "Your local guide article" });
+  const articleShape = () => editor.locator(":scope > p, :scope > h3, :scope > figure").evaluateAll(nodes =>
+    nodes.filter(node => node.nodeName === "FIGURE" || node.textContent?.trim()).map(node => node.nodeName));
+  assert.deepEqual(await articleShape(), ["P", "H3", "P"], "standalone library uploads do not insert a photo");
+
+  const chooseAt = async (selector: string) => {
+    await editor.locator(selector).first().click();
+    await page.getByRole("button", { name: "Insert image", exact: true }).click();
+    await page.getByRole("region", { name: "Choose article image" }).waitFor();
+  };
+  const articleUpload = page.getByRole("button", { name: "Upload new photo", exact: true });
+  const uploadInline = async () => {
+    const [picker] = await Promise.all([page.waitForEvent("filechooser"), articleUpload.click()]);
+    await picker.setFiles(file);
+  };
+
+  await chooseAt("h3");
+  await page.getByRole("region", { name: "Choose article image" })
+    .locator('button:has(img[src="' + image(1) + '"])').click();
+  assert.deepEqual(await articleShape(), ["P", "H3", "FIGURE", "P"]);
+  const existingFigure = editor.locator('figure:has(img[src="' + image(1) + '"])');
+  assert.ok(await existingFigure.isVisible());
+
+  rejectNextImage = true;
+  await chooseAt("p");
+  await uploadInline();
+  await page.getByTestId("fixture-toast").getByText("Photo upload failed").waitFor();
+  assert.deepEqual(await articleShape(), ["P", "H3", "FIGURE", "P"], "failed upload leaves the article intact");
+  assert.ok(await articleUpload.isEnabled(), "the original chooser can retry");
+
+  detachPickerOnUpload = true;
+  await uploadInline();
+  const inlineImage = image(5);
+  const inlineFigure = editor.locator('figure:has(img[src="' + inlineImage + '"])');
+  await inlineFigure.waitFor();
+  assert.deepEqual(await articleShape(), ["P", "FIGURE", "H3", "FIGURE", "P"]);
+  assert.equal(await editor.locator("figure").count(), 2);
+  assert.ok(await library.locator('img[src="' + inlineImage + '"]').isVisible());
+  const width = page.getByRole("slider", { name: "Resize selected article image" });
+  await width.press("Home");
+  const caption = page.getByLabel("Image caption", { exact: true });
+  await caption.fill("Shaded walk near the park");
+  await inlineFigure.getByText("Shaded walk near the park").waitFor();
+  assert.equal(await inlineFigure.getAttribute("data-photo-width"), "40");
+
+  const articleSave = page.waitForResponse(response => response.request().method() === "PUT");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await articleSave;
+  assert.deepEqual(updates[2].customBoundary, polygon);
+  assert.match(updates[2].content, /\[\[photo:[a-f0-9-]+\|40\]\]/);
+  await page.evaluate(() => (window as any).__toggleNeighborhoodSettings());
+  await editor.waitFor({ state: "detached" });
+  await page.evaluate(() => (window as any).__toggleNeighborhoodSettings());
+  await inlineFigure.waitFor();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: /^Edit Victoria Park/ }).click();
+  await inlineFigure.waitFor();
+  assert.deepEqual(await articleShape(), ["P", "FIGURE", "H3", "FIGURE", "P"]);
+  assert.equal(await inlineFigure.getAttribute("data-photo-width"), "40");
+  assert.equal(await inlineFigure.locator("figcaption").textContent(), "Shaded walk near the park");
+
+  await page.getByRole("button", { name: "+ Add", exact: true }).click();
+  await page.getByRole("button", { name: "Insert image", exact: true }).click();
+  await page.getByRole("region", { name: "Choose article image" })
+    .getByText("Enter the neighborhood, city, region, and a two-letter country code first.").waitFor();
+  assert.equal(await articleUpload.isEnabled(), false);
+
+  targetId = "c5267bdb-66b2-48a3-8bb9-b651f094fdc5";
+  await page.evaluate(({ localKey, polygon, guide }) => {
+    localStorage.setItem(localKey, JSON.stringify({ active: "new", entries: { new: {
+      values: { name: "Palm Gardens", city: "Fort Lauderdale", state: "FL", country: "US", content: guide, photos: [], customBoundary: polygon },
+      baseVersion: null,
+    } } }));
+  }, { localKey: neighborhoodDraftKey("fixture"), polygon, guide });
+  await mount();
+  await chooseAt("h3");
+  await page.getByText("Uploading creates an unpublished draft and inserts the photo here.").waitFor();
+  const newArticleSave = page.waitForResponse(response => response.request().method() === "PUT");
+  await uploadInline();
+  await newArticleSave;
+  assert.equal(creates.length, 3, "inline upload creates only one new draft");
+  assert.equal(creates[2].published, false);
+  assert.equal(creates[2].content, guide);
+  assert.deepEqual(creates[2].customBoundary, polygon);
+  assert.equal(updates[3].published, false);
+  assert.deepEqual(updates[3].customBoundary, polygon);
+  assert.deepEqual(updates[3].photos?.map(photo => photo.url), [image(6)]);
+  await editor.locator('figure:has(img[src="' + image(6) + '"])').waitFor();
+  assert.deepEqual(await articleShape(), ["P", "H3", "FIGURE", "P"]);
+  await page.locator("#neighborhood-inline-image-width:enabled").waitFor();
+  assert.equal(await width.isEnabled(), true, "resize controls are available after the new editor remounts");
+  assert.equal(await caption.isEnabled(), true);
 });

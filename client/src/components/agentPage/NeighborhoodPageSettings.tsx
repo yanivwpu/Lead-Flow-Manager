@@ -9,10 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NeighborhoodGuideVisualEditor } from "./NeighborhoodGuideVisualEditor";
+import { NeighborhoodGuideVisualEditor, type ArticlePhotoPlacement } from "./NeighborhoodGuideVisualEditor";
 import { NeighborhoodBoundaryEditor } from "./NeighborhoodBoundaryEditor";
 import type { PolygonBoundary } from "@shared/agent/neighborhoodListingGeo";
-import { removeNeighborhoodPhotoFromArticle } from "@shared/agent/neighborhoodGuideBlocks";
+import { neighborhoodGuidePhotoId, neighborhoodPhotoToken, parseNeighborhoodPhotoMarker, removeNeighborhoodPhotoFromArticle } from "@shared/agent/neighborhoodGuideBlocks";
 
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
@@ -30,6 +30,13 @@ function browserDraftStorage(): Storage | undefined {
 }
 type Manager = { canPublish: boolean; pages: NeighborhoodPageSettings[] };
 
+function placeArticlePhoto(placement: ArticlePhotoPlacement, photoId: string): string {
+  const sections = placement.content.trim() ? placement.content.trim().split(/\n\s*\n/) : [];
+  if (sections.some(section => parseNeighborhoodPhotoMarker(section)?.id === photoId)) return placement.content;
+  sections.splice(placement.sectionIndex, 0, neighborhoodPhotoToken(photoId));
+  return sections.join("\n\n");
+}
+
 export function NeighborhoodPageSettings({ publicPageUrl }: { publicPageUrl: string | null }) {
   const { user } = useAuth();
   return user ? <NeighborhoodManager key={user.id} userId={user.id} publicPageUrl={publicPageUrl} /> : null;
@@ -42,6 +49,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const photoInput = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [offerUploadDraft, setOfferUploadDraft] = useState(false);
+  const [uploadedInlinePhoto, setUploadedInlinePhoto] = useState<{ pageId: string; photoId: string }>();
   const photoUploadInProgress = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -122,6 +130,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   function editPhotos(
     change: NeighborhoodPhoto[] | ((photos: NeighborhoodPhoto[]) => NeighborhoodPhoto[]),
     targetPage = page,
+    updateArticle?: (content: string) => string,
   ) {
     const editingId = targetPage?.id ?? active;
     if (!editingId) return;
@@ -131,7 +140,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       const photos = typeof change === "function" ? change(previousValues.photos ?? []) : change;
       const removed = (previousValues.photos ?? []).filter((oldPhoto) =>
         !photos.some((nextPhoto) => nextPhoto.url === oldPhoto.url));
-      let content = previousValues.content;
+      let content = updateArticle ? updateArticle(previousValues.content) : previousValues.content;
       for (const oldPhoto of removed) content = removeNeighborhoodPhotoFromArticle(content, oldPhoto.url);
       const next = { ...previousValues, content, photos };
       const entries = { ...current.entries };
@@ -141,16 +150,23 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     });
   }
 
-  async function uploadPhoto(file: File | undefined, createDraft = false): Promise<NeighborhoodPhoto | null> {
-    if (!file || !active || stale || save.isPending || photoUploadInProgress.current) return null;
-    if (!page && (!createDraft || !canCreateUploadDraft)) return null;
+  async function uploadPhoto(
+    file: File | undefined,
+    { createDraft, placement }: { createDraft?: boolean; placement?: ArticlePhotoPlacement } = {},
+  ): Promise<void> {
+    if (!file || !active || stale || save.isPending || photoUploadInProgress.current) return;
+    if (!page && (!(createDraft || placement) || !canCreateUploadDraft)) return;
+    if (placement && placeArticlePhoto(placement, "00000000-0000-0000-0000-000000000000").length > 5000) {
+      toast({ title: t("rgeNeighborhoodUpload.inlineTooLong"), variant: "destructive" });
+      return;
+    }
     if (file.size > NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES) {
-      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return null;
+      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return;
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return null;
+      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return;
     }
-    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return null;
+    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return;
     photoUploadInProgress.current = true;
     setPhotoUploading(true);
     try {
@@ -160,9 +176,9 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
           target = await save.mutateAsync({ values, published: false, preserveMapSession: true }) ?? undefined;
         } catch {
           // The existing save mutation shows the error and retains the local draft.
-          return null;
+          return;
         }
-        if (!target || !mounted.current) return null;
+        if (!target || !mounted.current) return;
         setOfferUploadDraft(false);
       }
       const form = new FormData();
@@ -178,7 +194,19 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       const photo: NeighborhoodPhoto = {
         url: result.url, alt: `Photo of ${current.name} in ${current.city}`.slice(0, 140),
       };
-      editPhotos((photos) => [...photos, photo], target);
+      const photoId = placement ? neighborhoodGuidePhotoId(photo.url) : null;
+      let inserted = false;
+      editPhotos((photos) => photos.some(item => item.url === photo.url) ? photos : [...photos, photo],
+        target, placement && photoId ? (content) => {
+          if (content.trim() !== placement.content.trim()) return content;
+          inserted = true;
+          return placeArticlePhoto(placement, photoId);
+        } : undefined);
+      if (inserted && photoId && mounted.current) {
+        setUploadedInlinePhoto({ pageId: target.id, photoId });
+      } else if (placement) {
+        toast({ title: t("rgeNeighborhoodUpload.inlineLibraryOnly"), variant: "destructive" });
+      }
       if (!page && mounted.current) {
         // Link the first upload to the newly created draft. Keep the browser
         // draft (including the photo) available for Save if that write fails.
@@ -189,14 +217,16 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
           } catch {
             // The save mutation reports the failure and keeps the local edit.
           }
-          return photo;
+          return;
         }
       }
-      toast({ title: "Photo uploaded", description: t("rgeNeighborhoodUpload.keepPhoto") });
-      return photo;
+      if (!placement || inserted) {
+        toast({ title: placement ? t("rgeNeighborhoodUpload.inlineInserted") : "Photo uploaded",
+          description: t("rgeNeighborhoodUpload.keepPhoto") });
+      }
     } catch (error) {
       toast({ title: "Photo upload failed", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
-      return null;
+      return;
     } finally {
       photoUploadInProgress.current = false;
       setPhotoUploading(false);
@@ -363,12 +393,14 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             disabled={stale || editingBusy} onChange={editBoundary} />
           <NeighborhoodGuideVisualEditor key={active} content={values.content} photos={values.photos ?? []}
             disabled={stale || editingBusy} uploading={photoUploading}
-            canUpload={Boolean(page && !stale && !editingBusy &&
+            canUpload={Boolean((page || canCreateUploadDraft) &&
               (values.photos?.length ?? 0) < NEIGHBORHOOD_GUIDE_MAX_PHOTOS)}
+            uploadDraftRequired={!page}
+            uploadedInlinePhotoId={uploadedInlinePhoto?.pageId === active ? uploadedInlinePhoto?.photoId : undefined}
             onChange={(content) => editField("content", content)}
             onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
               photo.url === url ? { ...photo, alt } : photo))}
-            onUploadPhoto={(file) => uploadPhoto(file)} />
+            onUploadPhoto={(file, placement) => uploadPhoto(file, { placement })} />
           <p className="text-xs text-slate-600">Write 240+ characters of useful local information across two distinct paragraphs, or one detailed paragraph with a section heading.
             Changing the neighborhood name may change its URL.</p>
 
@@ -391,7 +423,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
-                  void uploadPhoto(file, offerUploadDraft);
+                  void uploadPhoto(file, { createDraft: offerUploadDraft });
                 }} />
               <span className="text-xs text-slate-500">JPG, PNG, WebP · up to 5 MB each</span>
             </div>
