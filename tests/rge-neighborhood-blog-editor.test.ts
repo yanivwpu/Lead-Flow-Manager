@@ -5,10 +5,10 @@ import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
 
 const introduction = "Victoria Park is a residential neighborhood near downtown Fort Lauderdale, known for its mix of architectural styles, tree-lined streets, and convenient access to restaurants, shops, and parks. Its location near Las Olas Boulevard and Holiday Park makes it appealing for buyers looking for a neighborhood setting close to the city.";
 
-test("a complete introductory paragraph plus section heading can be updated without a misleading disabled Save", () => {
+test("one complete introductory paragraph can be published without a section heading", () => {
   assert.ok(introduction.length > 240);
   assert.equal(neighborhoodContentComplete(introduction + "\n\n## Around the block"), true);
-  assert.equal(neighborhoodContentComplete(introduction), false);
+  assert.equal(neighborhoodContentComplete(introduction), true);
   assert.equal(neighborhoodContentComplete("Short intro.\n\n## Around the block"), false);
   assert.equal(neighborhoodContentComplete("## Around the block\n\n[[photo:ffffffff-ffff-ffff-ffff-ffffffffffff]]"), false);
 });

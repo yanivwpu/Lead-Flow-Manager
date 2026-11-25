@@ -2434,6 +2434,13 @@
     "suggestionCount_other": "{{count}} sugerencias",
     "previewAttachment": "Vista previa de {{filename}}"
   },
+  "rgeNeighborhoodPublishing": {
+    "requirement": "Escribe al menos 240 caracteres de información local útil. Basta con un párrafo; los títulos, los párrafos adicionales y las fotos son opcionales.",
+    "slugNote": "Cambiar el nombre del vecindario puede cambiar su URL.",
+    "moreText": "Añade al menos 240 caracteres de contenido útil sobre el vecindario para publicar. Basta con un párrafo; los títulos y las fotos son opcionales.",
+    "unsaved": "El navegador conserva los cambios sin guardar hasta que publiques o los descartes.",
+    "seoTip": "Consejo SEO (opcional): Añade servicios locales, datos útiles, títulos o fotos para ayudar a los visitantes a conocer el vecindario."
+  },
   "rgeNeighborhoodUpload": {
     "keepPhoto": "Guarda o actualiza la página para conservar la imagen.",
     "offer": "Elige una foto para crear un borrador sin publicar con tus cambios y subirla a la biblioteca.",

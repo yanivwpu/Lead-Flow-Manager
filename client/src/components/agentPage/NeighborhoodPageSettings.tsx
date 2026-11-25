@@ -401,8 +401,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
               photo.url === url ? { ...photo, alt } : photo))}
             onUploadPhoto={(file, placement) => uploadPhoto(file, { placement })} />
-          <p className="text-xs text-slate-600">Add at least 240 characters of useful local information. One paragraph is fine; headings, extra paragraphs, and photos are optional.
-            Changing the neighborhood name may change its URL.</p>
+          <p className="text-xs text-slate-600">{t("rgeNeighborhoodPublishing.requirement")} {t("rgeNeighborhoodPublishing.slugNote")}</p>
 
 
           <details className="rounded-lg border border-slate-200 bg-white p-3">
@@ -483,13 +482,12 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
           {data && !data.canPublish && <p className="text-xs text-muted-foreground">Enable your public Agent Page before publishing.</p>}
           {page && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
             <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Add at least 240 characters of useful neighborhood guide text to publish. One paragraph is enough; headings and photos are optional.
-              Your browser keeps unsaved edits until you publish or discard them.
+              {t("rgeNeighborhoodPublishing.moreText")} {t("rgeNeighborhoodPublishing.unsaved")}
             </p>
           )}
           {page && neighborhoodContentComplete(values.content) && (
             <p className="text-xs text-slate-500">
-              SEO tip (optional): Add local amenities, useful details, headings, or photos to help visitors explore the neighborhood.
+              {t("rgeNeighborhoodPublishing.seoTip")}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
