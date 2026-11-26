@@ -11,6 +11,9 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
+import { PipelineLayoutEditor } from "@/components/followups/PipelineLayoutEditor";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasNeedsReply, hasTask,
@@ -30,7 +33,7 @@ interface AppointmentRecord {
 
 type ViewMode = 'list' | 'calendar' | 'pipeline';
 
-const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
+const DEFAULT_PIPELINE_LAYOUT = defaultPipelineLayout();
 const boardStage = (stage: string) => isClosedStage(stage) ? 'Closed' : stage.trim() ? stage : 'Lead';
 const EMPTY_PIPELINE_FILTERS: PipelineFilters = { search: '', channel: '', tag: '', assignment: 'all' };
 
@@ -187,14 +190,14 @@ function PipelineCard({
   onDragStart,
   onDragEnd,
   isDragging,
-  stage, stages, onStageChange, onSetReminder, isMobile, stagePending
+  stage, stages, layout, onStageChange, onSetReminder, isMobile, stagePending
 }: { 
   chat: Chat; 
   onClick: (chatId: string) => void;
   onDragStart: (e: React.DragEvent, chat: Chat) => void;
   onDragEnd: () => void;
   isDragging: boolean;
-  stage: string; stages: string[];
+  stage: string; stages: string[]; layout: readonly PipelineStageLayout[];
   onStageChange: (chatId: string, stage: string) => void;
   onSetReminder: (chat: Chat) => void;
   isMobile: boolean; stagePending: boolean;
@@ -248,7 +251,7 @@ function PipelineCard({
       {(chat.channel || chat.tag) && <div className="mt-2 flex flex-wrap gap-1 text-xs text-slate-600">{[chat.channel, chat.tag].filter(Boolean).map((value, index) => <span key={index} className="rounded bg-slate-100 px-1.5 py-0.5">{value}</span>)}</div>}
       <div className="mt-3 space-y-2 border-t border-slate-100 pt-2" onClick={event => event.stopPropagation()}>
         <select className="w-full min-w-0 rounded-md border border-slate-200 bg-white p-1.5 text-xs text-slate-700" aria-label={t("followups.moveDeal")} data-testid={`pipeline-move-${chat.id}`} value={stage} disabled={stagePending} onChange={event => onStageChange(chat.id, event.target.value)}>
-          {stages.map(value => <option key={value} value={value}>{value}</option>)}
+          {stages.map(value => <option key={value} value={value}>{pipelineStageDisplayLabel(layout, value)}</option>)}
         </select>
         <div className="flex flex-wrap gap-1">
           <Button type="button" size="sm" variant="ghost" className="h-auto flex-1 px-1.5 py-1 text-xs" onClick={() => onClick(chat.id)} data-testid={`pipeline-open-${chat.id}`}><MessageSquare className="h-3.5 w-3.5 shrink-0" />{t("followups.openConversation")}</Button>
@@ -263,22 +266,34 @@ function PipelineView({
   chats, 
   onCardClick,
   onStageChange,
-  isMobile, actorId, stagePending, onSetReminder
+  isMobile, actorId, stagePending, onSetReminder, sessionAligned
 }: { 
   chats: Chat[]; 
   onCardClick: (chatId: string) => void;
   onStageChange: (chatId: string, newStage: string) => void;
-  isMobile: boolean; actorId?: string; stagePending: boolean;
+  isMobile: boolean; actorId?: string; stagePending: boolean; sessionAligned: boolean;
   onSetReminder: (chat: Chat) => void;
 }) {
   const { t } = useTranslation();
   const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [filters, setFilters] = useState<PipelineFilters>(EMPTY_PIPELINE_FILTERS);
+  const queryClient = useQueryClient();
+  const layoutKey = withUserQueryScope(["/api/inbox/pipeline-layout"], actorId);
+  const layoutQuery = useQuery<PipelineLayoutResponse>({
+    queryKey: layoutKey,
+    enabled: !!actorId && sessionAligned,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    retry: false,
+  });
+  const layoutConfig = sessionAligned ? layoutQuery.data : undefined;
+  const layout = layoutConfig?.stages ?? DEFAULT_PIPELINE_LAYOUT;
+  const [editingLayout, setEditingLayout] = useState(false);
   const visibleChats = useMemo(() => filterPipelineItems(chats, filters, actorId), [chats, filters, actorId]);
   const channels = useMemo(() => [...new Set(chats.map(chat => chat.channel).filter((value): value is string => Boolean(value)))].sort(), [chats]);
   const tags = useMemo(() => [...new Set(chats.map(chat => chat.tag).filter(Boolean))].sort(), [chats]);
-  const stages = useMemo(() => [...new Set<string>([...PIPELINE_STAGES, ...chats.map(chat => boardStage(chat.pipelineStage))])], [chats]);
+  const stages = useMemo(() => orderedPipelineStages(layout, chats.map(chat => boardStage(chat.pipelineStage))), [layout, chats]);
   const chatsByStage = useMemo(() => {
     const map = new Map<string, Chat[]>(stages.map(stage => [stage, []]));
     visibleChats.forEach(chat => map.get(boardStage(chat.pipelineStage))?.push(chat));
@@ -345,6 +360,18 @@ function PipelineView({
         </div>
         <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-600"><span aria-live="polite">{t("followups.pipelineResults", { shown: visibleChats.length, total: chats.length })}</span><Button type="button" variant="ghost" size="sm" className="h-auto px-2 py-1 text-xs" onClick={() => setFilters(EMPTY_PIPELINE_FILTERS)}>{t("followups.resetPipelineFilters")}</Button></div>
       </div>
+      {layoutConfig?.canEdit && !layoutQuery.isError && (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditingLayout(true)} data-testid="customize-pipeline">{t("followups.customizePipeline")}</Button>
+        </div>
+      )}
+      {layoutQuery.isError && sessionAligned && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-slate-600"><span>{t("followups.layoutLoadFailed")}</span><Button type="button" variant="ghost" size="sm" onClick={() => void layoutQuery.refetch()}>{t("common.tryAgain")}</Button></div>}
+      {editingLayout && layoutConfig?.canEdit && (
+        <PipelineLayoutEditor key={`${actorId}:${layoutConfig.workspaceId}`} layout={layoutConfig}
+          onClose={() => setEditingLayout(false)}
+          onSaved={value => { queryClient.setQueryData(layoutKey, value); void queryClient.invalidateQueries({ queryKey: layoutKey }); }}
+          onConflict={() => { void queryClient.invalidateQueries({ queryKey: layoutKey }); }} />
+      )}
       {visibleChats.length === 0 && chats.length > 0 && <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">{t("followups.noMatchingDeals")}</p>}
       <div className="grid grid-flow-col items-stretch gap-3 w-full min-w-0 overflow-x-auto pb-3" style={{ gridAutoColumns: isMobile ? "minmax(240px, 1fr)" : "minmax(170px, 1fr)" }} data-testid="pipeline-view">
       {[...chatsByStage.keys()].map(stage => {
@@ -366,7 +393,7 @@ function PipelineView({
             <div className="p-3 border-b border-slate-200">
               <div className={cn("h-1 rounded-full mb-3", colors)} />
               <div className="flex items-start justify-between gap-2">
-                <h3 className="min-w-0 break-words font-semibold text-slate-900 text-sm">{stage}</h3>
+                <div className="min-w-0"><h3 className="break-words font-semibold text-slate-900 text-sm">{pipelineStageDisplayLabel(layout, stage)}</h3>{pipelineStageDisplayLabel(layout, stage) !== stage && <p className="text-[11px] text-slate-500">{stage}</p>}</div>
                 <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={t("followups.opportunitiesCount", { total: stageChats.length })}>{stageChats.length}</span>
               </div>
             </div>
@@ -379,13 +406,13 @@ function PipelineView({
                   onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
                   isDragging={draggedChat?.id === chat.id}
-                  stage={stage} stages={stages} isMobile={isMobile} stagePending={stagePending}
+                  stage={stage} stages={stages} layout={layout} isMobile={isMobile} stagePending={stagePending}
                   onStageChange={onStageChange} onSetReminder={onSetReminder}
                 />
               ))}
               {stageChats.length === 0 && (
                 <div className="text-center p-4 mt-1 rounded-lg border border-dashed border-slate-300 text-slate-500 text-xs leading-relaxed">
-                  {emptyStateMessages[stage] || t("followups.emptyPipelineStage")}
+                  {(pipelineStageDisplayLabel(layout, stage) === stage && emptyStateMessages[stage]) || t("followups.emptyPipelineStage")}
                 </div>
               )}
             </div>
@@ -572,7 +599,7 @@ function TaskCalendarView({
 
 export function FollowUps() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, sessionAligned } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -971,7 +998,7 @@ export function FollowUps() {
             chats={filteredChats.filter(chat => chat.isOpportunity)}
             onCardClick={handleRowClick}
             onStageChange={handleStageChange}
-            isMobile={isMobile} actorId={user?.id} stagePending={updatePipelineStageMutation.isPending} onSetReminder={setReminder}
+            isMobile={isMobile} actorId={user?.id} sessionAligned={sessionAligned} stagePending={updatePipelineStageMutation.isPending} onSetReminder={setReminder}
           />
         )}
       </div>

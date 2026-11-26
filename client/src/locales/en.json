@@ -290,6 +290,17 @@
     "saveAndOpen": "Save & Open"
   },
   "followups": {
+    "customizePipeline": "Customize pipeline",
+    "layoutDescription": "Rename and reorder the five standard columns for this workspace. Internal CRM stages, automations and integrations stay unchanged. Additional industry-specific stages remain visible.",
+    "internalStage": "CRM stage: {{stage}}",
+    "moveStageEarlier": "Move {{stage}} earlier",
+    "moveStageLater": "Move {{stage}} later",
+    "layoutSaved": "Pipeline layout saved",
+    "layoutSaveFailed": "Could not save the pipeline layout",
+    "layoutInvalid": "Enter a unique, nonempty name of up to 60 characters for each stage.",
+    "layoutConflict": "The workspace or layout changed. Close this editor and reopen it before saving.",
+    "resetLayout": "Restore default layout",
+    "layoutLoadFailed": "Pipeline configuration is unavailable.",
     "moveDeal": "Move deal to stage",
     "openConversation": "Open chat",
     "searchPipeline": "Search customers or deals",

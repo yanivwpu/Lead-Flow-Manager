@@ -11,6 +11,7 @@ import { parseHTML } from 'linkedom';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import en from '../client/src/locales/en.json';
+import { defaultPipelineLayout, type PipelineLayoutResponse } from '../shared/pipelineLayout';
 
 const i18n = createInstance();
 await i18n.init({ lng: 'en', resources: { en: { translation: en } } });
@@ -21,7 +22,7 @@ const date = new Date();
 date.setHours(12, 0, 0, 0);
 const future = new Date(date); future.setDate(date.getDate() + 1);
 const overdue = new Date(date); overdue.setDate(date.getDate() - 1);
-const state = { view: 'list', mobile: false, filter: null as string | null, nullState: 0, writes: 0, rows: [] as any[], appointments: [] as any[] };
+const state = { layout: undefined as PipelineLayoutResponse | undefined, view: 'list', mobile: false, filter: null as string | null, nullState: 0, writes: 0, rows: [] as any[], appointments: [] as any[] };
 (globalThis as any).__followUpRender = state;
 after(() => { rmSync(scratch, { recursive: true, force: true }); delete (globalThis as any).__followUpRender; });
 const stubs: Record<string, string> = {
@@ -29,14 +30,14 @@ const stubs: Record<string, string> = {
     export * from 'fixture-real-react';
     export const useState=(initial)=>React.useState(initial==='list' ? globalThis.__followUpRender.view :
       initial===null && ++globalThis.__followUpRender.nullState===1 ? globalThis.__followUpRender.filter : initial);`,
-  'auth-context': `export const useAuth=()=>({user:{id:'fixture',name:'Fixture'}});`,
+  'auth-context': `export const useAuth=()=>({user:{id:'fixture',name:'Fixture'},sessionAligned:true});`,
   'use-mobile': `export const useIsMobile=()=>globalThis.__followUpRender.mobile;`,
   'use-toast': `export const useToast=()=>({toast:()=>{}});`,
   'ecommercePilot': `export const useEcommercePilot=()=>({available:false});`,
   '@tanstack/react-query': `export const useQueryClient=()=>({invalidateQueries:async()=>{}});
     export const useMutation=()=>({isPending:false,mutate:()=>{globalThis.__followUpRender.writes++},mutateAsync:async()=>{globalThis.__followUpRender.writes++}});
     export const useQuery=(options)=>({data:options.queryKey.includes('/api/inbox') ? globalThis.__followUpRender.rows :
-      options.queryKey.includes('/api/appointments') ? globalThis.__followUpRender.appointments : [],refetch:()=>{}});`,
+      options.queryKey.includes('/api/appointments') ? globalThis.__followUpRender.appointments : options.queryKey.includes('/api/inbox/pipeline-layout') ? globalThis.__followUpRender.layout : [],refetch:()=>{}});`,
 };
 await build({ entryPoints: ['client/src/pages/FollowUps.tsx'], outfile: join(scratch, 'page.mjs'),
   bundle: true, platform: 'node', format: 'esm', packages: 'external', jsx: 'automatic',
@@ -61,6 +62,7 @@ function render(view: string, filter: string | null = null) {
   return parseHTML(renderToStaticMarkup(React.createElement(I18nextProvider, { i18n }, page))).document;
 }
 function reset() {
+  state.layout = undefined;
   state.rows = [
     fixture('ordinary'), fixture('railway', 'Your deployment failed. Please check logs.'),
     fixture('promo', 'Interested in buying? Save 30% off today!'),
@@ -205,4 +207,22 @@ test('mobile pipeline exposes stage and quick actions without native dragging', 
     assert.ok(document.querySelector('[data-testid="pipeline-reminder-deal"]'));
     assert.equal(state.writes, 0);
   } finally { state.mobile = false; }
+});
+
+test('workspace layout changes visible labels and order without changing stage values or Realtor cards', () => {
+  reset();
+  const stages = defaultPipelineLayout();
+  stages[2].label = 'Estimate sent';
+  state.layout = { workspaceId: 'fixture', canEdit: true, revision: 1, stages: [stages[2], stages[0], stages[1], stages[3], stages[4]] };
+  const document = render('pipeline');
+  const board = document.querySelector('[data-testid="pipeline-view"]')!;
+  assert.equal(board.children[0].getAttribute('data-testid'), 'pipeline-column-proposal');
+  assert.equal(board.children[0].querySelector('h3')?.textContent, 'Estimate sent');
+  assert.equal(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Proposal"]')?.textContent, 'Estimate sent');
+  assert.ok(document.querySelector('[data-testid="pipeline-column-qualified (warm)"] [data-testid="pipeline-card-realtor"]'));
+  assert.ok(document.querySelector('[data-testid="customize-pipeline"]'));
+  assert.equal(state.writes, 0);
+  state.layout = { ...state.layout, canEdit: false };
+  assert.equal(render('pipeline').querySelector('[data-testid="customize-pipeline"]'), null);
+  state.layout = undefined;
 });

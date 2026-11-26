@@ -6,9 +6,11 @@ import { db } from "../../drizzle/db";
 import { users, emailMailboxes } from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Express } from "express";
+import { registerPipelineLayoutRoutes } from "./pipelineLayout";
 import { getInboxWorkspaceAccess, listInboxWorkspaces, resolveInboxWorkspace } from "../inboxWorkspaceAccess";
 
 export function registerInboxWorkspaceRoutes(app: Express): void {
+  registerPipelineLayoutRoutes(app);
   // Read-only status for the selected Inbox. Never return channel config or credentials.
   app.get("/api/inbox/channel-status", inboxContentReadLimiter, requireInboxWorkspace, async (req, res, next) => {
     try {

@@ -1620,6 +1620,14 @@ CREATE INDEX IF NOT EXISTS seo_github_publication_idx ON seo_github_executions(s
   { tag: "0114_prospect_link_rendering_snapshot", sql: `-- Legacy authored snapshots retain their complete URL tokens. New drafts capture their mode and approved URL.
 ALTER TABLE prospect_outreach_queue_items ADD COLUMN IF NOT EXISTS link_rendering_snapshot jsonb NOT NULL DEFAULT '{"campaignLinkUrl":"","preserveAuthoredUrls":true}'::jsonb;
 ` },
+  { tag: "20261126_workspace_pipeline_layouts", sql: `
+CREATE TABLE IF NOT EXISTS workspace_pipeline_layouts (
+  workspace_id varchar PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  stages jsonb NOT NULL,
+  revision integer NOT NULL DEFAULT 1 CHECK (revision > 0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+` },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

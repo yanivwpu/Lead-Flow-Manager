@@ -292,6 +292,17 @@
     "saveAndOpen": "Guardar y Abrir"
   },
   "followups": {
+    "customizePipeline": "Personalizar embudo",
+    "layoutDescription": "Cambia el nombre y el orden de las cinco columnas estándar de este espacio de trabajo. Las etapas internas del CRM, las automatizaciones y las integraciones no cambian. Las etapas adicionales específicas del sector siguen visibles.",
+    "internalStage": "Etapa del CRM: {{stage}}",
+    "moveStageEarlier": "Mover {{stage}} hacia el inicio",
+    "moveStageLater": "Mover {{stage}} hacia el final",
+    "layoutSaved": "Diseño del embudo guardado",
+    "layoutSaveFailed": "No se pudo guardar el diseño del embudo",
+    "layoutInvalid": "Introduce un nombre único, no vacío y de hasta 60 caracteres para cada etapa.",
+    "layoutConflict": "El espacio de trabajo o el diseño ha cambiado. Cierra este editor y vuelve a abrirlo antes de guardar.",
+    "resetLayout": "Restaurar diseño predeterminado",
+    "layoutLoadFailed": "La configuración del embudo no está disponible.",
     "moveDeal": "Mover oportunidad a etapa",
     "openConversation": "Abrir chat",
     "searchPipeline": "Buscar clientes u oportunidades",

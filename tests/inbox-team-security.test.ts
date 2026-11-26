@@ -12,6 +12,7 @@ import { eq, inArray } from "drizzle-orm";
 import { WebSocket } from "ws";
 import { rateLimit } from "express-rate-limit";
 import * as schema from "../shared/schema";
+import { defaultPipelineLayout } from "../shared/pipelineLayout";
 
 // All database calls below use isolated in-memory PostgreSQL. No provider is invoked.
 process.env.DATABASE_URL ||= "postgresql://fixture:fixture@127.0.0.1:1/unused";
@@ -32,7 +33,7 @@ async function fixture() {
   for (const table of [schema.users, schema.teamMembers, schema.contacts, schema.conversations,
     schema.messages, schema.activityEvents, schema.channelSettings, schema.chats, schema.contactNotes,
     schema.prospectIntelligence, schema.prospectOutreachQueueItems, schema.campaignEnrollments,
-    schema.appointments, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults, schema.inboxSendAttempts, schema.inboxPresenceSessions]) {
+    schema.appointments, schema.workspacePipelineLayouts, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults, schema.inboxSendAttempts, schema.inboxPresenceSessions]) {
     const config = getTableConfig(table);
     const columns = config.columns.map(column => {
       let value = quote(column.name) + " " + column.getSQLType();
@@ -154,6 +155,35 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       }
       assert.equal((await f.request("owner-a", "/api/contacts/contact-a/details")).status, 200);
       assert.equal((await f.request("agent", "/api/contacts/contact-a/details")).status, 200);
+    });
+    await t.test("pipeline configuration is workspace scoped, admin-only and revision guarded", async () => {
+      const path = "/api/inbox/pipeline-layout";
+      assert.equal((await fetch(f.origin + path)).status, 401);
+      const initial = await (await f.request("owner-a", path)).json();
+      assert.equal(initial.workspaceId, "owner-a");
+      assert.equal(initial.revision, 0);
+      assert.deepEqual(initial.stages, defaultPipelineLayout());
+      const stages = defaultPipelineLayout();
+      stages[2].label = "Estimate sent";
+      const payload = { workspaceId: "owner-a", revision: 0, stages };
+      assert.equal((await f.request("agent", path, "PATCH", payload)).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", { ...payload, workspaceId: "owner-b" })).status, 409);
+      assert.equal((await f.request("admin", path, "PATCH", { ...payload, stages: stages.slice(1) })).status, 400);
+      const saved = await f.request("admin", path, "PATCH", payload);
+      assert.equal(saved.status, 200);
+      assert.equal((await saved.json()).revision, 1);
+      const shared = await (await f.request("agent", path)).json();
+      assert.equal(shared.canEdit, false);
+      assert.equal(shared.stages[2].label, "Estimate sent");
+      assert.equal((await f.request("owner-a", path, "PATCH", payload)).status, 409);
+      const foreign = await (await f.request("owner-b", path)).json();
+      assert.equal(foreign.revision, 0);
+      assert.deepEqual(foreign.stages, defaultPipelineLayout());
+      const reset = await f.request("owner-a", path, "PATCH", { ...payload, revision: 1, stages: defaultPipelineLayout() });
+      assert.equal(reset.status, 200);
+      assert.equal((await reset.json()).revision, 2);
+      const contact = await (await f.request("owner-a", "/api/contacts/contact-a")).json();
+      assert.equal(contact.pipelineStage, "Lead");
     });
     await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
       const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
