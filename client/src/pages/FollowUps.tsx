@@ -359,7 +359,7 @@ function PipelineView({
               draggedChat && dropStage === stage && boardStage(draggedChat.pipelineStage) !== stage && "ring-2 ring-inset ring-emerald-500 bg-emerald-50"
             )}
             onDragOver={(e) => handleDragOver(e, stage)}
-            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropStage(prev => prev === stage ? null : prev); }}
+            onDragLeave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDropStage(prev => prev === stage ? null : prev); }}
             onDrop={(e) => handleDrop(e, stage)}
             data-testid={`pipeline-column-${stage.toLowerCase()}`}
           >
@@ -844,7 +844,7 @@ export function FollowUps() {
                 <input key={reminder?.id} name="reminderTitle" required defaultValue={reminder?.followUp || reminder?.reviewRecommended || ""} className="rounded-md border border-gray-300 p-2" />
               </label>
               <label className="grid gap-1 text-sm">Date and time
-                <input name="reminderAt" type="datetime-local" required className="rounded-md border border-gray-300 p-2" />
+                <input key={reminder?.id} name="reminderAt" type="datetime-local" required defaultValue={reminder?.followUpDate ? format(new Date(reminder.followUpDate), "yyyy-MM-dd'T'HH:mm") : ""} className="rounded-md border border-gray-300 p-2" />
               </label>
               <Button type="submit" disabled={updateFollowUpDateMutation.isPending}>Save Reminder</Button>
             </form>

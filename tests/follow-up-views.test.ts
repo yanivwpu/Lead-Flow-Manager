@@ -21,7 +21,7 @@ const date = new Date();
 date.setHours(12, 0, 0, 0);
 const future = new Date(date); future.setDate(date.getDate() + 1);
 const overdue = new Date(date); overdue.setDate(date.getDate() - 1);
-const state = { view: 'list', filter: null as string | null, nullState: 0, writes: 0, rows: [] as any[], appointments: [] as any[] };
+const state = { view: 'list', mobile: false, filter: null as string | null, nullState: 0, writes: 0, rows: [] as any[], appointments: [] as any[] };
 (globalThis as any).__followUpRender = state;
 after(() => { rmSync(scratch, { recursive: true, force: true }); delete (globalThis as any).__followUpRender; });
 const stubs: Record<string, string> = {
@@ -30,7 +30,7 @@ const stubs: Record<string, string> = {
     export const useState=(initial)=>React.useState(initial==='list' ? globalThis.__followUpRender.view :
       initial===null && ++globalThis.__followUpRender.nullState===1 ? globalThis.__followUpRender.filter : initial);`,
   'auth-context': `export const useAuth=()=>({user:{id:'fixture',name:'Fixture'}});`,
-  'use-mobile': `export const useIsMobile=()=>false;`,
+  'use-mobile': `export const useIsMobile=()=>globalThis.__followUpRender.mobile;`,
   'use-toast': `export const useToast=()=>({toast:()=>{}});`,
   'ecommercePilot': `export const useEcommercePilot=()=>({available:false});`,
   '@tanstack/react-query': `export const useQueryClient=()=>({invalidateQueries:async()=>{}});
@@ -192,4 +192,17 @@ test('Pipeline uses the same deal definition as KPI/List and preserves Realtor q
   assert.equal(document.querySelectorAll('[data-testid^="pipeline-card-"]').length, Number(document.querySelector('[data-testid="kpi-active-deals"] p')?.textContent));
   assert.equal(render('pipeline', 'needs-reply').querySelectorAll('[data-testid^="pipeline-card-"]').length, 0);
   assert.equal(state.writes, 0);
+});
+
+test('mobile pipeline exposes stage and quick actions without native dragging', () => {
+  reset();
+  state.mobile = true;
+  try {
+    const document = render('pipeline');
+    assert.equal(document.querySelector('[data-testid="pipeline-card-deal"]')?.getAttribute('draggable'), 'false');
+    assert.ok(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Negotiation"]'));
+    assert.ok(document.querySelector('[data-testid="pipeline-open-deal"]'));
+    assert.ok(document.querySelector('[data-testid="pipeline-reminder-deal"]'));
+    assert.equal(state.writes, 0);
+  } finally { state.mobile = false; }
 });
