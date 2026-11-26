@@ -22,11 +22,12 @@ export function PipelineLayoutEditor({ layout, onClose, onSaved, onConflict }: {
   const parsed = pipelineLayoutSchema.safeParse(draft);
   const save = useMutation({
     mutationFn: async (stages: PipelineStageLayout[]) => {
+      if (!original.csrfToken) throw new Error("conflict");
       const response = await fetch("/api/inbox/pipeline-layout", {
-        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json", "X-CSRF-Token": original.csrfToken },
         body: JSON.stringify({ workspaceId: original.workspaceId, revision: original.revision, stages }),
       });
-      if (response.status === 409) throw new Error("conflict");
+      if (response.status === 409 || response.status === 403) throw new Error("conflict");
       if (!response.ok) throw new Error("save");
       const value = await response.json() as PipelineLayoutResponse;
       if (value.workspaceId !== original.workspaceId) throw new Error("conflict");

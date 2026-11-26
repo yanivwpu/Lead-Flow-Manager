@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
+import cookieParser from "cookie-parser";
 import session from "express-session";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -76,7 +77,7 @@ async function fixture() {
     await database.insert(schema.messages).values({ id: `message-${suffix}`, conversationId: `conv-${suffix}`, contactId: `contact-${suffix}`, userId: `owner-${suffix}`, direction: "inbound", content: `Private ${suffix}` });
     await database.insert(schema.emailMessageDetails).values({messageId:`message-${suffix}`,subject:"Private email",textBody:`Email ${suffix}`,fromAddress:"customer@example.com"});
   }
-  const app = express(); app.use(express.json());
+  const app = express(); app.use(express.json()); app.use(cookieParser());
   const sessions = new session.MemoryStore();
   setupAuth(app, { store: sessions });
   // Test-only login creates genuine signed cookies and uses the production serializer/deserializer.
@@ -156,30 +157,50 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal((await f.request("owner-a", "/api/contacts/contact-a/details")).status, 200);
       assert.equal((await f.request("agent", "/api/contacts/contact-a/details")).status, 200);
     });
-    await t.test("pipeline configuration is workspace scoped, admin-only and revision guarded", async () => {
+    await t.test("pipeline configuration is workspace scoped, admin-only, CSRF protected and revision guarded", async () => {
       const path = "/api/inbox/pipeline-layout";
       assert.equal((await fetch(f.origin + path)).status, 401);
-      const initial = await (await f.request("owner-a", path)).json();
+      async function editor(actor: string) {
+        const result = await f.request(actor, path);
+        assert.equal(result.status, 200);
+        const cookie = result.headers.get("set-cookie")?.match(/(?:^|,\s*)(pipelineCsrfToken=[a-f0-9]{64})/)?.[1];
+        const layout = await result.json();
+        assert.match(layout.csrfToken, /^[a-f0-9]{64}$/);
+        assert.ok(cookie);
+        return { layout, headers: { Cookie: f.cookies.get(actor) + "; " + cookie, "X-CSRF-Token": layout.csrfToken } };
+      }
+      const owner = await editor("owner-a");
+      const initial = owner.layout;
       assert.equal(initial.workspaceId, "owner-a");
       assert.equal(initial.revision, 0);
       assert.deepEqual(initial.stages, defaultPipelineLayout());
+      const admin = await editor("admin");
+      assert.notEqual(admin.layout.csrfToken, owner.layout.csrfToken);
       const stages = defaultPipelineLayout();
       stages[2].label = "Estimate sent";
       const payload = { workspaceId: "owner-a", revision: 0, stages };
       assert.equal((await f.request("agent", path, "PATCH", payload)).status, 403);
-      assert.equal((await f.request("admin", path, "PATCH", { ...payload, workspaceId: "owner-b" })).status, 409);
-      assert.equal((await f.request("admin", path, "PATCH", { ...payload, stages: stages.slice(1) })).status, 400);
-      const saved = await f.request("admin", path, "PATCH", payload);
+      assert.equal((await f.request("admin", path, "PATCH", payload)).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload, { ...admin.headers, "X-CSRF-Token": "0".repeat(64) })).status, 403);
+      const stolen = { Cookie: f.cookies.get("admin") + "; pipelineCsrfToken=" + owner.layout.csrfToken, "X-CSRF-Token": owner.layout.csrfToken };
+      assert.equal((await f.request("admin", path, "PATCH", payload, stolen)).status, 403);
+      assert.equal((await f.request("admin", path, "GET", undefined, { Origin: "https://foreign.example" })).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload, { ...admin.headers, Origin: "https://foreign.example" })).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload, { ...admin.headers, "Sec-Fetch-Site": "cross-site" })).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", { ...payload, workspaceId: "owner-b" }, admin.headers)).status, 409);
+      assert.equal((await f.request("admin", path, "PATCH", { ...payload, stages: stages.slice(1) }, admin.headers)).status, 400);
+      const saved = await f.request("admin", path, "PATCH", payload, admin.headers);
       assert.equal(saved.status, 200);
       assert.equal((await saved.json()).revision, 1);
       const shared = await (await f.request("agent", path)).json();
       assert.equal(shared.canEdit, false);
+      assert.equal(shared.csrfToken, undefined);
       assert.equal(shared.stages[2].label, "Estimate sent");
-      assert.equal((await f.request("owner-a", path, "PATCH", payload)).status, 409);
-      const foreign = await (await f.request("owner-b", path)).json();
-      assert.equal(foreign.revision, 0);
-      assert.deepEqual(foreign.stages, defaultPipelineLayout());
-      const reset = await f.request("owner-a", path, "PATCH", { ...payload, revision: 1, stages: defaultPipelineLayout() });
+      assert.equal((await f.request("owner-a", path, "PATCH", payload, owner.headers)).status, 409);
+      const foreign = await editor("owner-b");
+      assert.equal(foreign.layout.revision, 0);
+      assert.deepEqual(foreign.layout.stages, defaultPipelineLayout());
+      const reset = await f.request("owner-a", path, "PATCH", { ...payload, revision: 1, stages: defaultPipelineLayout() }, owner.headers);
       assert.equal(reset.status, 200);
       assert.equal((await reset.json()).revision, 2);
       const contact = await (await f.request("owner-a", "/api/contacts/contact-a")).json();

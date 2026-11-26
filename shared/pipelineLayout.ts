@@ -27,6 +27,8 @@ export const pipelineLayoutPatchSchema = z.object({
 export type PipelineLayoutResponse = {
   workspaceId: string;
   canEdit: boolean;
+  /** Present only for authorized editors; never persisted in workspace settings. */
+  csrfToken?: string;
   revision: number;
   stages: PipelineStageLayout[];
 };
