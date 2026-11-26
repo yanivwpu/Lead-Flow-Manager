@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
 import cookieParser from "cookie-parser";
+import { csrfProtection } from "../server/csrfProtection";
 import session from "express-session";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -78,6 +79,8 @@ async function fixture() {
     await database.insert(schema.emailMessageDetails).values({messageId:`message-${suffix}`,subject:"Private email",textBody:`Email ${suffix}`,fromAddress:"customer@example.com"});
   }
   const app = express(); app.use(express.json()); app.use(cookieParser());
+  // Match production middleware ordering; do not bypass CSRF in the fixture.
+  app.use(csrfProtection);
   const sessions = new session.MemoryStore();
   setupAuth(app, { store: sessions });
   // Test-only login creates genuine signed cookies and uses the production serializer/deserializer.
@@ -112,7 +115,7 @@ async function fixture() {
     if(method==="POST"&&body&&!body.sendAttemptId&&(path.match(/^\/api\/contacts\/[^/]+\/send$/)||path==="/api/inbox/templates/send")){
       const id=path.startsWith("/api/contacts/")?path.split("/")[3]:body.contactId;
       let state:any={revision:"0/-",aiEpoch:0};
-      if(id){const response=await fetch(origin+`/api/contacts/${id}/reply-state`,{method:"POST",headers:{Cookie:cookie,"Content-Type":"application/json"},body:JSON.stringify({channel:body.channel||"whatsapp"})});if(response.ok)state=await response.json();}
+      if(id){const response=await fetch(origin+`/api/contacts/${id}/reply-state`,{method:"POST",headers:{Cookie:cookie,Origin:origin,"Content-Type":"application/json"},body:JSON.stringify({channel:body.channel||"whatsapp"})});if(response.ok)state=await response.json();}
       body={...body,sendAttemptId:randomUUID(),replyRevision:state.revision,aiEpoch:state.aiEpoch,...(body.channel!=="email"&&state.conversationId?{conversationId:state.conversationId}:{})};
     }
     return fetch(origin + path, { method, headers: { Cookie: cookie, Origin: origin, "Content-Type": "application/json", ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -156,6 +159,25 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       }
       assert.equal((await f.request("owner-a", "/api/contacts/contact-a/details")).status, 200);
       assert.equal((await f.request("agent", "/api/contacts/contact-a/details")).status, 200);
+    });
+    await t.test("shared CSRF guard rejects foreign and missing browser provenance before contact writes", async () => {
+      const path = "/api/contacts/contact-a";
+      const cookie = f.cookies.get("owner-a") ?? await f.login("owner-a");
+      const before = await f.storage.getContact("contact-a");
+      for (const headers of [
+        { Origin: "https://foreign.example" },
+        { "Sec-Fetch-Site": "cross-site", Origin: f.origin },
+        {},
+      ] as Record<string, string>[]) {
+        const response = await fetch(f.origin + path, {
+          method: "PATCH", headers: { Cookie: cookie, "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ notes: "Must not be persisted" }),
+        });
+        assert.equal(response.status, 403);
+        assert.equal((await response.json()).code, "CSRF_INVALID");
+      }
+      const after = await f.storage.getContact("contact-a");
+      assert.equal(after?.notes, before?.notes);
     });
     await t.test("pipeline configuration is workspace scoped, admin-only, CSRF protected and revision guarded", async () => {
       const path = "/api/inbox/pipeline-layout";
@@ -266,7 +288,7 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
     });
     await t.test("HTTP sends require a draft revision and reject stale or foreign reply context", async () => {
       const cookie=await f.login("agent");
-      const send=async(body:any)=>fetch(f.origin+"/api/contacts/contact-a/send",{method:"POST",headers:{Cookie:cookie,"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const send=async(body:any)=>fetch(f.origin+"/api/contacts/contact-a/send",{method:"POST",headers:{Cookie:cookie,Origin:f.origin,"Content-Type":"application/json"},body:JSON.stringify(body)});
       const missing=await send({content:"Unsynchronized reply",channel:"sms"});assert.equal(missing.status,428);assert.equal((await missing.json()).code,"reply_context_required");
       const stale=await send({content:"Preserved draft",channel:"sms",sendAttemptId:randomUUID(),replyRevision:"stale",conversationId:"conv-a"});assert.equal(stale.status,409);assert.equal((await stale.json()).code,"reply_conflict");
       const foreign=await send({content:"Wrong room",channel:"sms",sendAttemptId:randomUUID(),replyRevision:"0/-",conversationId:"conv-b"});assert.equal(foreign.status,404);
