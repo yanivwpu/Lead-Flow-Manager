@@ -292,6 +292,9 @@
     "saveAndOpen": "שמור ופתח"
   },
   "followups": {
+    "opportunitiesCount": "הזדמנויות: {{total}}",
+    "emptyPipelineStage": "אין הזדמנויות בשלב זה",
+    "emptyTasksHint": "מעקבים ופניות לקוחות מתיבת הדואר הנכנס האחרונה שלך יופיעו כאן כאשר הם ידרשו טיפול.",
     "title": "מעקבים",
     "scheduled": "מתוזמנים",
     "overdue": "באיחור",

@@ -157,6 +157,25 @@ test('fresh form reviews surface with a reminder action after urgent work, with 
   assert.equal(state.writes, 0);
 });
 
+test('Follow-up view and KPI controls expose selected states, and pipeline uses flexible columns', () => {
+  reset();
+  for (const view of ['list', 'calendar', 'pipeline']) {
+    const document = render(view);
+    for (const option of ['list', 'calendar', 'pipeline']) {
+      assert.equal(document.querySelector(`[data-testid="toggle-${option}-view"]`)?.getAttribute('aria-pressed'), String(option === view));
+    }
+    assert.equal(document.querySelector('[data-testid="kpi-active-deals"]')?.getAttribute('aria-pressed'), 'false');
+  }
+  const document = render('pipeline', 'active-deals');
+  assert.equal(document.querySelector('[data-testid="kpi-active-deals"]')?.getAttribute('aria-pressed'), 'true');
+  const board = document.querySelector('[data-testid="pipeline-view"]')!;
+  assert.ok(board.classList.contains('overflow-x-auto'));
+  assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"] [aria-label]')?.getAttribute('aria-label'), 'Opportunities: 1');
+  assert.match(board.getAttribute('style') ?? '', /minmax\(170px,\s*1fr\)/);
+  assert.equal(document.querySelector('[data-testid="pipeline-card-deal"]')?.getAttribute('draggable'), 'true');
+  assert.equal(state.writes, 0);
+});
+
 test('Pipeline uses the same deal definition as KPI/List and preserves Realtor qualification stages', () => {
   reset();
   const document = render('pipeline');
