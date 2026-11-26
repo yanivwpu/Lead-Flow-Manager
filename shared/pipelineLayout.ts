@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Stable CRM identifiers. These are used by lead scoring, integrations and automations.
-// Display labels and column order are presentation settings, never new CRM stage values.
+// Additional board columns have stable separate IDs and map to one of these CRM values.
 export const PIPELINE_STAGE_IDS = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
 export type PipelineStageId = typeof PIPELINE_STAGE_IDS[number];
 

@@ -2,6 +2,7 @@ import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inbo
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
 import { pipelineLayoutSchema, isCustomPipelineStageId } from "@shared/pipelineLayout";
+import { isSalesOpportunity } from "@shared/followUpTasks";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
@@ -651,6 +652,7 @@ export function registerContactRoutes(app: Express): void {
       const { pipelineLayoutMove, ...contactFields } = parsedPatch.data;
       const body: Record<string, any> = { ...contactFields };
       if (pipelineLayoutMove) {
+        if (!isSalesOpportunity(contact)) return res.status(409).json({ error: "Contact is not an existing sales opportunity" });
         if (Object.keys(body).length || pipelineLayoutMove.workspaceId !== inboxWorkspaceId(req)) return res.status(409).json({ error: "Workspace or pipeline changed" });
         const [layout] = await db.select().from(workspacePipelineLayouts).where(eq(workspacePipelineLayouts.workspaceId, inboxWorkspaceId(req))).limit(1);
         const column = layout && layout.revision === pipelineLayoutMove.revision && pipelineLayoutSchema.parse(layout.stages).find(stage => stage.id === pipelineLayoutMove.columnId);

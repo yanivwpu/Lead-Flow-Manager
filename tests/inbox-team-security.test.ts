@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
@@ -50,6 +51,8 @@ async function fixture() {
     });
     await pg.exec(`CREATE TABLE ${quote(config.name)} (${columns.join(",")})`);
   }
+  // Exercise the actual additive migration, including the canonical-transition trigger.
+  await pg.exec(readFileSync("migrations/20261126_custom_pipeline_stages.sql", "utf8"));
   const { db } = await import("../drizzle/db");
   const original = new Map<string, any>();
   for (const method of ["select", "selectDistinct", "insert", "update", "delete", "execute", "transaction"]) {
@@ -225,8 +228,50 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       const reset = await f.request("owner-a", path, "PATCH", { ...payload, revision: 1, stages: defaultPipelineLayout() }, owner.headers);
       assert.equal(reset.status, 200);
       assert.equal((await reset.json()).revision, 2);
-      const contact = await (await f.request("owner-a", "/api/contacts/contact-a")).json();
+      const draftId = "custom:" + randomUUID();
+      const draft = [...defaultPipelineLayout(), { id: draftId, label: "Design and measurements", canonicalStage: "Proposal" }];
+      const configured = await f.request("owner-a", path, "PATCH", { ...payload, revision: 2, stages: draft }, owner.headers);
+      assert.equal(configured.status, 200);
+      const configuration = await configured.json();
+      const id = configuration.stages[5].id;
+      assert.notEqual(id, draftId);
+      assert.equal(configuration.revision, 3);
+      const contactPath = "/api/contacts/contact-a";
+      const move = { pipelineLayoutMove: { workspaceId: "owner-a", revision: 3, columnId: id } };
+      assert.equal((await f.request("agent", contactPath, "PATCH", move)).status, 409, "only existing opportunities are board-movable");
+      assert.equal((await f.request("owner-a", contactPath, "PATCH", { pipelineStage: "Proposal" })).status, 200);
+      assert.equal((await f.request("owner-b", contactPath, "PATCH", move)).status, 404);
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineLayoutMove: { ...move.pipelineLayoutMove, workspaceId: "owner-b" } })).status, 409);
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineLayoutMove: { ...move.pipelineLayoutMove, revision: 2 } })).status, 409);
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineLayoutMove: { ...move.pipelineLayoutMove, columnId: "custom:" + randomUUID() } })).status, 409);
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineCustomStageId: id })).status, 400);
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineStage: id })).status, 400);
+      const moved = await f.request("agent", contactPath, "PATCH", move);
+      assert.equal(moved.status, 200);
+      const movedContact = await moved.json();
+      assert.equal(movedContact.pipelineStage, "Proposal");
+      assert.equal(movedContact.pipelineCustomStageId, id);
+      const inbox = await (await f.request("agent", "/api/inbox")).json();
+      assert.equal(inbox.find((row: any) => row.contact.id === "contact-a").contact.pipelineCustomStageId, id);
+      // A direct workflow/provider stage update clears a stale custom assignment.
+      await f.database.update(schema.contacts).set({ pipelineStage: "Negotiation" }).where(eq(schema.contacts.id, "contact-a"));
+      assert.equal((await f.storage.getContact("contact-a"))?.pipelineCustomStageId, null);
+      assert.equal((await f.request("agent", contactPath, "PATCH", move)).status, 200);
+      const remapped = configuration.stages.map((stage: any) => stage.id === id ? { ...stage, canonicalStage: "Closed" } : stage);
+      assert.equal((await f.request("owner-a", path, "PATCH", { ...payload, revision: 3, stages: remapped }, owner.headers)).status, 400);
+      // Removing the custom column preserves the contact's canonical stage. Old IDs cannot be reused.
+      const removed = await f.request("owner-a", path, "PATCH", { ...payload, revision: 3, stages: defaultPipelineLayout() }, owner.headers);
+      assert.equal(removed.status, 200);
+      assert.equal((await f.storage.getContact("contact-a"))?.pipelineStage, "Proposal");
+      assert.equal((await f.request("agent", contactPath, "PATCH", move)).status, 409);
+      const recreated = await f.request("owner-a", path, "PATCH", { ...payload, revision: 4, stages: configuration.stages }, owner.headers);
+      assert.equal(recreated.status, 200);
+      assert.notEqual((await recreated.json()).stages[5].id, id);
+      assert.equal((await f.request("owner-a", path, "PATCH", { ...payload, revision: 5, stages: defaultPipelineLayout() }, owner.headers)).status, 200);
+      assert.equal((await f.request("owner-a", contactPath, "PATCH", { pipelineStage: "Lead" })).status, 200);
+      const contact = await (await f.request("owner-a", contactPath)).json();
       assert.equal(contact.contact.pipelineStage, "Lead");
+      assert.equal(contact.contact.pipelineCustomStageId, null);
     });
     await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
       const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
