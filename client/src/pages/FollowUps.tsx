@@ -725,7 +725,7 @@ export function FollowUps() {
     },
     onSuccess: async (_result, variables) => {
       await invalidateAll();
-      toast({ title: t(variables.action === "dismiss" ? "followups.recommendationDismissed" : "followups.conversationResolved") });
+      toast({ title: variables.action === "dismiss" ? t("followups.recommendationDismissed") : t("followups.conversationResolved") });
     },
     onError: () => { void invalidateAll(); toast({ title: t("followups.replyActionFailed"), variant: "destructive" }); },
   });
