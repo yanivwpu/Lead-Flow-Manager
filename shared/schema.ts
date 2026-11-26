@@ -3,6 +3,7 @@ import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean,
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { uuid } from "drizzle-orm/pg-core";
+import type { PipelineStageLayout } from "./pipelineLayout";
 
 // Subscription plan types
 export type SubscriptionPlan = 'free' | 'starter' | 'pro';
@@ -229,6 +230,14 @@ export const users = pgTable("users", {
     .on(t.shopifyShop)
     .where(sql`${t.shopifyShop} IS NOT NULL`),
 }));
+
+/** Workspace-scoped Follow-ups presentation settings. Not CRM stage values. */
+export const workspacePipelineLayouts = pgTable("workspace_pipeline_layouts", {
+  workspaceId: varchar("workspace_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  stages: jsonb("stages").$type<PipelineStageLayout[]>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [check("workspace_pipeline_layouts_revision_check", sql`${table.revision} > 0`)]);
 
 /** Hashed, single-use email verification tokens for public signup. */
 /** Server-only encrypted Shopify pairs; users.shopifyAccessToken holds an opaque installation reference.

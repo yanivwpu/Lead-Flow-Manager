@@ -52,6 +52,9 @@ on:
       - 'server/routes/inboxWorkspace.ts'
       - 'server/storage.ts'
       - 'server/index.ts'
+      - 'server/csrfProtection.ts'
+      - 'server/routes/pipelineLayout.ts'
+      - 'tests/csrf-protection.test.ts'
       - 'shared/schema.ts'
       - 'tests/inbox-team-security.test.ts'
       - 'tests/inbox-content-rate-limit.test.ts'
@@ -89,7 +92,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Session-backed HTTP, WebSocket and SQL authorization regressions
-        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts tests/team-invitation-return.test.ts tests/inbox-team-ownership.test.ts tests/inbox-reply-conflict.test.ts
+        run: node --import tsx --test tests/inbox-team-security.test.ts tests/csrf-protection.test.ts tests/inbox-content-rate-limit.test.ts tests/team-invitation-return.test.ts tests/inbox-team-ownership.test.ts tests/inbox-reply-conflict.test.ts
       - name: PostgreSQL cross-process concurrency and authenticated presence
         env:
           TEST_DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:5432/codex_inbox

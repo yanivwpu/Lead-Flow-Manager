@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { defaultPipelineLayout, orderedPipelineStages, pipelineLayoutPatchSchema, pipelineLayoutSchema, pipelineStageDisplayLabel } from '../shared/pipelineLayout';
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasActionableInquiry,
   hasScheduledFollowUp, hasTask, isActiveDeal, isSalesOpportunity, prioritizeTasks,
@@ -194,4 +195,23 @@ test('pipeline search, channel, tags and assignment filter without modifying opp
   assert.deepEqual(ids({ search: 'Thanks' }), []);
   assert.deepEqual(ids({ search: 'not present' }), []);
   assert.equal(JSON.stringify(items), before);
+});
+
+test('pipeline layouts only rename and reorder stable stages and preserve observed industry stages', () => {
+  const layout = defaultPipelineLayout();
+  layout[2].label = 'Estimate sent';
+  const moved = [layout[2], layout[0], layout[1], layout[3], layout[4]];
+  assert.equal(pipelineLayoutSchema.safeParse(moved).success, true);
+  assert.deepEqual(orderedPipelineStages(moved, ['Proposal', 'Qualified (Warm)', 'Under Contract']), ['Proposal', 'Lead', 'Contacted', 'Negotiation', 'Closed', 'Qualified (Warm)', 'Under Contract']);
+  assert.equal(pipelineStageDisplayLabel(moved, 'Proposal'), 'Estimate sent');
+  assert.equal(pipelineStageDisplayLabel(moved, 'Qualified (Warm)'), 'Qualified (Warm)');
+  assert.equal(pipelineLayoutSchema.safeParse(moved.slice(1)).success, false);
+  assert.equal(pipelineLayoutSchema.safeParse([...moved.slice(0, 4), moved[0]]).success, false);
+  assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => ({ ...stage, label: 'Same' }))).success, false);
+  assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => ({ ...stage, label: ' ' }))).success, false);
+  assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => stage.id === 'Proposal' ? { ...stage, id: 'Estimate sent' } : stage)).success, false);
+  assert.equal(pipelineLayoutPatchSchema.safeParse({ workspaceId: 'owner', revision: 0, stages: moved, userId: 'foreign' }).success, false);
+  const [item] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal' } })]);
+  assert.equal(isActiveDeal(item), true);
+  assert.equal(item.pipelineStage, 'Proposal');
 });

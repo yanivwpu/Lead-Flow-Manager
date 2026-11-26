@@ -4,6 +4,7 @@ import { registerShopifyWebhookBodyParser } from "./shopifyWebhookBodyParser";
 import { registerShopifyPrivacyAlertReceiver } from "./shopifyPrivacyAlertEmail";
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
+import { csrfProtection } from "./csrfProtection";
 import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -325,6 +326,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   return globalUrlencodedParser(req, _res, next);
 });
 app.use(cookieParser());
+// Protect cookie-backed unsafe requests before any subsequent route handler.
+app.use(csrfProtection);
 
 // OIDC provider for LeadConnector SSO (must be before auth middleware)
 app.use(oidcRouter);

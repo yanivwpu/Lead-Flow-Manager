@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
+import cookieParser from "cookie-parser";
+import { csrfProtection } from "../server/csrfProtection";
 import session from "express-session";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -12,6 +14,7 @@ import { eq, inArray } from "drizzle-orm";
 import { WebSocket } from "ws";
 import { rateLimit } from "express-rate-limit";
 import * as schema from "../shared/schema";
+import { defaultPipelineLayout } from "../shared/pipelineLayout";
 
 // All database calls below use isolated in-memory PostgreSQL. No provider is invoked.
 process.env.DATABASE_URL ||= "postgresql://fixture:fixture@127.0.0.1:1/unused";
@@ -32,7 +35,7 @@ async function fixture() {
   for (const table of [schema.users, schema.teamMembers, schema.contacts, schema.conversations,
     schema.messages, schema.activityEvents, schema.channelSettings, schema.chats, schema.contactNotes,
     schema.prospectIntelligence, schema.prospectOutreachQueueItems, schema.campaignEnrollments,
-    schema.appointments, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults, schema.inboxSendAttempts, schema.inboxPresenceSessions]) {
+    schema.appointments, schema.workspacePipelineLayouts, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults, schema.inboxSendAttempts, schema.inboxPresenceSessions]) {
     const config = getTableConfig(table);
     const columns = config.columns.map(column => {
       let value = quote(column.name) + " " + column.getSQLType();
@@ -75,7 +78,9 @@ async function fixture() {
     await database.insert(schema.messages).values({ id: `message-${suffix}`, conversationId: `conv-${suffix}`, contactId: `contact-${suffix}`, userId: `owner-${suffix}`, direction: "inbound", content: `Private ${suffix}` });
     await database.insert(schema.emailMessageDetails).values({messageId:`message-${suffix}`,subject:"Private email",textBody:`Email ${suffix}`,fromAddress:"customer@example.com"});
   }
-  const app = express(); app.use(express.json());
+  const app = express(); app.use(express.json()); app.use(cookieParser());
+  // Match production middleware ordering; do not bypass CSRF in the fixture.
+  app.use(csrfProtection);
   const sessions = new session.MemoryStore();
   setupAuth(app, { store: sessions });
   // Test-only login creates genuine signed cookies and uses the production serializer/deserializer.
@@ -110,7 +115,7 @@ async function fixture() {
     if(method==="POST"&&body&&!body.sendAttemptId&&(path.match(/^\/api\/contacts\/[^/]+\/send$/)||path==="/api/inbox/templates/send")){
       const id=path.startsWith("/api/contacts/")?path.split("/")[3]:body.contactId;
       let state:any={revision:"0/-",aiEpoch:0};
-      if(id){const response=await fetch(origin+`/api/contacts/${id}/reply-state`,{method:"POST",headers:{Cookie:cookie,"Content-Type":"application/json"},body:JSON.stringify({channel:body.channel||"whatsapp"})});if(response.ok)state=await response.json();}
+      if(id){const response=await fetch(origin+`/api/contacts/${id}/reply-state`,{method:"POST",headers:{Cookie:cookie,Origin:origin,"Content-Type":"application/json"},body:JSON.stringify({channel:body.channel||"whatsapp"})});if(response.ok)state=await response.json();}
       body={...body,sendAttemptId:randomUUID(),replyRevision:state.revision,aiEpoch:state.aiEpoch,...(body.channel!=="email"&&state.conversationId?{conversationId:state.conversationId}:{})};
     }
     return fetch(origin + path, { method, headers: { Cookie: cookie, Origin: origin, "Content-Type": "application/json", ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -154,6 +159,74 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       }
       assert.equal((await f.request("owner-a", "/api/contacts/contact-a/details")).status, 200);
       assert.equal((await f.request("agent", "/api/contacts/contact-a/details")).status, 200);
+    });
+    await t.test("shared CSRF guard rejects foreign and missing browser provenance before contact writes", async () => {
+      const path = "/api/contacts/contact-a";
+      const cookie = f.cookies.get("owner-a") ?? await f.login("owner-a");
+      const before = await f.storage.getContact("contact-a");
+      for (const headers of [
+        { Origin: "https://foreign.example" },
+        { "Sec-Fetch-Site": "cross-site", Origin: f.origin },
+        {},
+      ] as Record<string, string>[]) {
+        const response = await fetch(f.origin + path, {
+          method: "PATCH", headers: { Cookie: cookie, "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ notes: "Must not be persisted" }),
+        });
+        assert.equal(response.status, 403);
+        assert.equal((await response.json()).code, "CSRF_INVALID");
+      }
+      const after = await f.storage.getContact("contact-a");
+      assert.equal(after?.notes, before?.notes);
+    });
+    await t.test("pipeline configuration is workspace scoped, admin-only, CSRF protected and revision guarded", async () => {
+      const path = "/api/inbox/pipeline-layout";
+      assert.equal((await fetch(f.origin + path)).status, 401);
+      async function editor(actor: string) {
+        const result = await f.request(actor, path);
+        assert.equal(result.status, 200);
+        const cookie = result.headers.get("set-cookie")?.match(/(?:^|,\s*)(pipelineCsrfToken=[a-f0-9]{64})/)?.[1];
+        const layout = await result.json();
+        assert.match(layout.csrfToken, /^[a-f0-9]{64}$/);
+        assert.ok(cookie);
+        return { layout, headers: { Cookie: f.cookies.get(actor) + "; " + cookie, "X-CSRF-Token": layout.csrfToken } };
+      }
+      const owner = await editor("owner-a");
+      const initial = owner.layout;
+      assert.equal(initial.workspaceId, "owner-a");
+      assert.equal(initial.revision, 0);
+      assert.deepEqual(initial.stages, defaultPipelineLayout());
+      const admin = await editor("admin");
+      assert.notEqual(admin.layout.csrfToken, owner.layout.csrfToken);
+      const stages = defaultPipelineLayout();
+      stages[2].label = "Estimate sent";
+      const payload = { workspaceId: "owner-a", revision: 0, stages };
+      assert.equal((await f.request("agent", path, "PATCH", payload)).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload)).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload, { ...admin.headers, "X-CSRF-Token": "0".repeat(64) })).status, 403);
+      const stolen = { Cookie: f.cookies.get("admin") + "; pipelineCsrfToken=" + owner.layout.csrfToken, "X-CSRF-Token": owner.layout.csrfToken };
+      assert.equal((await f.request("admin", path, "PATCH", payload, stolen)).status, 403);
+      assert.equal((await f.request("admin", path, "GET", undefined, { Origin: "https://foreign.example" })).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload, { ...admin.headers, Origin: "https://foreign.example" })).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", payload, { ...admin.headers, "Sec-Fetch-Site": "cross-site" })).status, 403);
+      assert.equal((await f.request("admin", path, "PATCH", { ...payload, workspaceId: "owner-b" }, admin.headers)).status, 409);
+      assert.equal((await f.request("admin", path, "PATCH", { ...payload, stages: stages.slice(1) }, admin.headers)).status, 400);
+      const saved = await f.request("admin", path, "PATCH", payload, admin.headers);
+      assert.equal(saved.status, 200);
+      assert.equal((await saved.json()).revision, 1);
+      const shared = await (await f.request("agent", path)).json();
+      assert.equal(shared.canEdit, false);
+      assert.equal(shared.csrfToken, undefined);
+      assert.equal(shared.stages[2].label, "Estimate sent");
+      assert.equal((await f.request("owner-a", path, "PATCH", payload, owner.headers)).status, 409);
+      const foreign = await editor("owner-b");
+      assert.equal(foreign.layout.revision, 0);
+      assert.deepEqual(foreign.layout.stages, defaultPipelineLayout());
+      const reset = await f.request("owner-a", path, "PATCH", { ...payload, revision: 1, stages: defaultPipelineLayout() }, owner.headers);
+      assert.equal(reset.status, 200);
+      assert.equal((await reset.json()).revision, 2);
+      const contact = await (await f.request("owner-a", "/api/contacts/contact-a")).json();
+      assert.equal(contact.contact.pipelineStage, "Lead");
     });
     await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
       const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
@@ -215,7 +288,7 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
     });
     await t.test("HTTP sends require a draft revision and reject stale or foreign reply context", async () => {
       const cookie=await f.login("agent");
-      const send=async(body:any)=>fetch(f.origin+"/api/contacts/contact-a/send",{method:"POST",headers:{Cookie:cookie,"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const send=async(body:any)=>fetch(f.origin+"/api/contacts/contact-a/send",{method:"POST",headers:{Cookie:cookie,Origin:f.origin,"Content-Type":"application/json"},body:JSON.stringify(body)});
       const missing=await send({content:"Unsynchronized reply",channel:"sms"});assert.equal(missing.status,428);assert.equal((await missing.json()).code,"reply_context_required");
       const stale=await send({content:"Preserved draft",channel:"sms",sendAttemptId:randomUUID(),replyRevision:"stale",conversationId:"conv-a"});assert.equal(stale.status,409);assert.equal((await stale.json()).code,"reply_conflict");
       const foreign=await send({content:"Wrong room",channel:"sms",sendAttemptId:randomUUID(),replyRevision:"0/-",conversationId:"conv-b"});assert.equal(foreign.status,404);
