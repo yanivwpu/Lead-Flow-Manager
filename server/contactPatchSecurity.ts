@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { insertContactSchema } from "@shared/schema";
+import { pipelineLayoutMoveSchema } from "@shared/pipelineLayout";
 
 // Browser CRM edits only. Ownership, immutable provider identities, source/provenance,
 // timestamps and server-recorded actors cannot be written through this endpoint.
@@ -9,5 +10,6 @@ export const contactPatchSchema = insertContactSchema.pick({
   customFields: true, primaryChannelOverride: true, automationsPaused: true,
   leadScore: true,
 }).partial().extend({
+  pipelineLayoutMove: pipelineLayoutMoveSchema.optional(),
   followUpDate: z.union([z.string().datetime({ offset: true }), z.date()]).nullable().optional(),
 }).strict();

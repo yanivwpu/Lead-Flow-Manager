@@ -8,7 +8,7 @@ import { agentInquiryRecommendation, isAgentInquiryThread } from './agent/agentP
 export type FollowUpInboxItem = {
   contact: {
     id: string; name: string; avatar?: string | null; email?: string | null;
-    tag: string; pipelineStage: string; notes?: string | null;
+    tag: string; pipelineStage: string; pipelineCustomStageId?: string | null; notes?: string | null;
     followUp?: string | null; followUpDate?: string | Date | null;
     source?: string | null; sourceDetails?: unknown; assignedTo?: string | null;
   };
@@ -27,7 +27,7 @@ export type FollowUpInboxItem = {
 export type FollowUpItem = {
   id: string; name: string; avatar: string; lastMessage: string; time: string;
   unread: number; tag: string; followUp: string | null; followUpDate: string | null;
-  notes: string; pipelineStage: string; needsReply: boolean; isOpportunity: boolean;
+  notes: string; pipelineStage: string; pipelineCustomStageId?: string | null; needsReply: boolean; isOpportunity: boolean;
   urgent: boolean; engaged: boolean;
   reviewRecommended?: string;
   channel?: string; assignedTo?: string | null;
@@ -109,7 +109,7 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
       unread: row.unreadCount, tag: contact.tag, followUp,
       reviewRecommended: agentInquiryRecommendation(contact),
       followUpDate: followUp ? validTaskDate(contact.followUpDate) : null,
-      notes: contact.notes || '', pipelineStage: contact.pipelineStage,
+      notes: contact.notes || '', pipelineStage: contact.pipelineStage, pipelineCustomStageId: contact.pipelineCustomStageId,
       needsReply, isOpportunity: isSalesOpportunity(contact),
       urgent: /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(followUp || '') ||
         (needsReply && /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(row.conversation?.lastMessagePreview || row.lastMessage)),
