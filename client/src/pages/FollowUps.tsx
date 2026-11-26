@@ -59,23 +59,23 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3 mb-6" data-testid="kpi-header">
+    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 mb-5" data-testid="kpi-header">
       {kpis.map(kpi => (
         <button 
           key={kpi.label}
           onClick={() => handleClick(kpi.filterKey)}
           className={cn(
-            "rounded-xl border p-3 md:p-4 text-left transition-all cursor-pointer hover:shadow-md",
-            kpi.bg,
-            activeFilter === kpi.filterKey ? kpi.activeBorder : kpi.border
+            "min-w-0 rounded-xl border bg-white p-3 text-start shadow-sm transition-colors hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+            activeFilter === kpi.filterKey ? "border-emerald-500 ring-1 ring-emerald-500" : "border-slate-200"
           )}
+          aria-pressed={activeFilter === kpi.filterKey}
           data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
         >
           <div className="flex items-center gap-2 mb-1">
-            <kpi.icon className={cn("h-4 w-4", kpi.color)} />
-            <span className="text-xs md:text-sm font-medium text-gray-600">{kpi.label}</span>
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", kpi.bg, kpi.color)}><kpi.icon className="h-4 w-4" /></span>
+            <span className="text-xs font-medium text-slate-600">{kpi.label}</span>
           </div>
-          <p className={cn("text-xl md:text-2xl font-bold", kpi.color)}>{kpi.value}</p>
+          <p className={cn("text-2xl font-semibold tabular-nums", kpi.color)}>{kpi.value}</p>
         </button>
       ))}
     </div>
@@ -124,12 +124,12 @@ function TaskListItem({
   
   return (
     <div 
-      className="group bg-white border border-gray-200 rounded-xl p-4 flex items-center hover:shadow-md transition-all hover:border-brand-green/30 cursor-pointer"
+      className="group bg-white border border-slate-200 rounded-xl p-3.5 md:p-4 flex items-center shadow-sm hover:shadow-md transition-shadow hover:border-brand-green/40 cursor-pointer"
       onClick={() => onClick(chat.id)}
       data-testid={`task-item-${chat.id}`}
     >
       {hasTask(chat) && !chat.isAppointment && !chat.reviewRecommended && <button
-        className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white mr-4 shrink-0 transition-colors flex items-center justify-center"
+        className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white me-3 shrink-0 transition-colors flex items-center justify-center"
         onClick={(e) => onMarkDone(e, chat.id)}
         disabled={isPending}
         data-testid={`button-mark-done-${chat.id}`}
@@ -149,7 +149,7 @@ function TaskListItem({
           </span>
           {status && <StatusTag status={status} />}
           {needsReply && (
-            <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-medium" data-testid={`tag-unreplied-${chat.id}`}>
+            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium" data-testid={`tag-unreplied-${chat.id}`}>
               Needs Reply
             </span>
           )}
@@ -157,7 +157,7 @@ function TaskListItem({
         <p className="text-sm text-gray-600 mb-1">
           {chat.reviewRecommended || (hasTask(chat) ? `Follow up: ${chat.followUp}` : needsReply ? 'Reply to customer inquiry' : `Sales opportunity · ${chat.pipelineStage}`)}
           {chat.followUpDate && (
-            <span className="text-gray-400 ml-2">
+            <span className="text-slate-500 ms-2">
               ({format(new Date(chat.followUpDate), 'MMM d, yyyy')})
             </span>
           )}
@@ -172,9 +172,9 @@ function TaskListItem({
         )}
       </div>
 
-      {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ml-3 shrink-0"
+      {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ms-3 shrink-0"
         onClick={(event) => { event.stopPropagation(); onSetReminder(chat); }}>Set Reminder</Button>
-        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ml-4" data-testid={`icon-arrow-${chat.id}`} />}
+        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ms-3 shrink-0 rtl:rotate-180" data-testid={`icon-arrow-${chat.id}`} />}
     </div>
   );
 }
@@ -202,35 +202,37 @@ function PipelineCard({
       onDragEnd={onDragEnd}
       onClick={() => onClick(chat.id)}
       className={cn(
-        "bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/30",
+        "bg-white border border-slate-200 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-shadow hover:border-brand-green/40",
         isDragging && "opacity-50"
       )}
       data-testid={`pipeline-card-${chat.id}`}
     >
-      <div className="font-semibold text-gray-900 text-sm mb-1 truncate" data-testid={`pipeline-contact-${chat.id}`}>
-        {chat.name}
+      <div className="flex min-w-0 items-center gap-2 mb-2">
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">{chat.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "?"}</span>
+        <div className="min-w-0 flex-1 font-semibold text-slate-900 text-sm truncate" data-testid={`pipeline-contact-${chat.id}`}>{chat.name}</div>
+        <span aria-hidden="true" className="hidden md:block text-slate-400 cursor-grab text-base leading-none">⠿</span>
       </div>
-      <p className="text-xs text-gray-500 truncate mb-2" data-testid={`pipeline-lastmessage-${chat.id}`}>
+      <p className="text-xs text-slate-600 line-clamp-2 break-words mb-3" data-testid={`pipeline-lastmessage-${chat.id}`}>
         {chat.lastMessage}
       </p>
       <div className="flex flex-wrap gap-1">
         {needsReply && (
-          <span className="text-[10px] bg-green-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
             Needs Reply
           </span>
         )}
         {status === 'overdue' && (
-          <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
+          <span className="text-xs bg-red-50 text-red-700 px-2 py-0.5 rounded-full font-medium">
             Overdue
           </span>
         )}
         {status === 'today' && (
-          <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-medium">
+          <span className="text-xs bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full font-medium">
             Today
           </span>
         )}
         {chat.followUpDate && status === 'upcoming' && (
-          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
             {format(new Date(chat.followUpDate), 'MMM d')}
           </span>
         )}
@@ -290,12 +292,12 @@ function PipelineView({
     setDraggedChat(null);
   };
 
-  const stageColors: Record<string, { bg: string; border: string; header: string }> = {
-    'Lead': { bg: 'bg-gray-50', border: 'border-gray-300', header: 'bg-gray-100' },
-    'Contacted': { bg: 'bg-blue-50', border: 'border-blue-300', header: 'bg-blue-100' },
-    'Proposal': { bg: 'bg-purple-50', border: 'border-purple-300', header: 'bg-purple-100' },
-    'Negotiation': { bg: 'bg-amber-50', border: 'border-amber-300', header: 'bg-amber-100' },
-    'Closed': { bg: 'bg-green-50', border: 'border-green-300', header: 'bg-green-100' },
+  const stageColors: Record<string, string> = {
+    'Lead': 'bg-slate-400',
+    'Contacted': 'bg-blue-500',
+    'Proposal': 'bg-violet-500',
+    'Negotiation': 'bg-amber-500',
+    'Closed': 'bg-emerald-600',
   };
 
   const emptyStateMessages: Record<string, string> = {
@@ -307,7 +309,7 @@ function PipelineView({
   };
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4" data-testid="pipeline-view">
+    <div className="grid grid-flow-col items-stretch gap-3 w-full min-w-0 overflow-x-auto pb-3" style={{ gridAutoColumns: isMobile ? "minmax(240px, 1fr)" : "minmax(170px, 1fr)" }} data-testid="pipeline-view">
       {[...chatsByStage.keys()].map(stage => {
         const stageChats = chatsByStage.get(stage) || [];
         const colors = stageColors[stage] || stageColors['Lead'];
@@ -316,24 +318,21 @@ function PipelineView({
           <div
             key={stage}
             className={cn(
-              "flex-shrink-0 w-[280px] md:w-[300px] rounded-xl border",
-              colors.bg,
-              colors.border,
-              draggedChat && draggedChat.pipelineStage !== stage && "ring-2 ring-brand-green/30"
+              "min-w-0 min-h-[360px] rounded-xl border border-slate-200 bg-slate-100/80 flex flex-col",
+              draggedChat && draggedChat.pipelineStage !== stage && "ring-2 ring-inset ring-brand-green/30"
             )}
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, stage)}
             data-testid={`pipeline-column-${stage.toLowerCase()}`}
           >
-            <div className={cn("p-3 rounded-t-xl border-b", colors.header, colors.border)}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">{stage}</h3>
-                  <p className="text-xs text-gray-500">{stageChats.length} opportunit{stageChats.length !== 1 ? 'ies' : 'y'}</p>
-                </div>
+            <div className="p-3 border-b border-slate-200">
+              <div className={cn("h-1 rounded-full mb-3", colors)} />
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="min-w-0 break-words font-semibold text-slate-900 text-sm">{stage}</h3>
+                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={`${stageChats.length} opportunities`}>{stageChats.length}</span>
               </div>
             </div>
-            <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
+            <div className="flex-1 p-2 space-y-2 max-h-[500px] overflow-y-auto">
               {stageChats.map(chat => (
                 <PipelineCard
                   key={chat.id}
@@ -345,8 +344,8 @@ function PipelineView({
                 />
               ))}
               {stageChats.length === 0 && (
-                <div className="text-center py-8 text-gray-400 text-sm italic">
-                  {emptyStateMessages[stage]}
+                <div className="text-center p-4 mt-1 rounded-lg border border-dashed border-slate-300 text-slate-500 text-xs leading-relaxed">
+                  {emptyStateMessages[stage] || "No opportunities in this stage"}
                 </div>
               )}
             </div>
@@ -425,11 +424,11 @@ function TaskCalendarView({
   const maxTasksToShow = isMobile ? 2 : 3;
   
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-testid="calendar-view">
-      <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" data-testid="calendar-view">
+      <div className="flex items-center justify-between p-3 md:p-4 border-b border-slate-200">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors"
           aria-label={t("calendar.previousMonth")}
           data-testid="button-prev-month"
         >
@@ -440,7 +439,7 @@ function TaskCalendarView({
         </h3>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors"
           aria-label={t("calendar.nextMonth")}
           data-testid="button-next-month"
         >
@@ -450,7 +449,7 @@ function TaskCalendarView({
       
       <div className="grid grid-cols-7">
         {dayNames.map((day, idx) => (
-          <div key={idx} className="p-1 md:p-2 text-center text-[10px] md:text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50">
+          <div key={idx} className="p-2 text-center text-xs font-medium text-slate-600 border-b border-slate-200 bg-slate-50">
             {day}
           </div>
         ))}
@@ -468,9 +467,9 @@ function TaskCalendarView({
             <div
               key={idx}
               className={cn(
-                "min-h-[60px] md:min-h-[100px] p-0.5 md:p-1 border-b border-r border-gray-100 transition-colors",
-                !isCurrentMonth && "bg-gray-50",
-                isDayToday && "bg-amber-50",
+                "min-w-0 min-h-[72px] md:min-h-[116px] p-1 md:p-2 border-b border-e border-slate-100 transition-colors",
+                !isCurrentMonth && "bg-slate-50",
+                isDayToday && "bg-emerald-50/60",
                 !isMobile && draggedTask && "hover:bg-green-50"
               )}
               onDragOver={handleDragOver}
@@ -478,9 +477,9 @@ function TaskCalendarView({
               data-testid={`calendar-day-${dateKey}`}
             >
               <div className={cn(
-                "text-[10px] md:text-xs font-medium mb-0.5 md:mb-1 text-right pr-0.5 md:pr-1",
+                "text-xs font-medium mb-1 text-end text-slate-700",
                 !isCurrentMonth && "text-gray-400",
-                isDayToday && "text-amber-600",
+                isDayToday && "text-emerald-800 font-bold",
                 isPastDay && isCurrentMonth && "text-gray-500"
               )}>
                 {format(day, 'd')}
@@ -499,10 +498,10 @@ function TaskCalendarView({
                         onTaskClick(task.id);
                       }}
                       className={cn(
-                        "text-[9px] md:text-xs p-0.5 md:p-1 rounded cursor-pointer truncate transition-all hover:shadow-sm",
+                        "text-[10px] md:text-xs px-1 py-1 md:px-2 rounded-md cursor-pointer truncate transition-colors",
                         status === 'overdue' && "bg-red-100 text-red-700 hover:bg-red-200",
                         status === 'today' && "bg-amber-100 text-amber-700 hover:bg-amber-200",
-                        status === 'upcoming' && "bg-blue-100 text-blue-700 hover:bg-blue-200",
+                        status === 'upcoming' && "bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
                         !status && "bg-gray-100 text-gray-700 hover:bg-gray-200",
                         draggedTask?.id === task.id && "opacity-50"
                       )}
@@ -715,8 +714,8 @@ export function FollowUps() {
   }
 
   return (
-    <div className="flex-1 h-full bg-white flex flex-col">
-      <div className="p-4 md:p-8 pb-4 border-b border-gray-100">
+    <div className="flex-1 min-w-0 h-full bg-slate-50 flex flex-col">
+      <div className="shrink-0 bg-white px-4 py-4 md:px-6 md:py-5 border-b border-slate-200">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">Tasks</h1>
@@ -724,15 +723,16 @@ export function FollowUps() {
             <p className="text-xs text-gray-400 mt-1">Contact task and deal counts reflect the recent inbox.</p>
           </div>
           
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg self-start md:self-auto" data-testid="view-toggle">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 border border-slate-200 p-1 rounded-xl self-start md:self-auto" data-testid="view-toggle">
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 md:gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                 viewMode === 'list' 
-                  ? "bg-white text-gray-900 shadow-sm" 
+                  ? "bg-brand-green text-white shadow-sm" 
                   : "text-gray-600 hover:text-gray-900"
               )}
+              aria-pressed={viewMode === 'list'}
               data-testid="toggle-list-view"
             >
               <List className="h-3.5 w-3.5 md:h-4 md:w-4" />
@@ -741,11 +741,12 @@ export function FollowUps() {
             <button
               onClick={() => setViewMode('calendar')}
               className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 md:gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                 viewMode === 'calendar' 
-                  ? "bg-white text-gray-900 shadow-sm" 
+                  ? "bg-brand-green text-white shadow-sm" 
                   : "text-gray-600 hover:text-gray-900"
               )}
+              aria-pressed={viewMode === 'calendar'}
               data-testid="toggle-calendar-view"
             >
               <CalendarIcon className="h-3.5 w-3.5 md:h-4 md:w-4" />
@@ -754,11 +755,12 @@ export function FollowUps() {
             <button
               onClick={() => setViewMode('pipeline')}
               className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 md:gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                 viewMode === 'pipeline' 
-                  ? "bg-white text-gray-900 shadow-sm" 
+                  ? "bg-brand-green text-white shadow-sm" 
                   : "text-gray-600 hover:text-gray-900"
               )}
+              aria-pressed={viewMode === 'pipeline'}
               data-testid="toggle-pipeline-view"
             >
               <Kanban className="h-3.5 w-3.5 md:h-4 md:w-4" />
@@ -768,7 +770,7 @@ export function FollowUps() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-4 md:p-6">
         <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
         <Dialog open={!!reminder} onOpenChange={(open) => { if (!open) setReminder(undefined); }}>
           <DialogContent aria-describedby={undefined}>
@@ -788,7 +790,7 @@ export function FollowUps() {
         {viewMode === "list" && !kpiFilter && <ShopifyOrderSupportTasks />}
         
         {kpiFilter && (
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
             <span className="text-sm text-gray-600">
               Filtering by: <span className="font-semibold">
                 {{
@@ -820,11 +822,11 @@ export function FollowUps() {
         )}
 
         {viewMode === 'list' ? (
-          <div className={cn("grid items-start gap-6", savedTasks.length > 0 && recommendedTasks.length > 0
+          <div className={cn("grid items-start gap-4 md:gap-5", savedTasks.length > 0 && recommendedTasks.length > 0
             ? "lg:grid-cols-2" : "max-w-3xl")} data-testid="follow-up-list-columns">
             {savedTasks.length > 0 && (
-              <section className="min-w-0 space-y-3" aria-labelledby="follow-up-tasks-heading">
-                <h2 id="follow-up-tasks-heading" className="text-sm font-semibold text-gray-700 uppercase tracking-wider" data-testid="section-all-tasks">
+              <section className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-slate-100/60 p-3 md:p-4" aria-labelledby="follow-up-tasks-heading">
+                <h2 id="follow-up-tasks-heading" className="text-base font-semibold text-slate-900" data-testid="section-all-tasks">
                   {kpiFilter ? 'Matching Tasks' : 'Follow-up Tasks'}
                 </h2>
                 {savedTasks.map(chat => (
@@ -836,10 +838,10 @@ export function FollowUps() {
             )}
 
             {recommendedTasks.length > 0 && (
-              <section className="min-w-0" aria-labelledby="recommended-tasks-heading">
-                <div className="flex items-center gap-2 mb-4">
+              <section className="min-w-0 rounded-xl border border-slate-200 bg-slate-100/60 p-3 md:p-4" aria-labelledby="recommended-tasks-heading">
+                <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="h-4 w-4 text-purple-500" />
-                  <h2 id="recommended-tasks-heading" tabIndex={-1} className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
+                  <h2 id="recommended-tasks-heading" tabIndex={-1} className="text-base font-semibold text-slate-900" data-testid="section-recommended">
                     Recommended Tasks
                   </h2>
                 </div>
@@ -855,7 +857,7 @@ export function FollowUps() {
                 <div className="space-y-3">
                   {recommendedTasks.map(chat => (
                     <div key={chat.id} className="relative">
-                      <div className="absolute -left-2 top-4 w-1 h-8 bg-gradient-to-b from-purple-500 to-purple-300 rounded-full" />
+                      <div className="absolute start-0 top-4 w-1 h-8 bg-violet-400 rounded-e-full" />
                       <TaskListItem
                         chat={chat}
                         onMarkDone={handleMarkDone}
@@ -883,10 +885,10 @@ export function FollowUps() {
             )}
 
             {followUps.length === 0 && (
-              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              <div className="text-center py-12 px-4 bg-white rounded-xl border border-dashed border-slate-300">
                 <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">No matching tasks</p>
-                <p className="text-sm text-gray-400 mt-1">No actionable contact tasks in the recent inbox for this view.</p>
+                <p className="text-slate-900 font-semibold">No matching tasks</p>
+                <p className="text-sm text-slate-600 mt-1">Follow-ups and customer inquiries from your recent inbox will appear here when they need attention.</p>
                 <Button className="mt-4 bg-brand-green hover:bg-emerald-700" data-testid="button-view-chats"
                   onClick={() => setLocation('/app/inbox')}>
                   Go to Inbox
