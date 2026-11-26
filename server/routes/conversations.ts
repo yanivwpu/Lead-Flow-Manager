@@ -9,6 +9,10 @@ import { computeConversationReplyWindowStatus } from "@shared/conversationReplyW
 import { waMetaWebhookFailureHint } from "../waMetaDeliveryHints";
 import { deleteAnonymousInboxConversationSafely } from "../conversationDeleteService";
 import { storage } from "../storage";
+import { db } from "../../drizzle/db";
+import { conversations } from "@shared/schema";
+import { and, eq, notInArray } from "drizzle-orm";
+import { z } from "zod";
 
 /** Include Postgres `code` / `detail` when present (node-postgres / Drizzle). */
 function dbErrorPayload(err: unknown): {
@@ -240,6 +244,39 @@ export function registerConversationRoutes(app: Express): void {
     } catch (error) {
       console.error("Error updating conversation:", error);
       res.status(500).json({ error: "Failed to update conversation" });
+    }
+  });
+
+  // A dismissal changes only the current reply recommendation, not the contact,
+  // unread count, Inbox visibility, manual reminders, or conversation status.
+  app.post("/api/conversations/:id/reply-recommendation", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
+    try {
+      const input = z.object({
+        action: z.enum(["dismiss", "resolve"]),
+        messageAt: z.string().datetime({ precision: 3 }),
+      }).strict().safeParse(req.body);
+      if (!input.success) return res.status(400).json({ error: "Invalid recommendation action" });
+      const workspaceId = inboxWorkspaceId(req);
+      const conversation = await storage.getConversation(req.params.id);
+      if (!conversation || conversation.userId !== workspaceId) return res.status(404).json({ error: "Not found" });
+      const messageAt = new Date(input.data.messageAt);
+      if (!Number.isFinite(messageAt.getTime())) return res.status(400).json({ error: "Invalid message timestamp" });
+      // Compare-and-swap: a stale card must not resolve or dismiss a new message.
+      const [updated] = await db.update(conversations).set({
+        ...(input.data.action === "resolve" ? { status: "resolved" } : { dismissedReplyMessageAt: messageAt.toISOString() }),
+        updatedAt: new Date(),
+      }).where(and(
+        eq(conversations.id, conversation.id),
+        eq(conversations.userId, workspaceId),
+        eq(conversations.lastMessageAt, messageAt),
+        eq(conversations.lastMessageDirection, "inbound"),
+        notInArray(conversations.status, ["resolved", "closed"]),
+      )).returning({ id: conversations.id });
+      if (!updated) return res.status(409).json({ error: "Conversation changed; refresh before acting" });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Reply recommendation update failed:", error);
+      res.status(500).json({ error: "Could not update recommendation" });
     }
   });
 

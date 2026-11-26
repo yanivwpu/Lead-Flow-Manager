@@ -18,6 +18,7 @@ export type FollowUpInboxItem = {
     id?: string; channel?: string; status?: string | null; channelAccountId?: string | null;
     subject?: string | null; lastMessagePreview?: string | null;
     lastMessageDirection?: string | null;
+    dismissedReplyMessageAt?: string | null;
   } | null;
   channel?: string;
   lastMessage: string;
@@ -34,6 +35,7 @@ export type FollowUpItem = {
   reviewRecommended?: string;
   channel?: string; assignedTo?: string | null;
   conversationId?: string;
+  replyMessageAt?: string;
   appointmentId?: string; contactId?: string; appointmentType?: string; isAppointment?: boolean;
 };
 
@@ -122,6 +124,8 @@ export function hasStrongEmailInquiry(row: FollowUpInboxItem): boolean {
 
 export function hasActionableInquiry(row: FollowUpInboxItem): boolean {
   const conversation = row.conversation;
+  const messageAt = validTaskDate(row.lastMessageAt);
+  if (messageAt && conversation?.dismissedReplyMessageAt === messageAt) return false;
   if (isAgentInquiryThread(conversation)) return false;
   if (conversation?.lastMessageDirection !== 'inbound' ||
       ['resolved', 'closed'].includes(normalized(conversation.status || ''))) return false;
@@ -157,6 +161,7 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
         (needsReply && /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(row.conversation?.lastMessagePreview || row.lastMessage)),
       engaged: needsReply,
       conversationId: row.conversation?.id,
+      replyMessageAt: needsReply && time ? time : undefined,
       channel: (row.conversation?.channel || row.channel || '').trim().toLowerCase(),
       assignedTo: contact.assignedTo,
     };

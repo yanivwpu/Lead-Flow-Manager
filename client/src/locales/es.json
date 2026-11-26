@@ -292,6 +292,11 @@
     "saveAndOpen": "Guardar y Abrir"
   },
   "followups": {
+    "dismissRecommendation": "Descartar",
+    "markResolved": "Marcar como resuelta",
+    "recommendationDismissed": "Recomendación descartada",
+    "conversationResolved": "Conversación resuelta",
+    "replyActionFailed": "No se pudo actualizar la recomendación. Actualiza e inténtalo de nuevo.",
     "customStageMapping": "Etapa estándar del CRM",
     "removeCustomStage": "Eliminar",
     "addCustomStage": "Añadir etapa personalizada",

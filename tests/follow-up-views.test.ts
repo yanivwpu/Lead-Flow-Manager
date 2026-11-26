@@ -260,3 +260,19 @@ test('passive vendor email with legacy qualified stage is excluded from the boar
   assert.equal(board.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '1');
   assert.equal(state.writes, 0);
 });
+
+test('reply recommendations expose both actions without adding them to manual reminders', () => {
+  reset();
+  const page = render('list');
+  assert.ok(page.querySelector('[data-testid="dismiss-reply-inquiry"]'));
+  assert.ok(page.querySelector('[data-testid="resolve-reply-inquiry"]'));
+  assert.equal(page.querySelector('[data-testid="dismiss-reply-manual"]'), null);
+  const inquiry = state.rows.find(row => row.contact.id === 'inquiry');
+  inquiry.conversation.dismissedReplyMessageAt = inquiry.lastMessageAt;
+  const dismissed = render('list');
+  assert.equal(dismissed.querySelector('[data-testid="task-item-inquiry"]'), null);
+  assert.equal(dismissed.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '0');
+  assert.ok(dismissed.querySelector('[data-testid="task-item-manual"]'));
+  assert.equal(state.writes, 0);
+  reset();
+});

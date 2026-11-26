@@ -281,3 +281,20 @@ test('email marketing and informational copy stay out of follow-ups and the pipe
     assert.equal(buildFollowUpItems([manuallyAdded])[0].needsReply, false);
   }
 });
+
+test('dismissed recommendation is message-specific and preserves reminders and other threads', () => {
+  const first = row('Can you send a quote?');
+  const dismissed = { ...first, conversation: { ...first.conversation!, dismissedReplyMessageAt: now.toISOString() } };
+  assert.equal(hasActionableInquiry(dismissed), false);
+  assert.equal(buildFollowUpItems([dismissed])[0].needsReply, false);
+  assert.deepEqual(prioritizeTasks(buildFollowUpItems([dismissed]), now), []);
+  const next = { ...dismissed, lastMessageAt: new Date(now.getTime() + 1000).toISOString() };
+  assert.equal(hasActionableInquiry(next), true);
+  const sibling = { ...first, conversation: { ...first.conversation!, id: 'sibling' } };
+  const [representative] = buildFollowUpItems([dismissed, sibling]);
+  assert.equal(representative.conversationId, 'sibling');
+  assert.equal(representative.needsReply, true);
+  assert.equal(representative.replyMessageAt, now.toISOString());
+  const reminder = { ...dismissed, contact: { ...dismissed.contact, followUp: 'Call customer', followUpDate: now.toISOString() } };
+  assert.equal(hasScheduledFollowUp(buildFollowUpItems([reminder])[0]), true);
+});
