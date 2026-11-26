@@ -1648,6 +1648,9 @@ BEGIN
 END;
 $$;
 ` },
+  { tag: "20261126_reply_recommendation_dismissal", sql: `
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS dismissed_reply_message_at text;
+` },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

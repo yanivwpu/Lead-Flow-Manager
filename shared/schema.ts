@@ -1340,6 +1340,8 @@ export const conversations = pgTable("conversations", {
   lastMessageAt: timestamp("last_message_at"),
   lastMessagePreview: text("last_message_preview"),
   lastMessageDirection: text("last_message_direction"), // inbound, outbound
+  /** ISO timestamp of the inbound message whose reply recommendation was dismissed. */
+  dismissedReplyMessageAt: text("dismissed_reply_message_at"),
 
   /** Email thread subject (nullable for non-email channels). */
   subject: text("subject"),
@@ -1531,6 +1533,7 @@ export const insertContactSchema = createInsertSchema(contacts).omit({
 });
 
 export const insertConversationSchema = createInsertSchema(conversations).omit({
+  dismissedReplyMessageAt: true,
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -1557,7 +1560,7 @@ export type InsertContact = z.infer<typeof insertContactSchema>;
 // Older internal contact projections and fixtures may omit the additive board metadata.
 export type Contact = Omit<typeof contacts.$inferSelect, "pipelineCustomStageId"> & { pipelineCustomStageId?: string | null };
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
-export type Conversation = typeof conversations.$inferSelect;
+export type Conversation = Omit<typeof conversations.$inferSelect, "dismissedReplyMessageAt"> & { dismissedReplyMessageAt?: string | null };
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertActivityEvent = z.infer<typeof insertActivityEventSchema>;

@@ -273,6 +273,34 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal(contact.contact.pipelineStage, "Lead");
       assert.equal(contact.contact.pipelineCustomStageId, null);
     });
+    await t.test("reply recommendation actions preserve Inbox data and reject foreign or stale writes", async () => {
+      const id = "conv-recommendation";
+      const path = "/api/conversations/" + id + "/reply-recommendation";
+      const at = new Date("2026-11-26T12:00:00.000Z");
+      await f.database.insert(schema.conversations).values({ id, userId: "owner-a", contactId: "contact-a", channel: "email", status: "open", unreadCount: 3, lastMessageDirection: "inbound", lastMessageAt: at, lastMessagePreview: "Can you send a quote?" });
+      try {
+        const payload = { action: "dismiss", messageAt: at.toISOString() };
+        assert.equal((await fetch(f.origin + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).status, 401);
+        assert.equal((await f.request("owner-b", path, "POST", payload)).status, 404);
+        assert.equal((await f.request("agent", path, "POST", { ...payload, action: "delete" })).status, 400);
+        assert.equal((await f.request("agent", path, "POST", payload, { Origin: "https://foreign.example" })).status, 403);
+        assert.equal((await f.request("agent", path, "POST", payload)).status, 200);
+        const dismissed = await f.storage.getConversation(id);
+        assert.equal(dismissed?.dismissedReplyMessageAt, at.toISOString());
+        assert.equal(dismissed?.status, "open");
+        assert.equal(dismissed?.unreadCount, 3);
+        const next = new Date(at.getTime() + 1000);
+        await f.database.update(schema.conversations).set({ lastMessageAt: next }).where(eq(schema.conversations.id, id));
+        assert.equal((await f.request("agent", path, "POST", { ...payload, action: "resolve" })).status, 409);
+        assert.equal((await f.storage.getConversation(id))?.status, "open");
+        assert.equal((await f.request("agent", path, "POST", { action: "resolve", messageAt: next.toISOString() })).status, 200);
+        assert.equal((await f.storage.getConversation(id))?.status, "resolved");
+        assert.equal((await f.storage.getConversation(id))?.unreadCount, 3);
+        assert.ok(await f.storage.getContact("contact-a"));
+      } finally {
+        await f.database.delete(schema.conversations).where(eq(schema.conversations.id, id));
+      }
+    });
     await t.test("passive email pipeline admission requires explicit authenticated stage edit", async () => {
       const path = "/api/contacts/contact-a";
       const before = await f.storage.getContact("contact-a");

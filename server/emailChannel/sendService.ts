@@ -1,6 +1,7 @@
 import { assertInboxFence } from "../inboxDispatchFence";
 import { coordinatedSend, insideCoordinatedSend, beforeInboxProviderDispatch } from "../inboxSendCoordination";
 import { type EmailRichSendPayload, normalizeEmailAddress } from "@shared/emailChannel";
+import type { Conversation } from "@shared/schema";
 import { runTrackedWork, runtimeDrain } from '../runtimeDrain';
 import { contactHasDoNotContact } from "../automationSendGuard";
 import { storage } from "../storage";
@@ -115,7 +116,7 @@ export async function sendEmailViaMailbox(params: {
   const replyMode = params.rich.replyMode || (params.rich.providerThreadId ? "reply" : "new");
   let subject = String(params.rich.subject || "").trim();
   let threadId = params.rich.providerThreadId || null;
-  let conversation =
+  let conversation: Conversation | null =
     threadId
       ? await findEmailConversationByThread({
           workspaceUserId: params.workspaceUserId,

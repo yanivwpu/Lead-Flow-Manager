@@ -292,6 +292,11 @@
     "saveAndOpen": "שמור ופתח"
   },
   "followups": {
+    "dismissRecommendation": "הסרת המלצה",
+    "markResolved": "סימון כטופל",
+    "recommendationDismissed": "ההמלצה הוסרה",
+    "conversationResolved": "השיחה סומנה כטופלה",
+    "replyActionFailed": "לא ניתן לעדכן את ההמלצה. יש לרענן ולנסות שוב.",
     "customStageMapping": "שלב CRM רגיל",
     "removeCustomStage": "הסרה",
     "addCustomStage": "הוספת שלב מותאם",

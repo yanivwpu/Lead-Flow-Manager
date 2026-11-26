@@ -1,6 +1,6 @@
 import { inboundOptOutText } from "./authoredEmailText";
 import { and, eq } from "drizzle-orm";
-import { conversations, type EmailMailbox } from "@shared/schema";
+import { conversations, type Conversation, type EmailMailbox } from "@shared/schema";
 import type { NormalizedEmailMessage } from "@shared/emailChannel";
 import { isCalendarOrInviteEmail } from "@shared/emailChannel";
 import { nextEmailConversationUnreadCount } from "@shared/emailUnreadState";
@@ -226,7 +226,7 @@ export async function persistNormalizedEmailMessage(params: {
     contactDecision: match.kind,
   });
 
-  let conversation = await findEmailConversationByThread({
+  let conversation: Conversation | undefined = await findEmailConversationByThread({
     workspaceUserId: mailbox.workspaceUserId,
     mailboxId: mailbox.id,
     threadId: normalized.providerThreadId,

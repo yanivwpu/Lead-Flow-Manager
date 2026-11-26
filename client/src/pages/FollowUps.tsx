@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -116,6 +116,7 @@ function TaskListItem({
   pendingId,
   onClick,
   onSetReminder,
+  onReplyAction, replyActionPending,
 }: { 
   chat: Chat; 
   onMarkDone: (e: React.MouseEvent, chatId: string) => void;
@@ -123,7 +124,10 @@ function TaskListItem({
   pendingId: string | undefined;
   onClick: (chatId: string) => void;
   onSetReminder?: (chat: Chat) => void;
+  onReplyAction?: (chat: Chat, action: "dismiss" | "resolve") => void;
+  replyActionPending?: boolean;
 }) {
+  const { t } = useTranslation();
   const status = chat.followUpDate ? getTaskStatus(chat.followUpDate) : null;
   const needsReply = hasNeedsReply(chat);
   
@@ -174,6 +178,12 @@ function TaskListItem({
           <p className="text-xs text-gray-400 truncate mt-1">
             Note: {chat.notes}
           </p>
+        )}
+        {needsReply && !chat.reviewRecommended && !hasTask(chat) && chat.conversationId && chat.replyMessageAt && onReplyAction && (
+          <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2" onClick={event => event.stopPropagation()}>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={replyActionPending} onClick={() => onReplyAction(chat, "dismiss")} data-testid={`dismiss-reply-${chat.id}`}><X className="h-3.5 w-3.5" />{t("followups.dismissRecommendation")}</Button>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs text-emerald-700 border-emerald-200" disabled={replyActionPending} onClick={() => onReplyAction(chat, "resolve")} data-testid={`resolve-reply-${chat.id}`}><CheckCircle2 className="h-3.5 w-3.5" />{t("followups.markResolved")}</Button>
+          </div>
         )}
       </div>
 
@@ -703,6 +713,26 @@ export function FollowUps() {
     ]);
   };
 
+  const replyActionMutation = useMutation({
+    mutationFn: async ({ chat, action }: { chat: Chat; action: "dismiss" | "resolve" }) => {
+      if (!chat.conversationId || !chat.replyMessageAt || !sessionAligned) throw new Error("Missing conversation");
+      const response = await fetch(`/api/conversations/${encodeURIComponent(chat.conversationId)}/reply-recommendation`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, messageAt: chat.replyMessageAt }),
+      });
+      if (!response.ok) throw new Error("Recommendation changed");
+      return response.json();
+    },
+    onSuccess: async (_result, variables) => {
+      await invalidateAll();
+      toast({ title: variables.action === "dismiss" ? t("followups.recommendationDismissed") : t("followups.conversationResolved") });
+    },
+    onError: () => { void invalidateAll(); toast({ title: t("followups.replyActionFailed"), variant: "destructive" }); },
+  });
+  const handleReplyAction = (chat: Chat, action: "dismiss" | "resolve") => {
+    if (!replyActionMutation.isPending && sessionAligned) replyActionMutation.mutate({ chat, action });
+  };
+
   const clearFollowUpMutation = useMutation({
     mutationFn: async (contactId: string) => {
       return patchContact(contactId, { followUp: null, followUpDate: null });
@@ -966,6 +996,7 @@ export function FollowUps() {
                         pendingId={clearFollowUpMutation.variables}
                         onClick={handleRowClick}
                         onSetReminder={setReminder}
+                        onReplyAction={handleReplyAction} replyActionPending={replyActionMutation.isPending || !sessionAligned}
                       />
                     </div>
                   ))}
@@ -978,7 +1009,8 @@ export function FollowUps() {
                     {remainingReplies.map(chat => (
                       <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
                         isPending={clearFollowUpMutation.isPending} pendingId={clearFollowUpMutation.variables}
-                        onClick={handleRowClick} onSetReminder={setReminder} />
+                        onClick={handleRowClick} onSetReminder={setReminder}
+                        onReplyAction={handleReplyAction} replyActionPending={replyActionMutation.isPending || !sessionAligned} />
                     ))}
                   </details>
                 )}

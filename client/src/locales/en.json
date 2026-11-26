@@ -290,6 +290,11 @@
     "saveAndOpen": "Save & Open"
   },
   "followups": {
+    "dismissRecommendation": "Dismiss",
+    "markResolved": "Mark resolved",
+    "recommendationDismissed": "Recommendation dismissed",
+    "conversationResolved": "Conversation resolved",
+    "replyActionFailed": "Could not update recommendation. Refresh and try again.",
     "customStageMapping": "Standard CRM stage",
     "removeCustomStage": "Remove",
     "addCustomStage": "Add custom stage",
