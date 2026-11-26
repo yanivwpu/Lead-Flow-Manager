@@ -273,6 +273,31 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal(contact.contact.pipelineStage, "Lead");
       assert.equal(contact.contact.pipelineCustomStageId, null);
     });
+    await t.test("passive email pipeline admission requires explicit authenticated stage edit", async () => {
+      const path = "/api/contacts/contact-a";
+      const before = await f.storage.getContact("contact-a");
+      assert.ok(before);
+      await f.database.update(schema.contacts).set({
+        source: "email_inbox", sourceDetails: { inboxIdentity: true, contactLifecycle: "inbox_only" },
+        pipelineStage: "Lead", tag: "New",
+      }).where(eq(schema.contacts.id, "contact-a"));
+      try {
+        assert.equal((await f.request("owner-a", path, "PATCH", { sourceDetails: { pipelineManuallyAdded: true } })).status, 400);
+        assert.equal((await f.request("owner-b", path, "PATCH", { pipelineStage: "Contacted" })).status, 404);
+        assert.equal((await f.request("owner-a", path, "PATCH", { tag: "Warm" })).status, 200);
+        assert.equal(((await f.storage.getContact("contact-a"))?.sourceDetails as any)?.pipelineManuallyAdded, undefined);
+        assert.equal((await f.request("owner-a", path, "PATCH", { pipelineStage: "Contacted" })).status, 200);
+        const updated = await f.storage.getContact("contact-a");
+        assert.equal(updated?.pipelineStage, "Contacted");
+        assert.equal((updated?.sourceDetails as any)?.pipelineManuallyAdded, true);
+        assert.equal((updated?.sourceDetails as any)?.contactLifecycle, "inbox_only");
+        assert.equal(updated?.source, "email_inbox");
+      } finally {
+        await f.database.update(schema.contacts).set({
+          source: before.source, sourceDetails: before.sourceDetails, pipelineStage: before.pipelineStage, tag: before.tag,
+        }).where(eq(schema.contacts.id, "contact-a"));
+      }
+    });
     await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
       const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
       assert.deepEqual(await (await f.request("agent","/api/inbox?mine=true")).json(),[]);

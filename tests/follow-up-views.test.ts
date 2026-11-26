@@ -71,6 +71,7 @@ function reset() {
     fixture('realtor', 'Thanks!', { source: 'whatsapp', tag: 'Warm', pipelineStage: 'Qualified (Warm)', followUp: 'Realtor follow-up', followUpDate: future.toISOString() }),
     fixture('deal', 'Thanks!', { source: 'email', pipelineStage: 'Proposal' }),
     fixture('undated', 'Thanks!', { followUp: 'Prepare quote', followUpDate: 'invalid' }),
+    fixture('vendor-pitch', 'Hello, Just checking if you are interested in improving your website', { tag: 'Warm', pipelineStage: 'Proposal' }),
   ];
   state.rows.push({ ...state.rows[4], conversation: { ...state.rows[4].conversation, id: 'second-email-thread' } });
   state.appointments = [{ id: 'appt', contactId: 'manual', contactName: 'manual', appointmentType: 'Consultation', appointmentDate: date.toISOString(), status: 'scheduled', title: 'Consultation' }];
@@ -85,7 +86,7 @@ test('List renders genuine work with accurate counts and rule-based copy, withou
   assert.match(text, /Recommended Tasks/);
   assert.doesNotMatch(text, /AI Recommended|unread messages|Follow up: null/);
   for (const id of ['manual', 'realtor', 'inquiry', 'undated']) assert.ok(document.querySelector(`[data-testid="task-item-${id}"]`), id);
-  for (const id of ['ordinary', 'railway', 'promo', 'deal']) assert.equal(document.querySelector(`[data-testid="task-item-${id}"]`), null, id);
+  for (const id of ['ordinary', 'railway', 'promo', 'deal', 'vendor-pitch']) assert.equal(document.querySelector(`[data-testid="task-item-${id}"]`), null, id);
   assert.equal(document.querySelectorAll('[data-testid="task-item-manual"]').length, 1);
   const columns = document.querySelector('[data-testid="follow-up-list-columns"]')!;
   assert.ok(columns.classList.contains('lg:grid-cols-2'));
@@ -249,4 +250,13 @@ test('custom column renders eligible deals exactly once and falls back to their 
   assert.equal(removed.querySelector(`[data-testid="pipeline-column-${id}"]`), null);
   assert.equal(state.writes, 0);
   reset();
+});
+
+test('passive vendor email with legacy qualified stage is excluded from the board and reply KPI', () => {
+  reset();
+  const board = render('pipeline');
+  assert.equal(board.querySelector('[data-testid="pipeline-card-vendor-pitch"]'), null);
+  assert.equal(board.querySelector('[data-testid="kpi-active-deals"] p')?.textContent, '2');
+  assert.equal(board.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '1');
+  assert.equal(state.writes, 0);
 });

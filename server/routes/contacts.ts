@@ -2,7 +2,7 @@ import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inbo
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
 import { pipelineLayoutSchema, isCustomPipelineStageId } from "@shared/pipelineLayout";
-import { isSalesOpportunity } from "@shared/followUpTasks";
+import { isSalesOpportunity, isPassiveEmailIdentity } from "@shared/followUpTasks";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
@@ -685,6 +685,10 @@ export function registerContactRoutes(app: Express): void {
         body.followUpDate = body.followUpDate ? new Date(body.followUpDate) : null;
       }
       const sourceDetails = contact.sourceDetails as Record<string, unknown> | null;
+      // Explicit authenticated stage selection, not automatic score/tag changes.
+      if (isPassiveEmailIdentity(contact) && typeof body.pipelineStage === "string" && body.pipelineStage !== contact.pipelineStage && !pipelineLayoutMove) {
+        body.sourceDetails = { ...sourceDetails, pipelineManuallyAdded: true };
+      }
       const storedCustomPhone = (contact.customFields as { phone?: unknown } | null)?.phone;
       if (contact.source === "webchat" || sourceDetails?.agentPageForm === true) {
         if (("phone" in body && body.phone !== contact.phone) || ("customFields" in body && body.customFields?.phone !== storedCustomPhone)) {
