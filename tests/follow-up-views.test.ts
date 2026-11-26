@@ -226,3 +226,27 @@ test('workspace layout changes visible labels and order without changing stage v
   assert.equal(render('pipeline').querySelector('[data-testid="customize-pipeline"]'), null);
   state.layout = undefined;
 });
+
+test('custom column renders eligible deals exactly once and falls back to their canonical stage on removal', () => {
+  reset();
+  const id = 'custom:22222222-2222-4222-8222-222222222222';
+  const defaults = defaultPipelineLayout();
+  state.layout = { workspaceId: 'fixture', canEdit: true, revision: 2, stages: [...defaults, { id, label: 'Measurements', canonicalStage: 'Proposal' }] };
+  const deal = state.rows.find(row => row.contact.id === 'deal');
+  deal.contact.pipelineCustomStageId = id;
+  const document = render('pipeline');
+  const custom = document.querySelector(`[data-testid="pipeline-column-${id}"]`)!;
+  assert.equal(custom.querySelector('h3')?.textContent, 'Measurements');
+  assert.ok(custom.querySelector('[data-testid="pipeline-card-deal"]'));
+  assert.equal(document.querySelectorAll('[data-testid="pipeline-card-deal"]').length, 1);
+  assert.equal(document.querySelector(`[data-testid="pipeline-move-deal"] option[value="${id}"]`)?.textContent, 'Measurements');
+  assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"] [data-testid="pipeline-card-deal"]'), null);
+  assert.ok(document.querySelector('[data-testid="pipeline-column-qualified (warm)"] [data-testid="pipeline-card-realtor"]'));
+  assert.equal(render('pipeline', 'active-deals').querySelectorAll('[data-testid^="pipeline-card-"]').length, 2);
+  state.layout = { ...state.layout, stages: defaults, revision: 3 };
+  const removed = render('pipeline');
+  assert.ok(removed.querySelector('[data-testid="pipeline-column-proposal"] [data-testid="pipeline-card-deal"]'));
+  assert.equal(removed.querySelector(`[data-testid="pipeline-column-${id}"]`), null);
+  assert.equal(state.writes, 0);
+  reset();
+});

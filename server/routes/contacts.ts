@@ -1,6 +1,8 @@
 import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inboxSendCoordination";
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
+import { pipelineLayoutSchema, isCustomPipelineStageId } from "@shared/pipelineLayout";
+import { isSalesOpportunity } from "@shared/followUpTasks";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
@@ -23,7 +25,7 @@ import {
   promoteInboxIdentityToCrm,
 } from "../emailChannel/contactMatch";
 import { sql, eq, and, inArray, desc } from "drizzle-orm";
-import { CHANNELS, contactNotes, campaignEnrollments, contacts, conversations, activityEvents, type Contact } from "@shared/schema";
+import { CHANNELS, contactNotes, campaignEnrollments, contacts, conversations, activityEvents, workspacePipelineLayouts, type Contact } from "@shared/schema";
 import {
   CONTACTS_BULK_DELETE_MAX,
   deleteContactSafely,
@@ -647,7 +649,20 @@ export function registerContactRoutes(app: Express): void {
       // Coerce date strings → Date objects for timestamp columns
       const parsedPatch = contactPatchSchema.safeParse(req.body);
       if (!parsedPatch.success) return res.status(400).json({ error: "Invalid contact fields", fields: parsedPatch.error.flatten() });
-      const body: Record<string, any> = { ...parsedPatch.data };
+      const { pipelineLayoutMove, ...contactFields } = parsedPatch.data;
+      const body: Record<string, any> = { ...contactFields };
+      if (pipelineLayoutMove) {
+        if (!isSalesOpportunity(contact)) return res.status(409).json({ error: "Contact is not an existing sales opportunity" });
+        if (Object.keys(body).length || pipelineLayoutMove.workspaceId !== inboxWorkspaceId(req)) return res.status(409).json({ error: "Workspace or pipeline changed" });
+        const [layout] = await db.select().from(workspacePipelineLayouts).where(eq(workspacePipelineLayouts.workspaceId, inboxWorkspaceId(req))).limit(1);
+        const column = layout && layout.revision === pipelineLayoutMove.revision && pipelineLayoutSchema.parse(layout.stages).find(stage => stage.id === pipelineLayoutMove.columnId);
+        if (!column || !column.canonicalStage) return res.status(409).json({ error: "Pipeline changed; refresh before moving" });
+        body.pipelineStage = column.canonicalStage;
+        body.pipelineCustomStageId = column.id;
+      } else if (Object.prototype.hasOwnProperty.call(body, "pipelineStage")) {
+        if (isCustomPipelineStageId(body.pipelineStage)) return res.status(400).json({ error: "Use the configured pipeline column" });
+        body.pipelineCustomStageId = null;
+      }
       if (Object.prototype.hasOwnProperty.call(body, "assignedTo")) {
         const target = body.assignedTo;
         if (target !== null && (typeof target !== "string" || !await getInboxWorkspaceAccess(target, inboxWorkspaceId(req)))) {
@@ -706,8 +721,10 @@ export function registerContactRoutes(app: Express): void {
 
       const updated = await storage.updateContact(req.params.id, body, {
         expectedWorkspaceUserId: inboxWorkspaceId(req), expectedActorUserId: req.user.id,
+        ...(pipelineLayoutMove ? { expectedPipelineLayoutRevision: pipelineLayoutMove.revision } : {}),
         ...(identityVersion ? { expectedUpdatedAt, requireUnsyncedIdentity: true } : {}),
       });
+      if (!updated && pipelineLayoutMove) return res.status(409).json({ error: "Pipeline or workspace changed; refresh before moving" });
       if (!updated && !identityVersion) return res.status(403).json({ error: "Workspace or assignment permission changed" });
       if (identityVersion && !updated) return res.status(409).json({ error: "Customer information changed. Refresh before editing." });
       if (updated && Object.prototype.hasOwnProperty.call(body, "assignedTo") && contact.assignedTo !== updated.assignedTo) {
@@ -762,15 +779,15 @@ export function registerContactRoutes(app: Express): void {
 
         // Phase 3: Sync pipelineStage change → GHL opportunity (create or update)
         if (
-          'pipelineStage' in req.body &&
-          req.body.pipelineStage !== (contact as any).pipelineStage
+          'pipelineStage' in body &&
+          body.pipelineStage !== contact.pipelineStage
         ) {
           import('../ghlSync').then(({ ghlSyncPipelineStage }) => {
             ghlSyncPipelineStage(
               inboxWorkspaceId(req),
               contact.id,
               contact.ghlId!,
-              req.body.pipelineStage as string,
+              body.pipelineStage as string,
             ).catch(() => {});
           }).catch(() => {});
         }

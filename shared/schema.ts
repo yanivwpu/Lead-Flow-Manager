@@ -1281,6 +1281,8 @@ export const contacts = pgTable("contacts", {
   // CRM fields
   tag: text("tag").notNull().default("New"),
   pipelineStage: text("pipeline_stage").notNull().default("Lead"),
+  /** Workspace-specific board column; never used as the canonical CRM stage. */
+  pipelineCustomStageId: text("pipeline_custom_stage_id"),
   /** 0–100 cumulative score (W2, automations); null = never scored */
   leadScore: integer("lead_score"),
   /** RGE buyer preference memory (Inventory Intelligence Phase 1) */
@@ -1522,6 +1524,7 @@ export const channelSettings = pgTable("channel_settings", {
 
 // Insert schemas
 export const insertContactSchema = createInsertSchema(contacts).omit({
+  pipelineCustomStageId: true,
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -1551,7 +1554,8 @@ export const insertChannelSettingSchema = createInsertSchema(channelSettings).om
 
 // Types
 export type InsertContact = z.infer<typeof insertContactSchema>;
-export type Contact = typeof contacts.$inferSelect;
+// Older internal contact projections and fixtures may omit the additive board metadata.
+export type Contact = Omit<typeof contacts.$inferSelect, "pipelineCustomStageId"> & { pipelineCustomStageId?: string | null };
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Conversation = typeof conversations.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;

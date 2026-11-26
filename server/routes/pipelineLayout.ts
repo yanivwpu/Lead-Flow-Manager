@@ -1,9 +1,9 @@
 import type { Express, Request } from "express";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { workspacePipelineLayouts } from "@shared/schema";
-import { defaultPipelineLayout, pipelineLayoutPatchSchema, pipelineLayoutSchema, type PipelineLayoutResponse } from "@shared/pipelineLayout";
+import { defaultPipelineLayout, pipelineLayoutPatchSchema, pipelineLayoutSchema, preparePipelineLayoutSave, type PipelineLayoutResponse } from "@shared/pipelineLayout";
 import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 
@@ -74,7 +74,11 @@ export function registerPipelineLayoutRoutes(app: Express): void {
       if (!patch.success) return res.status(400).json({ error: "Invalid pipeline configuration" });
       const workspaceId = inboxWorkspaceId(req);
       if (patch.data.workspaceId !== workspaceId) return res.status(409).json({ error: "Workspace changed; reload configuration" });
-      const { revision, stages } = patch.data;
+      const { revision } = patch.data;
+      const [current] = await db.select().from(workspacePipelineLayouts).where(eq(workspacePipelineLayouts.workspaceId, workspaceId)).limit(1);
+      if ((current?.revision ?? 0) !== revision) return res.status(409).json({ error: "Pipeline configuration changed; reload before saving" });
+      const stages = preparePipelineLayoutSave(patch.data.stages, current ? pipelineLayoutSchema.parse(current.stages) : defaultPipelineLayout(), () => `custom:${randomUUID()}`);
+      if (!stages) return res.status(400).json({ error: "Custom stage mapping cannot be changed" });
       // Compare-and-swap prevents a stale editor from overwriting another admin.
       const [saved] = revision === 0
         ? await db.insert(workspacePipelineLayouts).values({ workspaceId, stages, revision: 1 }).onConflictDoNothing().returning()

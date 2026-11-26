@@ -13,7 +13,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMont
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
 import { PipelineLayoutEditor } from "@/components/followups/PipelineLayoutEditor";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
-import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
+import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, customPipelineColumn, type PipelineLayoutMove, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasNeedsReply, hasTask,
@@ -270,7 +270,7 @@ function PipelineView({
 }: { 
   chats: Chat[]; 
   onCardClick: (chatId: string) => void;
-  onStageChange: (chatId: string, newStage: string) => void;
+  onStageChange: (chatId: string, newStage: string, move?: PipelineLayoutMove) => void;
   isMobile: boolean; actorId?: string; stagePending: boolean; sessionAligned: boolean;
   onSetReminder: (chat: Chat) => void;
 }) {
@@ -294,11 +294,21 @@ function PipelineView({
   const channels = useMemo(() => [...new Set(chats.map(chat => chat.channel).filter((value): value is string => Boolean(value)))].sort(), [chats]);
   const tags = useMemo(() => [...new Set(chats.map(chat => chat.tag).filter(Boolean))].sort(), [chats]);
   const stages = useMemo(() => orderedPipelineStages(layout, chats.map(chat => boardStage(chat.pipelineStage))), [layout, chats]);
+  const columnFor = (chat: Chat) => customPipelineColumn(layout, chat.pipelineStage, chat.pipelineCustomStageId) ?? boardStage(chat.pipelineStage);
+  const moveToColumn = (chatId: string, columnId: string) => {
+    const chat = chats.find(item => item.id === chatId);
+    if (!chat || columnFor(chat) === columnId) return;
+    const target = layout.find(column => column.id === columnId);
+    if (target?.canonicalStage) {
+      if (!layoutConfig || layoutQuery.isError) return;
+      onStageChange(chatId, target.canonicalStage, { workspaceId: layoutConfig.workspaceId, revision: layoutConfig.revision, columnId });
+    } else onStageChange(chatId, columnId);
+  };
   const chatsByStage = useMemo(() => {
     const map = new Map<string, Chat[]>(stages.map(stage => [stage, []]));
-    visibleChats.forEach(chat => map.get(boardStage(chat.pipelineStage))?.push(chat));
+    visibleChats.forEach(chat => map.get(customPipelineColumn(layout, chat.pipelineStage, chat.pipelineCustomStageId) ?? boardStage(chat.pipelineStage))?.push(chat));
     return map;
-  }, [visibleChats, stages]);
+  }, [visibleChats, stages, layout]);
 
   const handleDragStart = (e: React.DragEvent, chat: Chat) => {
     if (isMobile || stagePending) { e.preventDefault(); return; }
@@ -317,7 +327,7 @@ function PipelineView({
   const handleDrop = (e: React.DragEvent, stage: string) => {
     if (isMobile || stagePending || !draggedChat) return;
     e.preventDefault();
-    if (boardStage(draggedChat.pipelineStage) !== stage) onStageChange(draggedChat.id, stage);
+    moveToColumn(draggedChat.id, stage);
     setDraggedChat(null);
     setDropStage(null);
   };
@@ -376,14 +386,15 @@ function PipelineView({
       <div className="grid grid-flow-col items-stretch gap-3 w-full min-w-0 overflow-x-auto pb-3" style={{ gridAutoColumns: isMobile ? "minmax(240px, 1fr)" : "minmax(170px, 1fr)" }} data-testid="pipeline-view">
       {[...chatsByStage.keys()].map(stage => {
         const stageChats = chatsByStage.get(stage) || [];
-        const colors = stageColors[stage] || stageColors['Lead'];
+        const canonical = layout.find(column => column.id === stage)?.canonicalStage ?? stage;
+        const colors = stageColors[canonical] || stageColors['Lead'];
         
         return (
           <div
             key={stage}
             className={cn(
               "min-w-0 min-h-[360px] rounded-xl border border-slate-200 bg-slate-100/80 flex flex-col",
-              draggedChat && dropStage === stage && boardStage(draggedChat.pipelineStage) !== stage && "ring-2 ring-inset ring-emerald-500 bg-emerald-50"
+              draggedChat && dropStage === stage && columnFor(draggedChat) !== stage && "ring-2 ring-inset ring-emerald-500 bg-emerald-50"
             )}
             onDragOver={(e) => handleDragOver(e, stage)}
             onDragLeave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDropStage(prev => prev === stage ? null : prev); }}
@@ -393,7 +404,7 @@ function PipelineView({
             <div className="p-3 border-b border-slate-200">
               <div className={cn("h-1 rounded-full mb-3", colors)} />
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0"><h3 className="break-words font-semibold text-slate-900 text-sm">{pipelineStageDisplayLabel(layout, stage)}</h3>{pipelineStageDisplayLabel(layout, stage) !== stage && <p className="text-[11px] text-slate-500">{stage}</p>}</div>
+                <div className="min-w-0"><h3 className="break-words font-semibold text-slate-900 text-sm">{pipelineStageDisplayLabel(layout, stage)}</h3>{pipelineStageDisplayLabel(layout, stage) !== stage && <p className="text-[11px] text-slate-500">{canonical}</p>}</div>
                 <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={t("followups.opportunitiesCount", { total: stageChats.length })}>{stageChats.length}</span>
               </div>
             </div>
@@ -407,7 +418,7 @@ function PipelineView({
                   onDragEnd={handleDragEnd}
                   isDragging={draggedChat?.id === chat.id}
                   stage={stage} stages={stages} layout={layout} isMobile={isMobile} stagePending={stagePending}
-                  onStageChange={onStageChange} onSetReminder={onSetReminder}
+                  onStageChange={moveToColumn} onSetReminder={onSetReminder}
                 />
               ))}
               {stageChats.length === 0 && (
@@ -708,11 +719,11 @@ export function FollowUps() {
   });
 
   const updatePipelineStageMutation = useMutation({
-    mutationFn: async ({ chatId, newStage }: { chatId: string; newStage: string }) => {
-      return patchContact(chatId, { pipelineStage: newStage });
+    mutationFn: async ({ chatId, newStage, move }: { chatId: string; newStage: string; move?: PipelineLayoutMove }) => {
+      return patchContact(chatId, move ? { pipelineLayoutMove: move } : { pipelineStage: newStage });
     },
     onSuccess: async () => { await invalidateAll(); toast({ title: t('followups.stageSaved') }); },
-    onError: () => toast({ title: t('followups.stageSaveFailed'), variant: 'destructive' }),
+    onError: () => { void invalidateAll(); void queryClient.invalidateQueries({ queryKey: ['/api/inbox/pipeline-layout'] }); toast({ title: t('followups.stageSaveFailed'), variant: 'destructive' }); },
   });
 
   const filteredChats = useMemo(() => {
@@ -784,11 +795,11 @@ export function FollowUps() {
     updateFollowUpDateMutation.mutate({ chatId, newDate });
   };
 
-  const handleStageChange = (chatId: string, newStage: string) => {
+  const handleStageChange = (chatId: string, newStage: string, move?: PipelineLayoutMove) => {
     const chat = chats.find(item => item.id === chatId && item.isOpportunity);
-    if (!chat || updatePipelineStageMutation.isPending || boardStage(chat.pipelineStage) === newStage) return;
+    if (!chat || updatePipelineStageMutation.isPending || (!move && !chat.pipelineCustomStageId && boardStage(chat.pipelineStage) === newStage)) return;
     if (!isSalesOpportunity({ id: chat.id, name: chat.name, tag: chat.tag, pipelineStage: newStage }) && !window.confirm(t('followups.moveOutOfPipeline'))) return;
-    updatePipelineStageMutation.mutate({ chatId, newStage });
+    updatePipelineStageMutation.mutate({ chatId, newStage, move });
   };
 
   if (isLoading) {

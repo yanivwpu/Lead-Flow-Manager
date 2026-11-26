@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { defaultPipelineLayout, orderedPipelineStages, pipelineLayoutPatchSchema, pipelineLayoutSchema, pipelineStageDisplayLabel } from '../shared/pipelineLayout';
+import { defaultPipelineLayout, orderedPipelineStages, pipelineLayoutPatchSchema, pipelineLayoutSchema, pipelineStageDisplayLabel, preparePipelineLayoutSave, customPipelineColumn, type PipelineStageLayout } from '../shared/pipelineLayout';
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasActionableInquiry,
   hasScheduledFollowUp, hasTask, isActiveDeal, isSalesOpportunity, prioritizeTasks,
@@ -214,4 +214,29 @@ test('pipeline layouts only rename and reorder stable stages and preserve observ
   const [item] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal' } })]);
   assert.equal(isActiveDeal(item), true);
   assert.equal(item.pipelineStage, 'Proposal');
+});
+
+test('custom columns require stable mapped stages, cannot be remapped, and cannot revive a deleted column ID', () => {
+  const base = defaultPipelineLayout();
+  const draftId = 'custom:11111111-1111-4111-8111-111111111111';
+  const savedId = 'custom:22222222-2222-4222-8222-222222222222';
+  const recreatedId = 'custom:33333333-3333-4333-8333-333333333333';
+  const custom: PipelineStageLayout = { id: draftId, label: 'Design and measurements', canonicalStage: 'Proposal' };
+  assert.equal(pipelineLayoutSchema.safeParse([...base, custom]).success, true);
+  assert.equal(pipelineLayoutSchema.safeParse([...base, { ...custom, canonicalStage: undefined }]).success, false);
+  assert.equal(pipelineLayoutSchema.safeParse([...base, { ...custom, canonicalStage: 'Arbitrary' }]).success, false);
+  assert.equal(pipelineLayoutSchema.safeParse(base.map(stage => ({ ...stage, canonicalStage: 'Proposal' }))).success, false);
+  const saved = preparePipelineLayoutSave([...base, custom], base, () => savedId)!;
+  assert.equal(saved[5].id, savedId);
+  assert.equal(customPipelineColumn(saved, 'Proposal', savedId), savedId);
+  assert.equal(customPipelineColumn(saved, 'Negotiation', savedId), undefined);
+  assert.equal(customPipelineColumn(base, 'Proposal', savedId), undefined);
+  assert.equal(preparePipelineLayoutSave(saved.map(stage => stage.id === savedId ? { ...stage, canonicalStage: 'Closed' } : stage), saved, () => recreatedId), null);
+  const renamed = preparePipelineLayoutSave(saved.map(stage => stage.id === savedId ? { ...stage, label: 'Measurements' } : stage), saved, () => recreatedId)!;
+  assert.equal(renamed[5].id, savedId);
+  assert.equal(preparePipelineLayoutSave(saved, base, () => recreatedId)![5].id, recreatedId);
+  const [deal] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', pipelineCustomStageId: savedId } })]);
+  assert.equal(deal.pipelineStage, 'Proposal');
+  assert.equal(deal.pipelineCustomStageId, savedId);
+  assert.equal(isActiveDeal(deal), true);
 });
