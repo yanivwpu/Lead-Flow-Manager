@@ -177,8 +177,11 @@ test('ranking favors overdue work, urgency and engagement; unread volume has no 
   assert.deepEqual(prioritizeTasks([stale, recent], now).map(t => t.id), ['recent', 'older']);
 });
 
- test('pipeline search, channel, tags and assignment filter without modifying opportunities', () => {
-  const make = (id: string, channel: string, assignedTo: string | null | undefined, tag: string) => row('Can you send a quote?', { contact: { ...row().contact, id, name: id, pipelineStage: 'Proposal', assignedTo, tag }, channel, conversation: { ...row().conversation!, channel } });
+test('pipeline search, channel, tags and assignment filter without modifying opportunities', () => {
+  const make = (id: string, channel: string, assignedTo: string | null | undefined, tag: string) => {
+    const fixture = row('Can you send a quote?');
+    return { ...fixture, contact: { ...fixture.contact, id, name: id, pipelineStage: 'Proposal', assignedTo, tag }, channel, conversation: { ...fixture.conversation!, channel } };
+  };
   const items = buildFollowUpItems([make('Alice', 'whatsapp', 'me', 'Warm'), make('Bob', 'email', null, 'New'), make('Carol', 'instagram', 'teammate', 'Hot'), make('Unknown', 'email', undefined, 'New')]);
   const all: PipelineFilters = { search: '', channel: '', tag: '', assignment: 'all' };
   const before = JSON.stringify(items);
@@ -188,5 +191,7 @@ test('ranking favors overdue work, urgency and engagement; unread volume has no 
   assert.deepEqual(ids({ assignment: 'others' }), ['Carol']);
   assert.deepEqual(ids({ channel: 'email' }), ['Bob', 'Unknown']);
   assert.deepEqual(ids({ search: 'quote' }), ['Alice', 'Bob', 'Carol', 'Unknown']);
+  assert.deepEqual(ids({ search: 'Thanks' }), []);
+  assert.deepEqual(ids({ search: 'not present' }), []);
   assert.equal(JSON.stringify(items), before);
 });
