@@ -53,7 +53,7 @@ test('sales inquiries and support requests need a reply regardless of read state
   ];
   for (const channel of ['email', 'whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel']) {
     for (const text of inquiries) {
-      const candidate = row(text, { channel, unreadCount: 0 });
+      const candidate = row(text, { channel, unreadCount: 0, conversation: { ...row(text).conversation!, channel } });
       assert.equal(hasActionableInquiry(candidate), true, `${channel}: ${text}`);
       assert.equal(isActiveDeal(buildFollowUpItems([candidate])[0]), false, 'an inquiry alone never creates a deal');
     }
@@ -92,11 +92,11 @@ test('only qualified contacts or meaningful sales pipeline stages count as oppor
       assert.equal(isSalesOpportunity({ ...contact, source, pipelineStage }), false, `${source}/${pipelineStage}`);
     }
     for (const pipelineStage of ['Opportunity', 'Proposal', 'Negotiation', 'Qualified (Hot)', 'Qualified (Warm)', 'Under Contract']) {
-      const [item] = buildFollowUpItems([row('', { contact: { ...contact, source, pipelineStage } })]);
+      const [item] = buildFollowUpItems([row('', { contact: { ...contact, source, pipelineStage, sourceDetails: source === 'email_inbox' ? { pipelineManuallyAdded: true } : undefined } })]);
       assert.equal(isActiveDeal(item), true, `${source}/${pipelineStage}`);
     }
     for (const tag of ['Hot Lead', 'Warm Lead', 'Hot', 'Warm']) {
-      assert.equal(isSalesOpportunity({ ...contact, source, tag }), true);
+      assert.equal(isSalesOpportunity({ ...contact, source, tag }), source !== 'email_inbox');
     }
   }
   for (const pipelineStage of ['Closed', 'Closed Won', 'Closed Lost', 'Lost', 'Unqualified']) {
@@ -142,7 +142,7 @@ test('only real tasks with valid dates are scheduled; invalid and undated tasks 
 
 test('thread expansion does not duplicate reminders or deals, or hide actionable sibling inquiries', () => {
   const inquiry = row('Can you send a quote?', { contact: {
-    ...row().contact, tag: 'Hot Lead', followUp: 'Call customer', followUpDate: '2026-11-10T15:00:00Z',
+    ...row().contact, source: 'email', tag: 'Hot Lead', followUp: 'Call customer', followUpDate: '2026-11-10T15:00:00Z',
   } });
   const notice = row('Your deployment failed', {
     contact: inquiry.contact, conversation: { ...row().conversation, id: 'notice' }, lastMessageAt: '2026-11-10T13:00:00Z',
@@ -170,7 +170,7 @@ test('ranking favors overdue work, urgency and engagement; unread volume has no 
   const before = prioritizeTasks([routine, urgent, overdue], now).map(t => t.id);
   routine.unread = 0; urgent.unread = 9999;
   assert.deepEqual(prioritizeTasks([routine, urgent, overdue], now).map(t => t.id), before);
-  const [dealWithoutWork] = buildFollowUpItems([row('Thanks', { contact: { ...row().contact, pipelineStage: 'Proposal' } })]);
+  const [dealWithoutWork] = buildFollowUpItems([row('Thanks', { contact: { ...row().contact, pipelineStage: 'Proposal', source: 'email' } })]);
   assert.deepEqual(prioritizeTasks([dealWithoutWork], now), [], 'a deal alone is not recommended as a task');
   const recent = task('recent', 'What is the price?', null);
   const stale = task('older', 'What is the price?', null);
@@ -211,7 +211,7 @@ test('pipeline layouts only rename and reorder stable stages and preserve observ
   assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => ({ ...stage, label: ' ' }))).success, false);
   assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => stage.id === 'Proposal' ? { ...stage, id: 'Estimate sent' } : stage)).success, false);
   assert.equal(pipelineLayoutPatchSchema.safeParse({ workspaceId: 'owner', revision: 0, stages: moved, userId: 'foreign' }).success, false);
-  const [item] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal' } })]);
+  const [item] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', source: 'email' } })]);
   assert.equal(isActiveDeal(item), true);
   assert.equal(item.pipelineStage, 'Proposal');
 });
@@ -235,8 +235,47 @@ test('custom columns require stable mapped stages, cannot be remapped, and canno
   const renamed = preparePipelineLayoutSave(saved.map(stage => stage.id === savedId ? { ...stage, label: 'Measurements' } : stage), saved, () => recreatedId)!;
   assert.equal(renamed[5].id, savedId);
   assert.equal(preparePipelineLayoutSave(saved, base, () => recreatedId)![5].id, recreatedId);
-  const [deal] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', pipelineCustomStageId: savedId } })]);
+  const [deal] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', pipelineCustomStageId: savedId, source: 'email' } })]);
   assert.equal(deal.pipelineStage, 'Proposal');
   assert.equal(deal.pipelineCustomStageId, savedId);
   assert.equal(isActiveDeal(deal), true);
+});
+
+test('email marketing and informational copy stay out of follow-ups and the pipeline even with legacy tags', () => {
+  const examples = [
+    "It&#39;s time! Looking for discounted properties? Join the Workshop TODAY",
+    "Save on blenders, accessories, and containers. View in your browser",
+    "SUBMITTED A message from support. Thank you for contacting support",
+    "Confirm your vehicle to see auto insurance quotes specific to your ride.",
+    "Hint: it gets real winters. The top five risers are all in the Midwest",
+    "Hello, Just checking if you&#39;re interested in improving your website",
+    "Explore capital options that can support your investment plans.",
+    "Think about that. Most investors spend their time looking for deals.",
+    "Hi, Here&#39;s this week&#39;s roundup of news and resources.",
+    "Trimming ECO-FRIENDLY EXCITEMENT: THE BIG ELECTRIC DAY BOAT",
+    "The same trusted team, now backed by more insight, support, and opportunity",
+    "Thousands of consumers are surprised by our outstanding service. January PIN: 1234",
+    "Don&#39;t start by looking for a cheap option. Start with three numbers",
+    "Are you interested in a demo? We provide marketing services.",
+    "Thanks!\nOn Tuesday Alex wrote:\nCan you send a quote?",
+  ];
+  for (const text of examples) {
+    const candidate = row(text, { contact: { ...row().contact, tag: 'Warm', pipelineStage: 'Proposal' } });
+    const [item] = buildFollowUpItems([candidate]);
+    assert.equal(item.needsReply, false, text);
+    assert.equal(item.isOpportunity, false, text);
+    assert.deepEqual(prioritizeTasks([item]), [], text);
+  }
+  const subjectOnly = row('Here is our weekly update.');
+  subjectOnly.conversation!.subject = 'Can you send a quote?';
+  subjectOnly.lastMessage = 'Can you send a quote?';
+  assert.equal(hasActionableInquiry(subjectOnly), false);
+  for (const text of ["Hi, could you send me a quote for kitchen remodeling?", "I would like to book a consultation.", "Quisiera una cotización para mi cocina.", "אני מעוניין לקבל הצעת מחיר לשיפוץ מטבח"]) {
+    assert.equal(hasActionableInquiry(row(text)), true, text);
+  }
+  for (const stage of ['Lead', 'Contacted', 'Proposal']) {
+    const manuallyAdded = row('Thanks!', { contact: { ...row().contact, pipelineStage: stage, sourceDetails: { pipelineManuallyAdded: true } } });
+    assert.equal(buildFollowUpItems([manuallyAdded])[0].isOpportunity, true);
+    assert.equal(buildFollowUpItems([manuallyAdded])[0].needsReply, false);
+  }
 });

@@ -798,7 +798,7 @@ export function FollowUps() {
   const handleStageChange = (chatId: string, newStage: string, move?: PipelineLayoutMove) => {
     const chat = chats.find(item => item.id === chatId && item.isOpportunity);
     if (!chat || updatePipelineStageMutation.isPending || (!move && !chat.pipelineCustomStageId && boardStage(chat.pipelineStage) === newStage)) return;
-    if (!isSalesOpportunity({ id: chat.id, name: chat.name, tag: chat.tag, pipelineStage: newStage }) && !window.confirm(t('followups.moveOutOfPipeline'))) return;
+    if (!isSalesOpportunity({ id: chat.id, name: chat.name, tag: chat.tag, pipelineStage: newStage, sourceDetails: { pipelineManuallyAdded: chat.pipelineManuallyAdded === true } }) && !window.confirm(t('followups.moveOutOfPipeline'))) return;
     updatePipelineStageMutation.mutate({ chatId, newStage, move });
   };
 

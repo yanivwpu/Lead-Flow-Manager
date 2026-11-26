@@ -4,6 +4,8 @@ import {
   looksLikeSystemNotificationContent, looksLikeSystemOrNotificationEmail,
 } from './aiDomainEligibility';
 import { agentInquiryRecommendation, isAgentInquiryThread } from './agent/agentPageInquiry';
+import { customerAuthoredText } from './buyerPreferenceEvidence';
+import { contactLifecycleFromDetails, isEmailInboxIdentitySource } from './contactCrmVisibility';
 
 export type FollowUpInboxItem = {
   contact: {
@@ -28,7 +30,7 @@ export type FollowUpItem = {
   id: string; name: string; avatar: string; lastMessage: string; time: string;
   unread: number; tag: string; followUp: string | null; followUpDate: string | null;
   notes: string; pipelineStage: string; pipelineCustomStageId?: string | null; needsReply: boolean; isOpportunity: boolean;
-  urgent: boolean; engaged: boolean;
+  urgent: boolean; engaged: boolean; pipelineManuallyAdded?: boolean;
   reviewRecommended?: string;
   channel?: string; assignedTo?: string | null;
   conversationId?: string;
@@ -55,12 +57,23 @@ export function isClosedStage(stage: string): boolean {
   return ['closed', 'closed won', 'closed lost', 'won', 'lost'].includes(normalized(stage));
 }
 
+/** Passive email identities cannot enter the board from automatic tags or legacy stages. */
+export function isPassiveEmailIdentity(contact: Pick<FollowUpInboxItem['contact'], 'source' | 'sourceDetails'>): boolean {
+  return isEmailInboxIdentitySource(contact.source) ||
+    (contact.source === 'email' && contactLifecycleFromDetails(contact.sourceDetails) === 'inbox_only');
+}
+function manuallyAddedToPipeline(contact: { sourceDetails?: unknown }): boolean {
+  return (contact.sourceDetails as { pipelineManuallyAdded?: unknown } | null)?.pipelineManuallyAdded === true;
+}
+
 /** Default Lead/New Lead, a saved contact, and an inbox conversation are not opportunities. */
 export function isSalesOpportunity(contact: FollowUpInboxItem['contact']): boolean {
   const stage = normalized(contact.pipelineStage);
   const tag = normalized(contact.tag);
   if (['unqualified', 'disqualified', 'archived'].includes(stage) ||
       ['unqualified', 'do not contact'].includes(tag)) return false;
+  if (isPassiveEmailIdentity(contact) && !manuallyAddedToPipeline(contact)) return false;
+  if (manuallyAddedToPipeline(contact) && ['lead', 'contacted'].includes(stage)) return true;
   return isClosedStage(stage) ||
     ['opportunity', 'proposal', 'negotiation', 'qualified', 'qualified (hot)', 'qualified (warm)', 'under contract'].includes(stage) ||
     ['hot', 'warm', 'hot lead', 'warm lead', 'qualified'].includes(tag);
@@ -73,23 +86,51 @@ const SOCIAL_ONLY = /^(?:hi|hello|hey|thanks|thank you|ok|okay|great|sounds good
 const CUSTOMER_REQUEST = /\b(?:interested in|looking (?:for|to)|(?:i|we)(?: (?:need|want|would like)|'d like) (?:help|support|info(?:rmation)?|a (?:refund|quote|demo)|to (?:buy|rent|book|order|schedule|sell))|(?:need|please|can you|could you) (?:help|send|share|check|confirm|call|contact|fix|reschedule)|(?:quote|pricing|refund|demo|support) (?:please|request)|arrived (?:broken|damaged)|was charged twice|(?:cannot|can't) log in|not working|(?:my|our) (?:order|package|item|account|payment|subscription).{0,40}(?:missing|never arrived|hasn't arrived|damaged|locked|failed))\b/i;
 const CUSTOMER_TOPIC = /\b(?:pric(?:e|es|ing)|cost|quot(?:e|es|ation)|proposal|demo|support|refund|return|invoice|cancel\w*|reschedul\w*|appointment|availability|available|(?:my|our) (?:order|account|payment|subscription|delivery)|tour|showing)\b/i;
 
+// A supplier's pitch and a customer's request can share sales vocabulary.
+// Require a sender-authored direct ask, not a subject or second-person CTA.
+const EMAIL_BROADCAST = /\b(?:view (?:this |the )?(?:email |message )?in (?:your |a )?browser|join (?:our|the|this) (?:webinar|workshop|event)|register (?:now|today)|sign up (?:now|today)|save on|this week'?s roundup|roundup of|weekly roundup|confirm your (?:vehicle|identity|account)|thank(?:s| you) for (?:contacting|reaching out)|explore (?:our|capital|financing|funding) options|we (?:can help|offer|provide|specialize|help businesses)|(?:improv(?:e|ing)|boost(?:ing)?|grow(?:ing)?) your (?:website|seo|rankings|business)|(?:would you|are you|if you(?:'re| are)) (?:be )?interested|your (?:support )?ticket (?:was|has been)|(?:your|verification) pin\s*:)/i;
+const EMAIL_DIRECT_ASK = /^(?:(?:can|could|would) you (?:please )?(?:send|share|provide|give|help|reschedule|book|schedule|quote|confirm|check|call|contact|fix)\b|please (?:send|share|provide|give|help|reschedule|book|schedule|quote|confirm|check|call|contact|fix)\b|(?:i|we)(?:'m|'re| am| are) (?:interested in|looking (?:for|to))\b|(?:i|we)(?: would like|'d like| need| want)\b|(?:how (?:much|do|does|can)|what (?:is|are|does)|where is|is (?:this|the|your)|does|do you)\b|(?:my|our) (?:order|package|item|account|payment|subscription).{0,65}(?:missing|never arrived|hasn't arrived|damaged|locked|failed|not working)|the item arrived (?:broken|damaged))/i;
+const EMAIL_PURCHASE_OR_SERVICE = /\b(?:buy(?:ing)?|rent(?:ing)?|lease|sell(?:ing)?|book(?:ing)?|schedule|reschedul\w*|quote|estimate|pricing|price|cost|demo|consultation|appointment|tour|showing|refund|return|availability|available|order|package|account|payment|subscription|service(?:s)?|product(?:s)?|support|help|integrat\w*|remodel\w*|renovat\w*|cabinet\w*|installation|property|home|house|condo|apartment|privacy policy|damaged|broken|log in)\b/i;
+const EMAIL_ES_DIRECT = /^(?:me gustar[ií]a|quisiera|quiero|necesito|estoy buscando|estoy interesad[oa] en|podr[ií]a(?:s|n)?|puede(?:s|n)?|por favor|cu[aá]nto (?:cuesta|vale)|cu[aá]l es|mi pedido)\b/i;
+const EMAIL_ES_TOPIC = /\b(?:comprar|alquilar|vender|presupuesto|cotizaci[oó]n|precio|cita|consulta|pedido|cuenta|reembolso|servicio|producto|ayuda|soporte|reforma|cocina|visita|demostraci[oó]n)\b/i;
+const EMAIL_HE_DIRECT = /^(?:אני (?:רוצה|צריך|צריכה|מעוניין|מעוניינת|מחפש|מחפשת)|אנחנו (?:רוצים|צריכים|מעוניינים|מחפשים)|אפשר|האם אפשר|האם תוכלו|האם אתם|בבקשה|כמה עולה|מה המחיר|ההזמנה שלי)(?:\s|$)/u;
+const EMAIL_HE_TOPIC = /(?:לקנות|לרכוש|לשכור|למכור|הצעת מחיר|מחיר|פגישה|ייעוץ|הזמנה|חשבון|החזר|שירות|מוצר|עזרה|תמיכה|מטבח|שיפוץ|דירה|בית)/u;
+
+function emailPlainText(value: string): string {
+  return value.replace(/&(?:#0*39|#x0*27|apos);|’/gi, "'").replace(/&(?:#0*160|nbsp);/gi, ' ').replace(/&amp;/gi, '&');
+}
+
+export function hasStrongEmailInquiry(row: FollowUpInboxItem): boolean {
+  const conversation = row.conversation;
+  if (conversation?.lastMessageDirection !== 'inbound' ||
+      ['resolved', 'closed'].includes(normalized(conversation.status || ''))) return false;
+  // row.lastMessage can be the email subject, not independent evidence.
+  const body = customerAuthoredText(emailPlainText(conversation.lastMessagePreview || ''));
+  if (!body || SOCIAL_ONLY.test(body)) return false;
+  const context = emailPlainText([conversation.subject, body].filter(Boolean).join('\n'));
+  if (TASK_NOTIFICATION_CONTENT.test(context) || EMAIL_BROADCAST.test(context)) return false;
+  if (row.formIdentity?.isWebsiteForm) return true;
+  if (looksLikeSystemOrNotificationEmail({ contactEmail: row.contact.email, channel: 'email', inboundText: '' })) return false;
+  const authored = body.replace(/^(?:hi|hello|hey|dear|hola|buenos d[ií]as|שלום|היי)(?:[ ,]+[\p{L} .'-]{1,35})?[,!:\n]\s*/iu, '').trim()
+    .replace(/^[¿¡]+/, '');
+  if (looksLikeSystemNotificationContent(context) && !looksLikeHumanAsk(authored)) return false;
+  return (EMAIL_DIRECT_ASK.test(authored) && (EMAIL_PURCHASE_OR_SERVICE.test(authored) || looksLikeProductOrSaasInquiry(authored))) ||
+    (EMAIL_ES_DIRECT.test(authored) && EMAIL_ES_TOPIC.test(authored)) ||
+    (EMAIL_HE_DIRECT.test(authored) && EMAIL_HE_TOPIC.test(authored));
+}
+
 export function hasActionableInquiry(row: FollowUpInboxItem): boolean {
   const conversation = row.conversation;
   if (isAgentInquiryThread(conversation)) return false;
   if (conversation?.lastMessageDirection !== 'inbound' ||
       ['resolved', 'closed'].includes(normalized(conversation.status || ''))) return false;
+  if (normalized(row.channel || conversation.channel || '') === 'email') return hasStrongEmailInquiry(row);
   const text = [conversation.subject, conversation.lastMessagePreview, row.lastMessage]
     .filter(Boolean).join('\n').replace(/’/g, "'").trim();
   const preview = (conversation.lastMessagePreview || row.lastMessage).trim();
   if (SOCIAL_ONLY.test(preview)) return false;
   if (TASK_NOTIFICATION_CONTENT.test(text) ||
       (looksLikeSystemNotificationContent(text) && !looksLikeHumanAsk(text))) return false;
-  const isEmail = (row.channel || conversation.channel) === 'email';
-  // Persisted website-form identity preserves legitimate inquiries sent by a form notifier.
-  if (isEmail && row.formIdentity?.isWebsiteForm) return true;
-  // Reuse the existing email/system policy. Blank text tests sender evidence alone,
-  // so a notification CTA cannot override a known automated sender.
-  if (isEmail && looksLikeSystemOrNotificationEmail({ contactEmail: row.contact.email, channel: 'email', inboundText: '' })) return false;
   return CUSTOMER_REQUEST.test(text) ||
     ((/[?？]/.test(text) || looksLikeHumanAsk(text)) &&
       (CUSTOMER_TOPIC.test(text) || looksLikeProductOrSaasInquiry(text)));
@@ -110,7 +151,7 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
       reviewRecommended: agentInquiryRecommendation(contact),
       followUpDate: followUp ? validTaskDate(contact.followUpDate) : null,
       notes: contact.notes || '', pipelineStage: contact.pipelineStage, pipelineCustomStageId: contact.pipelineCustomStageId,
-      needsReply, isOpportunity: isSalesOpportunity(contact),
+      needsReply, isOpportunity: isSalesOpportunity(contact), pipelineManuallyAdded: manuallyAddedToPipeline(contact),
       urgent: /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(followUp || '') ||
         (needsReply && /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(row.conversation?.lastMessagePreview || row.lastMessage)),
       engaged: needsReply,
