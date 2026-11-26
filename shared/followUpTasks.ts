@@ -10,7 +10,7 @@ export type FollowUpInboxItem = {
     id: string; name: string; avatar?: string | null; email?: string | null;
     tag: string; pipelineStage: string; notes?: string | null;
     followUp?: string | null; followUpDate?: string | Date | null;
-    source?: string | null; sourceDetails?: unknown;
+    source?: string | null; sourceDetails?: unknown; assignedTo?: string | null;
   };
   conversation?: {
     id?: string; channel?: string; status?: string | null; channelAccountId?: string | null;
@@ -30,6 +30,7 @@ export type FollowUpItem = {
   notes: string; pipelineStage: string; needsReply: boolean; isOpportunity: boolean;
   urgent: boolean; engaged: boolean;
   reviewRecommended?: string;
+  channel?: string; assignedTo?: string | null;
   conversationId?: string;
   appointmentId?: string; contactId?: string; appointmentType?: string; isAppointment?: boolean;
 };
@@ -114,6 +115,8 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
         (needsReply && /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(row.conversation?.lastMessagePreview || row.lastMessage)),
       engaged: needsReply,
       conversationId: row.conversation?.id,
+      channel: (row.conversation?.channel || row.channel || '').trim().toLowerCase(),
+      assignedTo: contact.assignedTo,
     };
     const prior = byContact.get(contact.id);
     // Show the actionable thread rather than a newer notification for the same contact.
@@ -127,6 +130,22 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
     });
   }
   return [...byContact.values()];
+}
+
+export type PipelineFilters = { search: string; channel: string; tag: string; assignment: 'all' | 'mine' | 'unassigned' | 'others' };
+
+/** Presentation-only filtering of already eligible opportunities. */
+export function filterPipelineItems(items: readonly FollowUpItem[], filters: PipelineFilters, actorId?: string): FollowUpItem[] {
+  const query = normalized(filters.search);
+  return items.filter(item => {
+    if (query && ![item.name, item.lastMessage, item.followUp, item.notes].some(value => (value || '').toLowerCase().includes(query))) return false;
+    if (filters.channel && item.channel !== filters.channel) return false;
+    if (filters.tag && item.tag !== filters.tag) return false;
+    if (filters.assignment === 'mine' && (!actorId || item.assignedTo !== actorId)) return false;
+    if (filters.assignment === 'unassigned' && item.assignedTo !== null && item.assignedTo !== '') return false;
+    if (filters.assignment === 'others' && (!actorId || !item.assignedTo || item.assignedTo === actorId)) return false;
+    return true;
+  });
 }
 
 export const hasNeedsReply = (item: FollowUpItem): boolean => item.needsReply;

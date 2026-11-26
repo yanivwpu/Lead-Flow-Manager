@@ -182,6 +182,13 @@ test('Pipeline uses the same deal definition as KPI/List and preserves Realtor q
   for (const id of ['realtor', 'deal']) assert.ok(document.querySelector(`[data-testid="pipeline-card-${id}"]`), id);
   for (const id of ['ordinary', 'railway', 'promo', 'inquiry', 'manual', 'undated']) assert.equal(document.querySelector(`[data-testid="pipeline-card-${id}"]`), null, id);
   assert.ok(document.querySelector('[data-testid="pipeline-column-qualified (warm)"] [data-testid="pipeline-card-realtor"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-search"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-filter-channel"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-filter-tag"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-filter-assignment"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Negotiation"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-open-deal"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-reminder-deal"]'));
   assert.equal(document.querySelectorAll('[data-testid^="pipeline-card-"]').length, Number(document.querySelector('[data-testid="kpi-active-deals"] p')?.textContent));
   assert.equal(render('pipeline', 'needs-reply').querySelectorAll('[data-testid^="pipeline-card-"]').length, 0);
   assert.equal(state.writes, 0);
