@@ -183,7 +183,7 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal(reset.status, 200);
       assert.equal((await reset.json()).revision, 2);
       const contact = await (await f.request("owner-a", "/api/contacts/contact-a")).json();
-      assert.equal(contact.pipelineStage, "Lead");
+      assert.equal(contact.contact.pipelineStage, "Lead");
     });
     await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
       const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
