@@ -257,6 +257,8 @@ test('email marketing and informational copy stay out of follow-ups and the pipe
     "Thousands of consumers are surprised by our outstanding service. January PIN: 1234",
     "Don&#39;t start by looking for a cheap option. Start with three numbers",
     "Are you interested in a demo? We provide marketing services.",
+    "I would like to offer you our services.",
+    "Can you share your availability for a demo of our product?",
     "Thanks!\nOn Tuesday Alex wrote:\nCan you send a quote?",
   ];
   for (const text of examples) {
