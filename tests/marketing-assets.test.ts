@@ -92,6 +92,24 @@ test("MIME and size rejection: only sniffed JPG/PNG/WebP/PDF", () => {
   assert.match(marketingAssetUploadErrorMessage("too_large", WEBCHAT_IMAGE_MAX_BYTES), /5 MB/);
 });
 
+test("marketing PDF security rejection explains how to export a clean PDF", () => {
+  for (const marker of ["/EmbeddedFiles", "/EmbeddedFile", "/JavaScript", "<html>"]) {
+    const pdf = Buffer.from("%PDF-1.4\n" + marker);
+    const result = inspectMarketingAssetBuffer(pdf, "application/pdf");
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "unsafe_pdf");
+      assert.match(marketingAssetUploadErrorMessage(result.reason), /Export a clean PDF/);
+    }
+  }
+  const clean = Buffer.from("%PDF-1.4\n");
+  assert.equal(inspectMarketingAssetBuffer(clean, "application/pdf").ok, true);
+  const fake = inspectMarketingAssetBuffer(Buffer.from("not a PDF"), "application/pdf");
+  assert.equal(fake.ok, false);
+  if (!fake.ok) assert.equal(fake.reason, "unsafe_type");
+  assert.match(marketingAssetUploadErrorMessage("unsafe_type"), /Only JPG/);
+});
+
 test("safe filenames never expose paths", () => {
   assert.equal(sanitizeMarketingFilename("../../etc/passwd.jpg", "image/jpeg"), "passwd.jpg");
   assert.equal(sanitizeMarketingFilename("C:\\\\temp\\\\flyer.PDF", "application/pdf"), "flyer.pdf");

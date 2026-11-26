@@ -209,7 +209,7 @@ export function inspectMarketingAssetBuffer(
     if (!pdf.ok) {
       return {
         ok: false,
-        reason: pdf.reason,
+        reason: pdf.reason === "unsafe_type" && sniffLooksPdf(buf) ? "unsafe_pdf" : pdf.reason,
         maxBytes: pdf.reason === "too_large" ? WEBCHAT_PDF_MAX_BYTES : undefined,
       };
     }
@@ -611,6 +611,9 @@ export function marketingAssetUploadErrorMessage(reason: string, maxBytes?: numb
   }
   if (reason === "empty") return "No file provided";
   if (reason === "mismatch") return "File type does not match the uploaded contents.";
+  if (reason === "unsafe_pdf") {
+    return "This PDF contains potentially unsafe content, such as embedded files or active actions. Export a clean PDF without attachments or active content and try again.";
+  }
   if (reason === "undecodable") {
     return "This image could not be read. Upload a valid JPG, PNG, or WebP.";
   }
