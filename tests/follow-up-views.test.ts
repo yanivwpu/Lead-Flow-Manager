@@ -170,6 +170,7 @@ test('Follow-up view and KPI controls expose selected states, and pipeline uses 
   assert.equal(document.querySelector('[data-testid="kpi-active-deals"]')?.getAttribute('aria-pressed'), 'true');
   const board = document.querySelector('[data-testid="pipeline-view"]')!;
   assert.ok(board.classList.contains('overflow-x-auto'));
+  assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"] [aria-label]')?.getAttribute('aria-label'), 'Opportunities: 1');
   assert.match(board.getAttribute('style') ?? '', /minmax\(170px,\s*1fr\)/);
   assert.equal(document.querySelector('[data-testid="pipeline-card-deal"]')?.getAttribute('draggable'), 'true');
   assert.equal(state.writes, 0);

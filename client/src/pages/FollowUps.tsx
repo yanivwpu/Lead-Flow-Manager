@@ -252,6 +252,7 @@ function PipelineView({
   onStageChange: (chatId: string, newStage: string) => void;
   isMobile: boolean;
 }) {
+  const { t } = useTranslation();
   const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
 
   const chatsByStage = useMemo(() => {
@@ -329,7 +330,7 @@ function PipelineView({
               <div className={cn("h-1 rounded-full mb-3", colors)} />
               <div className="flex items-start justify-between gap-2">
                 <h3 className="min-w-0 break-words font-semibold text-slate-900 text-sm">{stage}</h3>
-                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={`${stageChats.length} opportunities`}>{stageChats.length}</span>
+                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={t("followups.opportunitiesCount", { total: stageChats.length })}>{stageChats.length}</span>
               </div>
             </div>
             <div className="flex-1 p-2 space-y-2 max-h-[500px] overflow-y-auto">
@@ -345,7 +346,7 @@ function PipelineView({
               ))}
               {stageChats.length === 0 && (
                 <div className="text-center p-4 mt-1 rounded-lg border border-dashed border-slate-300 text-slate-500 text-xs leading-relaxed">
-                  {emptyStateMessages[stage] || "No opportunities in this stage"}
+                  {emptyStateMessages[stage] || t("followups.emptyPipelineStage")}
                 </div>
               )}
             </div>
@@ -530,6 +531,7 @@ function TaskCalendarView({
 }
 
 export function FollowUps() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -888,7 +890,7 @@ export function FollowUps() {
               <div className="text-center py-12 px-4 bg-white rounded-xl border border-dashed border-slate-300">
                 <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-slate-900 font-semibold">No matching tasks</p>
-                <p className="text-sm text-slate-600 mt-1">Follow-ups and customer inquiries from your recent inbox will appear here when they need attention.</p>
+                <p className="text-sm text-slate-600 mt-1">{t("followups.emptyTasksHint")}</p>
                 <Button className="mt-4 bg-brand-green hover:bg-emerald-700" data-testid="button-view-chats"
                   onClick={() => setLocation('/app/inbox')}>
                   Go to Inbox

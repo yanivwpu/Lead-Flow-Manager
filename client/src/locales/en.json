@@ -290,6 +290,9 @@
     "saveAndOpen": "Save & Open"
   },
   "followups": {
+    "opportunitiesCount": "Opportunities: {{total}}",
+    "emptyPipelineStage": "No opportunities in this stage",
+    "emptyTasksHint": "Follow-ups and customer inquiries from your recent inbox will appear here when they need attention.",
     "title": "Follow-ups",
     "scheduled": "Scheduled",
     "overdue": "Overdue",
