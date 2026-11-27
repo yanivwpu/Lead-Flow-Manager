@@ -68,12 +68,16 @@ function manuallyAddedToPipeline(contact: { sourceDetails?: unknown }): boolean 
   return (contact.sourceDetails as { pipelineManuallyAdded?: unknown } | null)?.pipelineManuallyAdded === true;
 }
 
+export function canManuallyAdmitToPipeline(contact: Pick<FollowUpInboxItem['contact'], 'tag'>): boolean {
+  return !['unqualified', 'do not contact'].includes(normalized(contact.tag));
+}
+
 /** Default Lead/New Lead, a saved contact, and an inbox conversation are not opportunities. */
 export function isSalesOpportunity(contact: FollowUpInboxItem['contact']): boolean {
   const stage = normalized(contact.pipelineStage);
   const tag = normalized(contact.tag);
   if (['unqualified', 'disqualified', 'archived'].includes(stage) ||
-      ['unqualified', 'do not contact'].includes(tag)) return false;
+      !canManuallyAdmitToPipeline(contact)) return false;
   if (isPassiveEmailIdentity(contact) && !manuallyAddedToPipeline(contact)) return false;
   if (manuallyAddedToPipeline(contact) && ['lead', 'contacted'].includes(stage)) return true;
   return isClosedStage(stage) ||

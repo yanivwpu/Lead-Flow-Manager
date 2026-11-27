@@ -7,6 +7,8 @@ import es from "../client/src/locales/es.json";
 import { copilotActionLabel, quickFollowUpDate, quickFollowUpOptions } from "../client/src/lib/inboxCopilotPresentation";
 import { CONVERSATION_STATUS_ROWS, conversationStatusLabel } from "../client/src/lib/conversationStatusUi";
 import { crmStageLabel, crmTagLabel, crmChannelLabel } from "../client/src/lib/crmPresentation";
+import { inboxPipelineChoices } from "../client/src/lib/data";
+import { defaultPipelineLayout, pipelineStageDisplayLabel } from "../shared/pipelineLayout";
 import { isSchedulingComposerAction } from "../shared/customerInsights";
 
 test("Inbox shell, channel picker, composer and Copilot resolve in each interface locale", async () => {
@@ -76,5 +78,41 @@ test("Inbox status, stage and tag labels preserve canonical values and custom te
     assert.equal(crmTagLabel(locale.t, "New"), messages.crmDetails.newTag);
     assert.equal(crmTagLabel(locale.t, "Customer supplied tag"), "Customer supplied tag");
     assert.equal(crmChannelLabel(locale.t, "email_inbox"), messages.inboxUi.emailChannel);
+  }
+});
+
+test("Inbox pipeline choices use workspace ordering, custom assignments and canonical fallback", () => {
+  const defaults = defaultPipelineLayout();
+  const id = "custom:12345678-1111-2222-3333-444444444444";
+  const [, contacted, proposal, negotiation, closed] = defaults;
+  const layout = [contacted, defaults[0], { id, label: "Design & Measurements", canonicalStage: "Proposal" as const },
+    { ...proposal, label: "Estimate" }, negotiation, closed];
+
+  assert.deepEqual(inboxPipelineChoices(layout, "Proposal", id, false), {
+    value: id,
+    stageIds: ["Contacted", "Lead", id, "Proposal", "Negotiation", "Closed"],
+  });
+  assert.equal(pipelineStageDisplayLabel(layout, id), "Design & Measurements");
+  assert.equal(pipelineStageDisplayLabel(layout, "Proposal"), "Estimate");
+  assert.equal(pipelineStageDisplayLabel(layout.map(stage => stage.id === id ? { ...stage, label: "Design" } : stage), id), "Design");
+  assert.equal(inboxPipelineChoices(layout, "Negotiation", id, false).value, "Negotiation");
+  assert.deepEqual(inboxPipelineChoices(defaults, "Proposal", id, false), {
+    value: "Proposal",
+    stageIds: ["Lead", "Contacted", "Proposal", "Negotiation", "Closed"],
+  });
+  assert.ok(inboxPipelineChoices(layout, "Lead", null, true).stageIds.includes("Appointment Set"));
+  assert.ok(inboxPipelineChoices(layout, "Lead", null, true).stageIds.includes("Qualified (Hot)"));
+  assert.equal(inboxPipelineChoices(layout, "Under Contract", null, false).stageIds.at(-1), "Under Contract");
+});
+
+test("Inbox pipeline admission is localized", async () => {
+  const locale = createInstance();
+  await locale.init({ lng: "en", resources: { en: { translation: en }, he: { translation: he }, es: { translation: es } } });
+  for (const [language, label] of [
+    ["en", "Add to pipeline"], ["es", "Añadir al pipeline"], ["he", "הוספה לצינור המכירות"],
+  ] as const) {
+    await locale.changeLanguage(language);
+    assert.equal(locale.t("inboxUi.addToPipeline"), label);
+    assert.equal(locale.dir(), language === "he" ? "rtl" : "ltr");
   }
 });
