@@ -975,7 +975,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           onClick={() => openConnectProvider(connector.id)}
                           data-testid={`button-inventory-connect-${connector.id}`}
                         >
-                          {connector.actionLabel}
+                          {connector.status === "available"
+                            ? t("settings.connect")
+                            : connector.status === "connected" ? t("rgeApp.connected") : t("rgeInventory.comingSoon")}
                         </Button>
                       </div>
                     ))}

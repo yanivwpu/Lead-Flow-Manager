@@ -1321,14 +1321,14 @@ export function RealtorGrowthEngine() {
 
   const DetailPage = () => {
     const includedItems: { Icon: typeof Sparkles; t: string; d: string }[] = [
-      { Icon: Sparkles, t: "AI lead qualification", d: "Inbound messages are interpreted, scored, and routed with guardrails." },
-      { Icon: Target, t: "Buyer / seller scoring", d: "Intent and readiness update automatically from the conversation." },
-      { Icon: Calendar, t: "Booking intent detection", d: "Tour and call language triggers the right next action and handoff." },
-      { Icon: Clock, t: "Multi-step automated nurture", d: "Next-day re-engagement and channel-aware follow-up while the conversation is still actionable." },
-      { Icon: Send, t: "WhatsApp template follow-up", d: "Structured sends when the channel requires templates outside the reply window." },
-      { Icon: LayoutGrid, t: "Pipeline stages + tags", d: "Stages, tags, and context stay aligned with automation outcomes." },
-      { Icon: ClipboardCheck, t: "Tasks + follow-up creation", d: "Hot handoffs and exceptions become actionable work for your team." },
-      { Icon: Handshake, t: "Concierge launch session", d: "White-glove validation session before you go live on real traffic." },
+      { Icon: Sparkles, t: t("rgeApp.includedQualification"), d: t("rgeApp.includedQualificationHelp") },
+      { Icon: Target, t: t("rgeApp.includedScoring"), d: t("rgeApp.includedScoringHelp") },
+      { Icon: Calendar, t: t("rgeApp.includedBooking"), d: t("rgeApp.includedBookingHelp") },
+      { Icon: Clock, t: t("rgeApp.includedNurture"), d: t("rgeApp.includedNurtureHelp") },
+      { Icon: Send, t: t("rgeApp.includedTemplate"), d: t("rgeApp.includedTemplateHelp") },
+      { Icon: LayoutGrid, t: t("rgeApp.includedPipeline"), d: t("rgeApp.includedPipelineHelp") },
+      { Icon: ClipboardCheck, t: t("rgeApp.includedTasks"), d: t("rgeApp.includedTasksHelp") },
+      { Icon: Handshake, t: t("rgeApp.includedLaunch"), d: t("rgeApp.includedLaunchHelp") },
     ];
 
     const whatItDoesLines = [
@@ -2041,11 +2041,11 @@ export function RealtorGrowthEngine() {
             <p className="mb-4 text-xs text-gray-500">{t("rgeApp.conciergeHelp")}</p>
             <div className="space-y-2.5">
               {[
-                "White-glove setup with a launch specialist",
-                "Channel validation (WhatsApp, Meta surfaces, web chat where used)",
-                "Workflow review against your market and offer",
-                "Launch optimization session to tune qualification and booking paths",
-                "Go-live checklist so automations match how you actually work",
+                t("rgeApp.conciergeSetup"),
+                t("rgeApp.conciergeChannels"),
+                t("rgeApp.conciergeWorkflows"),
+                t("rgeApp.conciergeOptimize"),
+                t("rgeApp.conciergeChecklist"),
               ].map((line) => (
                 <div key={line} className="flex items-start gap-2.5">
                   <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
