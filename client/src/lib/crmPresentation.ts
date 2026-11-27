@@ -50,7 +50,8 @@ export function crmChannelLabel(t: TFunction, channel: string | null | undefined
     case null:
     case "__none__": return t("crmDetails.noChannel");
     case "webchat": return t("inboxUi.websiteChat");
-    case "email": return t("inboxUi.emailChannel");
+    case "email":
+    case "email_inbox": return t("inboxUi.emailChannel");
     default: return getContactDisplayChannelLabel(channel);
   }
 }

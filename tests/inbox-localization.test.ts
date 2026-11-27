@@ -5,6 +5,8 @@ import en from "../client/src/locales/en.json";
 import he from "../client/src/locales/he.json";
 import es from "../client/src/locales/es.json";
 import { copilotActionLabel, quickFollowUpDate, quickFollowUpOptions } from "../client/src/lib/inboxCopilotPresentation";
+import { CONVERSATION_STATUS_ROWS, conversationStatusLabel } from "../client/src/lib/conversationStatusUi";
+import { crmStageLabel, crmTagLabel, crmChannelLabel } from "../client/src/lib/crmPresentation";
 import { isSchedulingComposerAction } from "../shared/customerInsights";
 
 test("Inbox shell, channel picker, composer and Copilot resolve in each interface locale", async () => {
@@ -52,5 +54,27 @@ test("quick follow-up localizes labels and schedules canonical offsets at 9 AM",
     assert.deepEqual(options.map(({ display }) => display), labels, locale);
     assert.deepEqual(options.map(({ value }) => value), ["24h", "3 days", "1 week"], locale);
     assert.deepEqual(options.map(({ value }) => quickFollowUpDate(value, now)), expectedDates, locale);
+  }
+});
+
+test("Inbox status, stage and tag labels preserve canonical values and custom text", async () => {
+  const locale = createInstance();
+  await locale.init({
+    lng: "en",
+    resources: { en: { translation: en }, he: { translation: he }, es: { translation: es } },
+  });
+
+  for (const [language, messages] of Object.entries({ en, he, es })) {
+    await locale.changeLanguage(language);
+    assert.deepEqual(CONVERSATION_STATUS_ROWS.map(row => row.value), ["open", "pending", "resolved", "closed"]);
+    assert.deepEqual(CONVERSATION_STATUS_ROWS.map(row => conversationStatusLabel(locale.t, row.value)), [
+      messages.inboxUi.conversationOpen, messages.inboxUi.conversationPending,
+      messages.inboxUi.conversationResolved, messages.inboxUi.conversationClosed,
+    ]);
+    assert.equal(crmStageLabel(locale.t, "Contacted"), messages.crmDetails.contacted);
+    assert.equal(crmStageLabel(locale.t, "Custom qualification"), "Custom qualification");
+    assert.equal(crmTagLabel(locale.t, "New"), messages.crmDetails.newTag);
+    assert.equal(crmTagLabel(locale.t, "Customer supplied tag"), "Customer supplied tag");
+    assert.equal(crmChannelLabel(locale.t, "email_inbox"), messages.inboxUi.emailChannel);
   }
 });

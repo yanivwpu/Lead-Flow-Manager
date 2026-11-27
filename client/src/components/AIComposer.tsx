@@ -39,7 +39,6 @@ import {
 } from "@shared/inboxAutoSendTrigger";
 import { logAiReplyDecision } from "@shared/aiReplyDecisionLog";
 import {
-  composerKeyboardHelperText,
   resolveComposerEnterAction,
 } from "@shared/composerKeyboard";
 import {
@@ -914,7 +913,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     }
   };
 
-  const keyboardHelperText = useMemo(() => composerKeyboardHelperText(channel), [channel]);
+  const keyboardHelperText = isEmailComposer ? inboxText("inboxUi.emailKeyboardHint") : inboxText("inboxUi.chatKeyboardHint");
   const composerMinHeight = textareaBounds.minPx;
   const keyboardHelperId = "ai-composer-keyboard-hint";
 
