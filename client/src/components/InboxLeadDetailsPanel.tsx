@@ -3105,7 +3105,7 @@ export function InboxLeadDetailsPanel({
                   value={pipelineChoices.value}
                   label={pipelineLayoutQuery.isError ? inboxText("followups.layoutLoadFailed") : inboxText("inboxUi.stage")}
                   options={(pipelineLayoutQuery.isError ? [] : pipelineChoices.stageIds).map(stage => {
-                    const label = pipelineStageDisplayLabel(pipelineStages, stage);
+                    const label = pipelineStageDisplayLabel(pipelineStages, stage, locale.language);
                     return { value: stage, label: label === stage ? crmStageLabel(inboxText, stage) : label };
                   })}
                   onChange={columnId => updatePipelineChoice(columnId)}

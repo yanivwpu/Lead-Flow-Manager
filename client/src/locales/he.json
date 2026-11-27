@@ -292,6 +292,7 @@
     "saveAndOpen": "שמור ופתח"
   },
   "followups": {
+    "localizedStageNames": "שמות תצוגה לפי שפה (רשות)",
     "dismissRecommendation": "הסרת המלצה",
     "markResolved": "סימון כטופל",
     "recommendationDismissed": "ההמלצה הוסרה",
@@ -814,6 +815,12 @@
     }
   },
   "auth": {
+    "loginRateLimited": "יותר מדי ניסיונות כניסה. נסו שוב בעוד {{minutes}} דק׳.",
+    "loginServerError": "השרת אינו זמין כרגע. נסו שוב בעוד כמה דקות.",
+    "loginNetworkError": "אירעה בעיית חיבור. בדקו את החיבור ונסו שוב.",
+    "loginInvalid": "כתובת האימייל או הסיסמה שגויות",
+    "needWalkthrough": "רוצים לראות איך זה עובד?",
+    "bookDemo": "קביעת הדגמה",
     "welcomeBack": "ברוך שובך",
     "createAccount": "צור את החשבון שלך",
     "crmHandoffHeading": "השלם את חיבור ה-CRM שלך",

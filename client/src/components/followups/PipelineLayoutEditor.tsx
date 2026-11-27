@@ -1,3 +1,5 @@
+import { supportedLanguages } from "@/lib/i18n";
+import { SUPPORTED_USER_LANGUAGES, type UserLanguage } from "@shared/userLanguage";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
@@ -20,7 +22,12 @@ export function PipelineLayoutEditor({ layout, onClose, onSaved, onConflict }: {
   const [original] = useState(layout);
   const [draft, setDraft] = useState<PipelineStageLayout[]>(() => layout.stages.map(stage => ({ ...stage })));
   const [conflict, setConflict] = useState(false);
-  const parsed = pipelineLayoutSchema.safeParse(draft);
+  const parsed = pipelineLayoutSchema.safeParse(draft.map(stage => ({
+    ...stage,
+    localizedLabels: stage.localizedLabels && Object.fromEntries(
+      Object.entries(stage.localizedLabels).filter(([, label]) => label.trim()),
+    ),
+  })));
   const save = useMutation({
     mutationFn: async (stages: PipelineStageLayout[]) => {
       if (!original.csrfToken) throw new Error("conflict");
@@ -49,6 +56,15 @@ export function PipelineLayoutEditor({ layout, onClose, onSaved, onConflict }: {
       return next;
     });
   };
+  const updateLocalizedLabel = (id: string, language: UserLanguage, value: string) => {
+    setDraft(previous => previous.map(stage => {
+      if (stage.id !== id) return stage;
+      const localizedLabels = { ...stage.localizedLabels };
+      if (value) localizedLabels[language] = value;
+      else delete localizedLabels[language];
+      return { ...stage, localizedLabels: Object.keys(localizedLabels).length ? localizedLabels : undefined };
+    }));
+  };
   return (
     <Dialog open onOpenChange={open => { if (!open && !save.isPending) onClose(); }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -57,7 +73,8 @@ export function PipelineLayoutEditor({ layout, onClose, onSaved, onConflict }: {
         <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (parsed.success && !conflict && !save.isPending) save.mutate(parsed.data); }}>
           <div className="space-y-2">
             {draft.map((stage, index) => (
-              <div key={stage.id} className="rounded-lg border border-slate-200 p-2.5 flex items-end gap-2">
+              <div key={stage.id} className="rounded-lg border border-slate-200 p-2.5">
+                <div className="flex items-end gap-2">
                 <label className="flex-1 min-w-0 grid gap-1 text-xs text-slate-600">
                   <span>{t("followups.internalStage", { stage: crmStageLabel(t, stage.canonicalStage ?? stage.id) })}</span>
                   <input value={stage.label} maxLength={60} required disabled={save.isPending || conflict} className="w-full rounded-md border border-slate-200 px-2 py-2 text-sm text-slate-900" onChange={event => setDraft(prev => prev.map(item => item.id === stage.id ? { ...item, label: event.target.value } : item))} data-testid={`pipeline-layout-label-${stage.id.toLowerCase()}`} />
@@ -66,6 +83,26 @@ export function PipelineLayoutEditor({ layout, onClose, onSaved, onConflict }: {
                 {isCustomPipelineStageId(stage.id) && <Button type="button" variant="ghost" size="sm" disabled={save.isPending || conflict} onClick={() => setDraft(prev => prev.filter(item => item.id !== stage.id))}>{t("followups.removeCustomStage")}</Button>}
                 <Button type="button" variant="outline" size="icon" disabled={index === 0 || save.isPending || conflict} aria-label={t("followups.moveStageEarlier", { stage: stage.label === stage.id ? crmStageLabel(t, stage.id) : stage.label })} onClick={() => move(index, -1)}><ChevronUp className="h-4 w-4" /></Button>
                 <Button type="button" variant="outline" size="icon" disabled={index === draft.length - 1 || save.isPending || conflict} aria-label={t("followups.moveStageLater", { stage: stage.label === stage.id ? crmStageLabel(t, stage.id) : stage.label })} onClick={() => move(index, 1)}><ChevronDown className="h-4 w-4" /></Button>
+                </div>
+                {isCustomPipelineStageId(stage.id) && (
+                  <fieldset className="mt-2 grid gap-2 sm:grid-cols-3">
+                    <legend className="text-xs text-slate-600">{t("followups.localizedStageNames")}</legend>
+                    {SUPPORTED_USER_LANGUAGES.map(language => (
+                      <label key={language} className="min-w-0 text-xs text-slate-600">
+                        <bdi>{supportedLanguages[language].nativeName}</bdi>
+                        <input
+                          className="mt-1 w-full rounded-md border border-slate-200 px-2 py-2 text-sm text-slate-900"
+                          dir={supportedLanguages[language].dir}
+                          maxLength={60}
+                          value={stage.localizedLabels?.[language] ?? ""}
+                          disabled={save.isPending || conflict}
+                          onChange={event => updateLocalizedLabel(stage.id, language, event.target.value)}
+                          data-testid={`pipeline-layout-label-${stage.id}-${language}`}
+                        />
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
               </div>
             ))}
           </div>

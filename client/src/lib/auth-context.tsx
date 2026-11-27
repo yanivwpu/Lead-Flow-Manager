@@ -1,10 +1,16 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
+import i18n from "@/lib/i18n";
+import { toast } from "@/hooks/use-toast";
 import { trackSignUp } from "@/lib/ga4Events";
 import { queryClient } from "@/lib/queryClient";
 import { resolveLogoutLandingUrl } from "@/lib/logoutRedirect";
 import {
   applyDatabaseLanguagePreference,
+  bindLoginLanguage,
+  clearLoginLanguage,
+  restoreLoginLanguage,
+  saveLoginLanguage,
   clearExplicitLanguageSelection,
   resolveSignupLanguagePreference,
 } from "@/lib/userLanguagePreference";
@@ -86,18 +92,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userRef = useRef<User | null>(null);
   const mismatchAttemptsRef = useRef(0);
   const sessionHoldUntilRef = useRef(0);
+  const sessionUpdate = useRef(0);
 
-  const replaceSessionUser = useCallback((next: User | null, aligned: boolean) => {
+  const replaceSessionUser = useCallback(async (next: User | null, aligned: boolean, deferLocale = false) => {
+    const update = ++sessionUpdate.current;
     const prevId = userRef.current?.id ?? null;
     const nextId = next?.id ?? null;
     if (prevId !== nextId) {
+      if (prevId) setSessionAligned(false);
       clearExplicitLanguageSelection();
+      if (nextId) restoreLoginLanguage(nextId);
+      else clearLoginLanguage();
       resetAccountQueryCache(queryClient);
       clearAccountLocalHints();
     }
+    if (next && !deferLocale) {
+      await applyDatabaseLanguagePreference(next.language, () => update === sessionUpdate.current);
+    }
+    if (update !== sessionUpdate.current) return;
     userRef.current = next;
     setUser(next);
     setSessionAligned(aligned && !!nextId);
+    if (nextId && aligned && !deferLocale) {
+      void saveLoginLanguage(nextId).then(ok => {
+        if (!ok && userRef.current?.id === nextId) {
+          toast({ description: i18n.t("language.saveFailed"), variant: "destructive" });
+        }
+      });
+    }
   }, []);
 
   const refreshSession = useCallback(async (reason: "mount" | "focus" | "manual" = "manual") => {
@@ -112,7 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
+      const startedAt = sessionUpdate.current;
       const result = await fetchAuthoritativeSessionUserResult();
+      if (startedAt !== sessionUpdate.current) return;
       if (result.status === 401 || result.status === 429 || result.status === 0) {
         sessionHoldUntilRef.current = holdUntilAfterSessionStatus(
           result.status,
@@ -129,22 +153,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const session = result.user;
       const currentId = userRef.current?.id ?? null;
       if (!session) {
+        clearLoginLanguage();
         mismatchAttemptsRef.current = 0;
-        replaceSessionUser(null, false);
+        await replaceSessionUser(null, false);
         return;
       }
       if (currentId && !sessionIdentitiesMatch(currentId, session.id)) {
         mismatchAttemptsRef.current += 1;
         if (mismatchAttemptsRef.current > 2) {
-          replaceSessionUser(null, false);
+          await replaceSessionUser(null, false);
           return;
         }
-        replaceSessionUser(asAppUser(session), true);
+        await replaceSessionUser(asAppUser(session), true);
         mismatchAttemptsRef.current = 0;
         return;
       }
       mismatchAttemptsRef.current = 0;
-      replaceSessionUser(asAppUser(session), true);
+      await replaceSessionUser(asAppUser(session), true);
     } catch (error) {
       sessionHoldUntilRef.current = holdUntilAfterSessionStatus(0, null, Date.now());
       console.error("Failed to refresh session:", error);
@@ -176,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Restore DB language once auth is known (and when leaving public URL-locale routes).
   useEffect(() => {
-    if (isLoading || !user) return;
+    if (isLoading || !user || location === "/auth") return;
     void applyDatabaseLanguagePreference(user.language);
   }, [user?.id, user?.language, location, isLoading]);
 
@@ -207,10 +232,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session = await fetchAuthoritativeSessionUser();
       }
       if (!session) {
-        replaceSessionUser(null, false);
+        await replaceSessionUser(null, false);
         return { ok: false, status: 500, errorKind: "server" };
       }
-      replaceSessionUser(asAppUser(session), true);
+      bindLoginLanguage(session.id, session.language);
+      await replaceSessionUser(asAppUser(session), true, true);
       const pending = session.emailVerifiedAt === null;
       if (pending && typeof session.email === "string") {
         rememberPendingVerificationEmail(session.email);
@@ -266,10 +292,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok && data.id) {
         const session = await fetchAuthoritativeSessionUser();
         if (!session || session.id !== data.id) {
-          replaceSessionUser(null, false);
+          await replaceSessionUser(null, false);
           return { success: false, error: "Could not start a signed-in session. Please log in." };
         }
-        replaceSessionUser(asAppUser(session), true);
+        await replaceSessionUser(asAppUser(session), true);
         trackSignUp({ method: "email", plan: "free", userId: session.id });
         return { success: true };
       }
@@ -324,7 +350,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       resetAccountQueryCache(queryClient);
       clearAccountLocalHints();
+      sessionUpdate.current++;
       clearExplicitLanguageSelection();
+      clearLoginLanguage();
       userRef.current = null;
       setUser(null);
       setSessionAligned(false);
