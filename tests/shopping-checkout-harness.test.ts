@@ -58,9 +58,9 @@ test('installation replacement, partial cart and ambiguous mutation never silent
  const f=fixture(change);await assert.rejects(runValidation(selection,{...f.deps,approval:approval()}));await assert.rejects(runValidation(selection,{...f.deps,approval:approval()}));assert.equal(f.counts().mutations,1);
  }
 });
-test('CLI has read-only transaction, exclusive durable claim, private receipt and no app bootstrap; gate stays false',()=>{
+test('CLI has read-only transaction, exclusive durable claim, private receipt and no app bootstrap; released source gate is explicit',()=>{
  const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');assert.match(cli,/BEGIN READ ONLY/);const files=readFileSync('scripts/checkout-validation/private-files.ts','utf8');assert.match(files,/'wx',0o600/);assert.match(files,/await file.sync\(\)/);assert.doesNotMatch(cli,/import\(['"].*(?:db|routes|index)['"]\)/);
- assert.match(readFileSync('server/shopping/checkout/authorization.ts','utf8'),/CHECKOUT_ROLLOUT_APPROVED: boolean = false/);
+ assert.match(readFileSync('server/shopping/checkout/authorization.ts','utf8'),/CHECKOUT_ROLLOUT_APPROVED: boolean = true/);
 });
 
 test('real filesystem claim is exclusive across racing invocations and remains consumed',async()=>{
