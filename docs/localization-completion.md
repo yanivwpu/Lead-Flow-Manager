@@ -10,18 +10,18 @@ These are route families. A comma-separated row shares the same recorded status,
 |---|---|---|---|---|---|
 | `/app/inbox/:contactId?` | ? | P | P | P | Rare provider and CRM payload states remain unverified. Representative Inbox, Copilot and Composer flows were checked in all three languages. |
 | `/app/chats`, `/app/chats/:id` | — | — | — | — | Inbox redirects |
-| `/app/contacts` | P | P | P | P | Foundation keys, relative dates and LTR phone/email checked. Bulk feedback, channel labels, appointment and error coverage pending |
-| `/app/contacts/:id` | ? | M | M | ? | Customer detail and purchase history |
-| `/app/followups` | ? | M | M | P | Tasks, calendar, deals, orders and scheduling display |
-| `/app/search` | ? | M | M | ? | Results, filters and empty/error copy |
-| `/app/workflows` | ? | M | M | P | Builder controls, nodes and status |
-| `/app/chatbot` | ? | M | M | P | Builder chrome. Existing authored locale variants and field direction are preserved |
-| `/app/templates` | P | P | P | P | Foundation preset keys done. Approved library, sync, send and re-engagement UI pending |
-| `/app/campaigns/:id?` | ? | M | M | ? | Gates, enrollment and campaign views |
-| `/app/widget` | ? | P | P | P | Configuration and preview UI |
+| `/app/contacts` | P | P | P | P | Batch 3A covers listing, creation, filters, bulk deletion, notes, and snapshot states. Rare error and provider payloads remain unverified. |
+| `/app/contacts/:id` | P | P | P | P | Batch 3A covers profile, editing, notes, appointments, and purchase-history chrome. Live store and uncommon permissions states remain unverified. |
+| `/app/followups` | P | P | P | P | Batch 3A covers standard tasks, reminders, calendar, and deals. Shopify order-support tasks remain in the Shopify batch. |
+| `/app/search` | P | P | P | P | Search copy and result layout verified with synthetic data at two widths. Error and provider-specific payloads remain unverified. |
+| `/app/workflows` | P | P | P | P | Batch 3B covers workflow and sequence editors, trigger and action catalogs, and execution-history states. Live execution and uncommon provider failures remain unverified. |
+| `/app/chatbot` | P | P | P | P | Batch 3B covers builder controls, node and form editors, branching, and publishing feedback. Live sends and integration-specific states remain unverified. |
+| `/app/templates` | P | P | P | P | Batch 3C covers preset filters, Meta library and previews, sync, and re-engagement/send controls. Live provider behavior and uncommon send errors remain unverified. |
+| `/app/campaigns/:id?` | P | P | P | P | Batch 3C covers the dashboard, draft editor, reporting, and enrollment controls. Live scheduling and recipient actions remain unverified. |
+| `/app/widget` | P | P | P | P | Batch 3C covers widget settings, branding, page rules, preview, validation, and install. External embeds and uncommon upload failures remain unverified. |
 | `/app/website-widget` | — | — | — | — | Redirect to widget settings |
-| `/app/ai-brain` | ? | P | P | P | Modes, knowledge, tests and qualification |
-| `/app/sales-catalog` | ? | P | P | P | Offers, payments, catalog and guidance |
+| `/app/ai-brain` | P | P | P | P | Batch 3D covers modes, personas, knowledge, qualification, marketing materials and preview labels. Provider diagnostics and uncommon error states remain. |
+| `/app/sales-catalog` | P | P | P | P | Batch 3D covers manual offers, pricing display, payment links, guidance and archive feedback. Shopify merchant functionality remains in Batch 5. |
 | `/app/templates/realtor-growth-engine`, `/app/templates/realtor-growth-engine/onboarding`, `/app/templates/realtor-growth-engine/status` | ? | P | P | P | Launch, qualification, MLS, agent and neighborhood settings and editor |
 | `/app/templates/ecommerce-growth-engine` | — | — | — | — | Redirect to dashboard details |
 | `/app/ecommerce-growth-engine` | ? | P | P | P | Setup, overview, catalog, orders, AI Shopping, recovery, readiness, consent and post-purchase |
@@ -79,7 +79,7 @@ The audited 92 route families gained `/team-invitation`, `/shopify-growth-engine
 | PR 1. Runtime foundation | Logical alignment for shared controls, direction-aware Radix positioning, and scoped legacy RTL rules. Format dates and numbers using explicit regions, with currency and timezone supplied independently. Serial account saves, trusted explicit cache isolated from URL sync, recoverable bundle failures and preserved in-session selection on failed saves. |
 | PR 1. Guardrails | `scripts/localization/check.mjs` checks dictionary and interpolation contracts, plural categories, common literal sources, and direct/constant-built key usages. Typed-map shape checks cover the homepage, marketing nav, pricing, and product/solution models. Unresolved dynamic expressions require an explicit reviewed mapping or a baseline entry. The legacy findings file records per-file counts by fingerprint. Reduce it as existing findings are fixed. |
 | PR 2. Core dashboard and Inbox | Implemented shell, Inbox, Copilot and Composer copy, including channel filters and health, message actions, notes, appointments, template preview, and the buyer shortlist. Verified representative mixed-script flows in EN, HE and ES. See Batch 2 evidence below. |
-| PR 3. CRM and automation | Pending. Include Contacts, tasks, calendars, builder chrome, widget settings, template UI and search. |
+| PR 3. CRM, automation and AI tools | Integrated. See Batches 3A–3E below for route coverage, verification and open items. |
 | PR 4. Realtor | Pending. Include the newly discovered Neighborhood Pages, visual editor, verified sale/rent filters and saved shortlist. |
 | PR 5. Shopify | Pending. Verify installed merchant states in isolated fixtures. |
 | PR 6. Prospect AI | Pending. Cover discovery, qualification, import and outreach editors. |
@@ -126,3 +126,56 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 - Synthetic Chromium at 1366 and 390 px exercised empty Inbox, channel filter, a populated mixed-script contact, composer placeholder, Manual mode, desktop Copilot, mobile contact details, conversation actions, and the direction and bounds of inbound/outbound bubbles in all three languages. Targeted tests cover Inbox routing, draft and Auto isolation, permissions, reply-language policy, templates, and navigation. The new locale test covers dashboard, composer and Copilot labels.
 - This batch retains the geometry and colors already on main. [#338](https://github.com/yanivwpu/Lead-Flow-Manager/pull/338) is the separate Inbox styling change. A test merge found overlap in the Copilot header, suggestion badge, quick actions, and details panel. At integration, retain the styling classes from #338 and the localized labels and plural handling from this batch.
 - Provider-supplied diagnostics, customer-authored text and generated replies keep their source language. Some uncommon provider/CRM payload states and residual legacy findings remain, so the Inbox route still carries partial coverage pending those checks. Real customer delivery and provider mutations were outside the synthetic test scope.
+
+## Batch 3 progress
+
+- Batch 2 merged in [#383](https://github.com/yanivwpu/Lead-Flow-Manager/pull/383) at `0bf176ce`. Railway production reported a successful deployment of that commit. Batch 3 started there. The next main revision, `105a7f7e` ([#386](https://github.com/yanivwpu/Lead-Flow-Manager/pull/386)), changes the Neighborhood Pages editor and has no overlapping files with this change. The open Inbox styling work in #338 remains separate.
+- The localization baseline started at **6,606 findings across 184 files**. This pass reduces it without adding fingerprints or increasing any existing counts. The localization workflow runs the new CRM control and contact-profile tests alongside the established safeguards.
+- Search includes translated shortcuts, search feedback and result counts, plus locale-aware timestamps. Synthetic Chromium at 1366 px and 390 px verified the displayed shortcuts, identical API query tokens, preserved Inbox links, mixed-script snippets, and literal bracket matching in EN, HE and ES.
+- Contacts and Contact Details include translated profile, actions, deletion warnings, notes and activity states. The profile uses locale-aware dates, logical layout and left-to-right contact identifiers. An all-language render fixture verifies translated text and preserved contact identity, note content and conversation navigation. Follow-ups includes task view and reminder controls.
+- Workflows and Chatbot Builder include translated trigger and configuration controls and delay options. Workflow hours and days, chatbot delay units and widget placement options retain their existing stored values. No saved workflow, chatbot text, campaign message, provider template, or catalog offer content is translated by the interface.
+- Templates includes library and sync controls. Campaigns includes table headings, common statuses, counts and row actions. Widget settings includes launcher and visual controls. AI Brain includes business-profile labels and workspace states. Sales Catalog includes the manual offer editor and billing/availability controls. Shopify merchant-specific UI remains queued for Batch 5.
+- This pass leaves the affected routes partial. The CRM follow-on is documented in Batch 3A below. Remaining non-CRM work includes workflow history and builder configuration, chatbot node catalogs and validation, template send and resync dialogs, campaign editor and enrollment, widget page rules and installation, AI modes and qualification/testing, and the remaining catalog dialogs and product guidance. Browser verification for these routes and native-language review remain open.
+
+## Batch 3A CRM verification
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387) from `e8371666`. The legacy localization count declined from **6,287 to 6,228** across 182 and 180 files respectively. It gained no fingerprints or count increases.
+- Localized Contacts filters and sorting, creation and validation, selected-contact actions, deletion warnings and feedback, and notes and AI snapshot states. Contact Details covers editing, pipeline stages, appointment status, notes, activity history, and purchase-history chrome.
+- Localized task counts, views, replies, completion and error feedback, the scheduling dialog, calendar events, and pipeline stages. Built-in tags, stages, and statuses use localized display labels. Custom tags and stages, contact data, authored content, provider-supplied text and unset values keep their existing semantics.
+- Chromium ran the same synthetic CRM flows in EN, HE and ES at 1366 and 390 px. It checked translated filters and canonical URL values, the bulk-delete confirmation and contact IDs, creation and validation, editing with canonical stage and date, notes, reminder scheduling, task completion, calendar navigation, and desktop deal moves. All six locale and viewport combinations passed, including Hebrew RTL and Spanish LTR. No fixture used live contacts or providers.
+- The focused automated run passed 48 tests. Unverified cases include uncommon permission and provider responses, live purchase and booking feeds, and Shopify order-support tasks deferred to the Shopify batch.
+
+## Batch 3B Automation Builder and Chatbot Builder
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387). Batch 3A's e-commerce foundation job failed because a source assertion expected a hardcoded Needs Reply label. Commit `d15adf3d` updated the assertion to verify both the canonical filter and the English translation. Every check on that commit passed.
+- Reduced the legacy localization baseline from **6,228 to 5,947** with zero new or increased fingerprints. Added EN, HE and ES copy for the workflow and sequence editors, trigger and action catalogs, condition and timing controls, permission and validation states, and read-only execution history fed by the existing owner-checked endpoint.
+- Localized the chatbot navigation, message and question editors, delay controls, quick replies and next-step controls, action selection, form editor and preview controls, and save and activation feedback. Catalog labels translate on display. Persisted defaults, trigger identifiers, authored messages, localized variants, and connections retain their original values.
+- The focused automated runs passed 35 tests. Synthetic Chromium covered the workflow editor and chatbot editor at 1366 and 390 px in all three languages. Equivalent configurations produced identical values. The fixtures intercepted every write and never executed a live workflow or sent a message.
+- Live runs, provider-specific errors, and uncommon legacy node and integration states remain unverified. Platform-native controls and provider or user-authored data retain their original source. The later Batch 3 modules remain separate.
+
+## Batch 3C templates, campaigns, and widget settings
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387) from `06ab97da`. The legacy count declined from **5,947 to 5,621** with no new fingerprints or increased counts.
+- Localized the approved library and its statuses and categories, sync and re-engagement feedback, previews, recipient and variable controls, and media and carousel requirements. Preset language filters start at All languages and stay independent of dashboard language. Meta continues to own approved template creation and approval.
+- Localized the campaign dashboard and editor, statuses, schedules, enrollment controls, reporting, previews, and confirmation dialogs. Template content, recipient language, delay values, and audience and activation gates retain their existing behavior.
+- Localized widget branding, settings, page-rule controls and validation, save feedback, preview controls, and installation and embed instructions. Visitor strings, locale precedence, aliases, matching modes, and physical positions keep their stored values.
+- All 48 targeted automated tests passed. Six synthetic Chromium runs at 1366 and 390 px verified EN, Hebrew RTL and Spanish LTR. The runs exercised a Meta template preview, preset draft creation, campaign editing and a widget-position save. Switching languages mid-edit produced no writes. Equivalent actions produced the same campaign and widget payloads. The Meta body, template language and saved widget visitor variants remained intact.
+- Live provider synchronization and sends, campaign execution and recipient enrollment, production embeds and clipboard integration on third-party sites remain unverified. Provider-supplied diagnostic text and authored values retain their source language. Later batches remain separate.
+
+## Batch 3D AI Brain and manual Sales Catalog
+
+- Continued [draft PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387) from `62d1d66c`. The legacy count declined from **5,621 to 5,357** with no new fingerprints or increased counts.
+- AI Brain covers reply modes and personas, tier and plan copy, business-profile controls, knowledge sources and review, live data fallback labels, qualification question controls, marketing materials and test-chat display labels. Dashboard translations leave saved instructions, question text, keywords and reply-language policy independent of the dashboard locale.
+- Manual Sales Catalog covers offer statuses and cadence labels, forms and guidance, archive confirmation, payment link instructions, and load and save feedback. Counts use regional formatting. Authored price strings, URLs, offer identifiers and cadence values are preserved.
+- Focused regressions covered RTL/LTR layout, reply-language isolation and catalog tenant and record behavior. The broader knowledge scan suite reached a pricing-page fixture assertion unrelated to the changed routes. All 26 focused automated tests passed. Six synthetic Chromium runs at 375 and 1280 px passed in EN, Hebrew RTL and Spanish LTR. Language switches produced no writes. Explicit persona edits produced the same settings payload, and offer saves preserved the same ID, price and cadence in all three locales.
+- Provider-supplied diagnostics and uncommon subscription or upload failures remain outstanding. Knowledge freshness, review counts, publish feedback and source-removal summaries use localized copy. Live AI dispatch, customer messaging, checkout and production catalog writes were outside verification.
+- Batch 3E handoff should use the accumulated draft PR, the shrink-only baseline, and the verified synthetic fixtures to review integration across Batch 3. Shopify merchant functionality is tracked for Batch 5.
+
+## Batch 3E integration
+
+- Integrated main `0f72353a` into [PR #387](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387). Follow-ups retains the redesigned task list, calendar, draggable desktop pipeline, mobile stage control, workspace column labels and ordering, reply actions, lead qualification and passive-email exclusion. Built-in stage, channel and tag labels are localized. Workspace labels and canonical values stay as saved.
+- Integrated coverage includes Search, Contacts and contact details, Follow-ups and the pipeline, Workflows, Chatbot Builder, Templates, Campaigns, Website Widget, AI Brain and the manual Sales Catalog. The route matrix records remaining UI gaps. Provider diagnostics, uncommon provider failures, live automation and campaign execution, customer sends, and external widget embeds remain outside synthetic verification. Shopify-specific localization remains in Batch 5.
+- Legacy findings declined from **5,357 to 5,353**. The baseline has no new fingerprints or increased counts. The 42 focused integration tests and the localization guard passed, covering both parents' Follow-ups assertions and the existing CRM, builder, outreach and reply-language contracts.
+- Six synthetic Chromium runs passed at 390 and 1366 px in English, Hebrew RTL and Spanish LTR. Desktop drag events and the mobile stage selector sent the same canonical stage. Calendar navigation, task completion and reminder saves preserved the scheduled ISO timestamp and authored title.
+- The pricing assertion for `Realtor Growth Engine: $199 one-time` also fails in an isolated checkout of main `0f72353a`, as it did at the Batch 3C starting commit. Pricing and knowledge behavior and the assertion remain unchanged.
+- Required GitHub workflows and CodeQL results for the integrated branch are tracked on the [PR checks page](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387/checks).

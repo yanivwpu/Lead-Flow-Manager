@@ -1,5 +1,8 @@
+import { campaignStatusLabel } from "@/lib/outreachPresentation";
+import { crmChannelLabel } from "@/lib/crmPresentation";
+import { useTranslation } from "react-i18next";
 import type { MouseEvent } from "react";
-import { format } from "date-fns";
+import { formatRegionalDate, formatRegionalNumber } from "@/lib/regionalFormatting";
 import {
   Copy,
   Eye,
@@ -50,21 +53,22 @@ export function SavedPresetCampaignsTable({
   onDuplicate,
   onDelete,
 }: Props) {
+  const { t, i18n } = useTranslation();
   return (
     <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-100 touch-pan-y">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Campaign</TableHead>
-            <TableHead className="hidden sm:table-cell">Based on</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden md:table-cell">Channel</TableHead>
-            <TableHead className="text-right">Steps</TableHead>
-            <TableHead className="text-right hidden sm:table-cell tabular-nums">Enrolled</TableHead>
-            <TableHead className="text-right hidden md:table-cell tabular-nums">Sent</TableHead>
-            <TableHead className="text-right hidden md:table-cell tabular-nums">Failed</TableHead>
-            <TableHead className="hidden lg:table-cell">Updated</TableHead>
-            <TableHead className="text-right w-[100px]">Actions</TableHead>
+            <TableHead>{t("campaignTable.campaign")}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t("campaignTable.source")}</TableHead>
+            <TableHead>{t("campaignTable.status")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("campaignTable.channel")}</TableHead>
+            <TableHead className="text-end">{t("campaignTable.steps")}</TableHead>
+            <TableHead className="text-end hidden sm:table-cell tabular-nums">{t("campaignTable.enrolled")}</TableHead>
+            <TableHead className="text-end hidden md:table-cell tabular-nums">{t("campaignTable.sent")}</TableHead>
+            <TableHead className="text-end hidden md:table-cell tabular-nums">{t("campaignTable.failed")}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t("campaignTable.updated")}</TableHead>
+            <TableHead className="text-end w-[100px]">{t("campaignTable.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -74,10 +78,9 @@ export function SavedPresetCampaignsTable({
                 ? row.stepCount
                 : getPresetCampaignStepCount(row.messages);
             const ex = row.executionStats;
-            const updated =
-              row.updatedAt && !Number.isNaN(new Date(row.updatedAt).getTime())
-                ? format(new Date(row.updatedAt), "MMM d, yyyy p")
-                : "—";
+            const updated = row.updatedAt
+              ? formatRegionalDate(new Date(row.updatedAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })
+              : "—";
             return (
               <TableRow
                 key={row.id}
@@ -85,7 +88,7 @@ export function SavedPresetCampaignsTable({
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => onOpen(row.id)}
               >
-                <TableCell className="font-medium text-gray-900 max-w-[140px] truncate">
+                <TableCell dir="auto" className="font-medium text-gray-900 max-w-[140px] truncate">
                   {row.name}
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-sm text-gray-700 max-w-[200px] truncate">
@@ -94,29 +97,29 @@ export function SavedPresetCampaignsTable({
                 <TableCell>
                   <Badge
                     variant="outline"
-                    className="text-[11px] font-normal whitespace-normal max-w-[200px] text-left h-auto py-1"
+                    className="text-[11px] font-normal whitespace-normal max-w-[200px] text-start h-auto py-1"
                   >
-                    {row.statusLabel || row.status}
+                    {campaignStatusLabel(t, row.status, row.statusLabel)}
                   </Badge>
                 </TableCell>
                 <TableCell className="hidden md:table-cell capitalize text-gray-700">
-                  {row.channel}
+                  {crmChannelLabel(t, row.channel)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{steps}</TableCell>
-                <TableCell className="text-right hidden sm:table-cell tabular-nums text-gray-700">
-                  {ex?.enrollmentCount ?? 0}
+                <TableCell className="text-end tabular-nums">{formatRegionalNumber(steps, i18n.language)}</TableCell>
+                <TableCell className="text-end hidden sm:table-cell tabular-nums text-gray-700">
+                  {formatRegionalNumber(ex?.enrollmentCount ?? 0, i18n.language)}
                 </TableCell>
-                <TableCell className="text-right hidden md:table-cell tabular-nums text-gray-700">
-                  {ex?.sentStepEvents ?? 0}
+                <TableCell className="text-end hidden md:table-cell tabular-nums text-gray-700">
+                  {formatRegionalNumber(ex?.sentStepEvents ?? 0, i18n.language)}
                 </TableCell>
-                <TableCell className="text-right hidden md:table-cell tabular-nums text-gray-700">
-                  {ex?.failedStepEvents ?? 0}
+                <TableCell className="text-end hidden md:table-cell tabular-nums text-gray-700">
+                  {formatRegionalNumber(ex?.failedStepEvents ?? 0, i18n.language)}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell text-gray-500 text-sm whitespace-nowrap">
                   {updated}
                 </TableCell>
                 <TableCell
-                  className="text-right p-1"
+                  className="text-end p-1"
                   onClick={(e: MouseEvent<HTMLTableCellElement>) => e.stopPropagation()}
                 >
                   <DropdownMenu>
@@ -126,7 +129,7 @@ export function SavedPresetCampaignsTable({
                         variant="ghost"
                         size="sm"
                         className="h-8 w-8 p-0"
-                        aria-label="Campaign actions"
+                        aria-label={t("campaignTable.rowActions")}
                         data-testid={`saved-campaign-actions-${row.id}`}
                       >
                         <MoreVertical className="h-4 w-4" />
@@ -134,45 +137,45 @@ export function SavedPresetCampaignsTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuItem onClick={() => onOpen(row.id)} className="cursor-pointer">
-                        <Eye className="h-4 w-4 mr-2 shrink-0" />
-                        View
+                        <Eye className="h-4 w-4 me-2 shrink-0" />
+                        {t("common.view")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => onOpen(row.id, true)}
                         className="cursor-pointer"
                       >
-                        <Pencil className="h-4 w-4 mr-2 shrink-0" />
-                        Edit
+                        <Pencil className="h-4 w-4 me-2 shrink-0" />
+                        {t("common.edit")}
                       </DropdownMenuItem>
                       {(row.status === "draft" || row.status === "active_pending") && (
                         <DropdownMenuItem className="cursor-pointer" onClick={() => onActivate(row.id)}>
-                          <Rocket className="h-4 w-4 mr-2 shrink-0" />
-                          Activate
+                          <Rocket className="h-4 w-4 me-2 shrink-0" />
+                          {t("campaignTable.activate")}
                         </DropdownMenuItem>
                       )}
                       {(row.status === "active_pending" || row.status === "active") && (
                         <DropdownMenuItem className="cursor-pointer" onClick={() => onPause(row.id)}>
-                          <Pause className="h-4 w-4 mr-2 shrink-0" />
-                          Pause
+                          <Pause className="h-4 w-4 me-2 shrink-0" />
+                          {t("campaignTable.pause")}
                         </DropdownMenuItem>
                       )}
                       {row.status === "paused" && (
                         <DropdownMenuItem className="cursor-pointer" onClick={() => onResume(row.id)}>
-                          <Play className="h-4 w-4 mr-2 shrink-0" />
-                          Resume
+                          <Play className="h-4 w-4 me-2 shrink-0" />
+                          {t("campaignTable.resume")}
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="cursor-pointer" onClick={() => onDuplicate(row.id)}>
-                        <Copy className="h-4 w-4 mr-2 shrink-0" />
-                        Duplicate
+                        <Copy className="h-4 w-4 me-2 shrink-0" />
+                        {t("campaignTable.duplicate")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer text-red-600 focus:text-red-600"
                         onClick={() => onDelete(row.id)}
                       >
-                        <Trash2 className="h-4 w-4 mr-2 shrink-0" />
-                        Delete
+                        <Trash2 className="h-4 w-4 me-2 shrink-0" />
+                        {t("common.delete")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

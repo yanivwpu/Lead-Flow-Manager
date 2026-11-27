@@ -2,6 +2,7 @@
  * Neutral Website Chat Widget defaults, activation state, and legacy fingerprint migration.
  * Run: npx tsx tests/webchat-widget-defaults.test.ts
  */
+import en from "../client/src/locales/en.json";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -272,17 +273,22 @@ const exactLegacyStored = {
   assert.match(website, /widgetSurfaceStatus/);
   assert.doesNotMatch(website, /checked=\{settings\.enabled\}/);
   assert.match(website, /empty-page-rules/);
-  assert.match(website, /No page-specific rules are configured/);
-  assert.match(website, /Add a website domain before enabling the widget/);
+  assert.match(website, /t\("widgetAdmin\.noRules"\)/);
+  assert.ok(en.widgetAdmin.noRules.includes("No page-specific rules are configured."));
+  assert.match(website, /t\("widgetSettingsUi\.domainRequired"\)/);
+  assert.ok(en.widgetSettingsUi.domainRequired.includes("Add a website domain before enabling the widget."));
   assert.match(website, /button-confirm-rotate-widget-id/);
-  assert.match(website, /invalidates existing embed snippets/);
+  assert.match(website, /t\("widgetAdmin\.publicIdHint"\)/);
+  assert.ok(en.widgetAdmin.publicIdHint.includes("invalidates existing embed snippets"));
   assert.match(website, /WebchatChromePreview/);
   assert.match(website, /button-preview-desktop/);
   assert.match(website, /button-preview-mobile/);
-  assert.match(website, /button-preview-\$\{item\.id\}/);
+  assert.match(website, /button-preview-\$\{previewState\}/);
   assert.doesNotMatch(website, /WhachatCRM<\/div>/);
-  assert.match(website, /Manual: your team replies in the Inbox/);
-  assert.match(website, /does not automatically enable Auto/);
+  assert.match(website, /t\("widgetAdmin\.manual"\)/);
+  assert.ok(en.widgetAdmin.manual.includes("Manual: your team replies in the Inbox."));
+  assert.match(website, /t\("outreachUi\.autoHint"\)/);
+  assert.match(en.outreachUi.autoHint, /does not automatically enable Auto/);
   assert.doesNotMatch(website, /WEBCHAT_SERVER_AI/);
   assert.match(website, /effectiveHasAIBrain/);
   assert.match(website, /text-auto-rollout-off/);
@@ -323,7 +329,8 @@ const exactLegacyStored = {
   assert.doesNotMatch(snippet, /11111111-1111-4111-8111-111111111111/);
 
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
-  assert.match(inbox, /webchat: 'Web Chat'/);
+  assert.match(inbox, /channel === "webchat"\) return inboxText\("inboxUi\.websiteChat"\)/);
+  assert.equal(en.inboxUi.websiteChat, "Website Chat");
   assert.match(inbox, /whatsapp: \{ icon: MessageCircle, color: '#25D366', label: 'WhatsApp' \}/);
 }
 

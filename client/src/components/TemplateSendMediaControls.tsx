@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ export function TemplateSendMediaControls(props: {
   /** User chose upload / recent / clear — skip automatic prefill from last send. */
   onUserAdjustedMedia?: () => void;
 }) {
+  const { t } = useTranslation();
   const {
     template,
     chatId,
@@ -130,9 +132,9 @@ export function TemplateSendMediaControls(props: {
   if (mediaRuntimeRequired === false) {
     return (
       <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 text-sm text-gray-600">
-        <p className="font-medium text-gray-800">Fixed header media</p>
+        <p className="font-medium text-gray-800">{t("templateMedia.fixed")}</p>
         <p className="mt-1 text-xs text-gray-500">
-          This template does not use runtime media selection in the library send flow.
+          {t("templateMedia.fixedHint")}
         </p>
       </div>
     );
@@ -209,7 +211,7 @@ export function TemplateSendMediaControls(props: {
     const cap = waUploadFileSizeCheck(mimeForCap, file.size);
     if (!cap.ok) {
       toast({
-        title: "File too large",
+        title: t("templateMedia.tooLarge"),
         description: waUploadTooLargeMessage(cap.kind),
         variant: "destructive",
       });
@@ -229,7 +231,7 @@ export function TemplateSendMediaControls(props: {
 
       if (!uploadMediaTypeMatchesHeader(ht, json.mediaType)) {
         toast({
-          title: "Wrong file type",
+          title: t("templateMedia.wrongType"),
           description:
             ht === "image"
               ? "Choose a JPG, PNG, or WebP image."
@@ -256,8 +258,8 @@ export function TemplateSendMediaControls(props: {
       });
     } catch (e: unknown) {
       toast({
-        title: "Upload failed",
-        description: e instanceof Error ? e.message : "Try again.",
+        title: t("templateMedia.failed"),
+        description: t("common.tryAgain"),
         variant: "destructive",
       });
     } finally {
@@ -291,10 +293,9 @@ export function TemplateSendMediaControls(props: {
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-0.5">
-        <Label className="text-sm font-medium text-gray-900">{headerKindLabel} for this send</Label>
+        <Label className="text-sm font-medium text-gray-900">{headerKindLabel} {t("templateMedia.forSend")}</Label>
         <p className="text-xs text-gray-500">
-          Upload a file or pick something you already shared in this chat. Approval samples from WhatsApp Manager are
-          defaults only — you can replace them for each send.
+          {t("templateMedia.pickHint")}
         </p>
       </div>
 
@@ -307,7 +308,7 @@ export function TemplateSendMediaControls(props: {
             className="gap-1.5"
             onClick={useSampleMedia}
           >
-            Use sample media
+            {t("templateMedia.useSample")}
           </Button>
         </div>
       ) : null}
@@ -329,7 +330,7 @@ export function TemplateSendMediaControls(props: {
           onClick={() => fileRef.current?.click()}
         >
           <Upload className="h-3.5 w-3.5" />
-          {uploading ? "Uploading…" : "Upload"}
+          {uploading ? t("templateMedia.uploading") : t("common.upload")}
         </Button>
         {hasMediaSelected ? (
           <Button type="button" variant="ghost" size="sm" className="gap-1 text-gray-600" onClick={clearMedia}>
@@ -341,7 +342,7 @@ export function TemplateSendMediaControls(props: {
 
       {recentFiltered.length > 0 ? (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">From this chat</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t("templateMedia.fromChat")}</p>
           <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto pr-0.5">
             {recentFiltered.map((item) => (
               <button
@@ -357,7 +358,7 @@ export function TemplateSendMediaControls(props: {
           </div>
         </div>
       ) : recentData && recentFiltered.length === 0 ? (
-        <p className="text-[11px] text-gray-400">No matching files in this chat yet. Upload one above.</p>
+        <p className="text-[11px] text-gray-400">{t("templateMedia.noFiles")}</p>
       ) : null}
     </div>
   );

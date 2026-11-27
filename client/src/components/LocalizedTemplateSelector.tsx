@@ -37,7 +37,6 @@ import {
   Eye,
   Loader2,
 } from "lucide-react";
-import { getCurrentLanguage, getDirection } from "@/lib/i18n";
 import { apiRequest } from "@/lib/queryClient";
 import {
   buildNewCampaignPlaceholderDefaults,
@@ -104,24 +103,17 @@ export function LocalizedTemplateSelector({
   onCampaignCreated,
   showPreviewOnly = false,
 }: LocalizedTemplateSelectorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const VALID_TEMPLATE_LANGS = ["en", "he", "es"] as const;
-  const rawLang = getCurrentLanguage() || "en";
-  const normalizedLang = rawLang.split("-")[0].toLowerCase();
-  const currentLang = (VALID_TEMPLATE_LANGS as readonly string[]).includes(normalizedLang)
-    ? (normalizedLang as "en" | "he" | "es")
-    : null;
-
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(currentLang ?? "all");
+  const [selectedLanguage, setSelectedLanguage] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedIndustry, setSelectedIndustry] = useState<string>("all");
   const [readOnlyPreviewTemplate, setReadOnlyPreviewTemplate] = useState<AutomationTemplate | null>(null);
   const [readOnlyPreviewOpen, setReadOnlyPreviewOpen] = useState(false);
-  const isRTL = getDirection() === "rtl";
+  const isRTL = i18n.dir() === "rtl";
 
-  const { data, isLoading } = useQuery<TemplateResponse>({
+  const { data, isLoading, isError, refetch } = useQuery<TemplateResponse>({
     queryKey: ["/api/automation-templates", selectedLanguage, selectedCategory, selectedIndustry],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -171,8 +163,12 @@ export function LocalizedTemplateSelector({
   });
 
   const templates = data?.templates || [];
-  const categoryLabels = data?.categoryLabels?.[selectedLanguage as keyof typeof data.categoryLabels] || {};
-  const industryLabels = data?.industryLabels?.[selectedLanguage as keyof typeof data.industryLabels] || {};
+  const industryLabels: Record<string, string> = {
+    general: t("templates.general"), clinic: t("templates.clinic"), real_estate: t("templates.realEstate"),
+    travel: t("templates.travel"), ecommerce: t("templates.ecommerce"),
+  };
+
+
 
   const openReadOnlyPreview = (template: AutomationTemplate) => {
     setReadOnlyPreviewTemplate(template);
@@ -204,6 +200,11 @@ export function LocalizedTemplateSelector({
     return <IconComponent className="h-4 w-4" />;
   };
 
+  const messageTypeLabels: Record<string, string> = {
+    initial: t("outreachUi.initial"), followup: t("outreachUi.followup"),
+    reminder: t("outreachUi.reminder"), feedback: t("outreachUi.feedback"),
+  };
+
   const getMessageTypeColor = (type: string) => {
     switch (type) {
       case "initial":
@@ -224,17 +225,17 @@ export function LocalizedTemplateSelector({
         <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${isRTL ? "text-right" : ""}`}>
           <div>
             <Label className={`text-sm font-medium mb-2 block ${isRTL ? "text-right" : ""}`}>
-              {t("language.select", "Language")}
+              {t("outreachUi.templateLanguage")}
             </Label>
             <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
               <SelectTrigger data-testid="template-language-select" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("common.all", "All Languages")}</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="he">עברית (Hebrew)</SelectItem>
-                <SelectItem value="es">Español (Spanish)</SelectItem>
+                <SelectItem value="all">{t("outreachUi.allLanguages")}</SelectItem>
+                <SelectItem value="en">{t("outreachUi.english")}</SelectItem>
+                <SelectItem value="he">{t("outreachUi.hebrew")}</SelectItem>
+                <SelectItem value="es">{t("outreachUi.spanish")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -248,11 +249,11 @@ export function LocalizedTemplateSelector({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("common.all", "All Categories")}</SelectItem>
-                <SelectItem value="abandoned_cart">{categoryLabels.abandoned_cart || "Abandoned Cart"}</SelectItem>
-                <SelectItem value="lead_nurture">{categoryLabels.lead_nurture || "Lead Nurture"}</SelectItem>
-                <SelectItem value="service_reminder">{categoryLabels.service_reminder || "Service Reminder"}</SelectItem>
-                <SelectItem value="promotions">{categoryLabels.promotions || "Promotions"}</SelectItem>
+                <SelectItem value="all">{t("outreachUi.allCategories")}</SelectItem>
+                <SelectItem value="abandoned_cart">{t("templates.abandonedCart")}</SelectItem>
+                <SelectItem value="lead_nurture">{t("templates.leadNurture")}</SelectItem>
+                <SelectItem value="service_reminder">{t("templates.serviceReminder")}</SelectItem>
+                <SelectItem value="promotions">{t("templates.promotions")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -266,22 +267,27 @@ export function LocalizedTemplateSelector({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("common.all", "All Industries")}</SelectItem>
-                <SelectItem value="general">{industryLabels.general || "General"}</SelectItem>
-                <SelectItem value="clinic">{industryLabels.clinic || "Healthcare"}</SelectItem>
-                <SelectItem value="real_estate">{industryLabels.real_estate || "Real Estate"}</SelectItem>
-                <SelectItem value="travel">{industryLabels.travel || "Travel"}</SelectItem>
-                <SelectItem value="ecommerce">{industryLabels.ecommerce || "E-commerce"}</SelectItem>
+                <SelectItem value="all">{t("outreachUi.allIndustries")}</SelectItem>
+                <SelectItem value="general">{t("templates.general")}</SelectItem>
+                <SelectItem value="clinic">{t("templates.clinic")}</SelectItem>
+                <SelectItem value="real_estate">{t("templates.realEstate")}</SelectItem>
+                <SelectItem value="travel">{t("templates.travel")}</SelectItem>
+                <SelectItem value="ecommerce">{t("templates.ecommerce")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {isLoading ? (
+        {isError ? (
+          <div role="alert" className="flex flex-wrap gap-2">
+            {t("outreachUi.loadPresets")}
+            <Button type="button" variant="outline" onClick={() => void refetch()}>{t("common.tryAgain")}</Button>
+          </div>
+        ) : isLoading ? (
           <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Card key={i} className="animate-pulse">
+                <Card key={i} className="animate-pulse" aria-label={t("common.loading")}>
                   <CardHeader>
                     <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                     <div className="h-3 bg-gray-200 rounded w-1/2 mt-2"></div>
@@ -396,7 +402,7 @@ export function LocalizedTemplateSelector({
                 {readOnlyPreviewTemplate?.messages.map((msg, idx) => (
                   <div key={idx} className="border rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge className={getMessageTypeColor(msg.type)}>{msg.type}</Badge>
+                      <Badge className={getMessageTypeColor(msg.type)}>{messageTypeLabels[msg.type] || msg.type}</Badge>
                       <span className="text-xs text-gray-500 flex items-center">
                         <Clock className="h-3 w-3 mr-1" />
                         {msg.delay === "0" ? t("templates.immediate", "Immediate") : msg.delay}

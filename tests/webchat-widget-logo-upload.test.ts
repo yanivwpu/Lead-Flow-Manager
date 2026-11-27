@@ -2,6 +2,7 @@
  * Website Chat widget logo upload: handler contract, response mapping, isolation.
  * Run: npx tsx tests/webchat-widget-logo-upload.test.ts
  */
+import en from "../client/src/locales/en.json";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -527,13 +528,14 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
   assert.match(website, /resetWidgetLogoFileInput/);
   assert.match(website, /globalThis\.fetch/);
   assert.match(website, /widgetLogoEditorDisplayName/);
-  assert.match(website, /Remove logo\?/);
+  assert.match(website, /t\("widgetEditor\.removeLogo"\)/);
+  assert.ok(en.widgetEditor.removeLogo.includes("Remove logo?"));
   assert.match(website, /updateSettings\(\{ logoUrl: "" \}\)/);
   assert.doesNotMatch(website, /data-testid="input-logo-url"/);
   assert.doesNotMatch(website, /value=\{coerceWidgetLogoUrl\(settings\.logoUrl\)\}/);
   const logoBlock = website.slice(
     website.indexOf('data-testid="section-widget-logo"'),
-    website.indexOf("Chat icon"),
+    website.indexOf('t("widgetEditor.chatIcon")'),
   );
   assert.match(logoBlock, /type="button"/);
   assert.match(logoBlock, /data-testid="input-logo-file"/);

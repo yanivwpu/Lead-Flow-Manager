@@ -1,10 +1,12 @@
+import { crmAppointmentStatus, crmAppointmentType, crmChannelLabel, crmInquiryLabel, crmStageLabel, crmTagLabel } from "@/lib/crmPresentation";
+import { useTranslation } from "react-i18next";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { ContactSuppressionStatus } from "@/components/ContactSuppressionStatus";
 import { useEffect, useState } from "react";
 import { Link, useRoute, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Contact, ContactNote } from "@shared/schema";
 import { contactConversationHref, contactsReturnHref } from "@shared/contactDetails";
-import { getContactDisplayChannelLabel } from "@shared/contactChannelDisplay";
 import { webchatPublicPhone } from "@shared/webchatContactIdentity";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
@@ -29,12 +31,11 @@ async function request(path: string, method = "GET", body?: unknown, version?: s
   const response = await fetch(path, { method, credentials: "include", headers: body ? { "Content-Type": "application/json", ...(version ? { "X-Contact-Updated-At": version } : {}) } : undefined, body: body ? JSON.stringify(body) : undefined });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || "Unable to load customer information");
+    throw Object.assign(new Error(data.error || "Unable to load customer information"), { status: response.status });
   }
   return response.json();
 }
 
-const date = (value: string | Date | null | undefined) => value && !Number.isNaN(new Date(value).getTime()) ? new Date(value).toLocaleString() : "Unavailable";
 const section = "min-w-0 rounded-lg border border-gray-200 bg-white p-4 space-y-3";
 
 export function ContactDetails() {
@@ -44,6 +45,10 @@ export function ContactDetails() {
 }
 
 function ContactDetailsContent({ id }: { id: string | undefined }) {
+  const { t, i18n } = useTranslation();
+  const date = (value: string | Date | null | undefined) => value
+    ? formatRegionalDate(new Date(value), i18n.language, { dateStyle: "medium", timeStyle: "short" })
+    : "—";
   const search = useSearch();
   const selectedShopifyOrder = new URLSearchParams(search).get("shopifyOrderEvent");
   const { user } = useAuth();
@@ -76,65 +81,77 @@ function ContactDetailsContent({ id }: { id: string | undefined }) {
     onSuccess: () => { setEditing(false); setDraft({}); cache.invalidateQueries({ queryKey: key }); cache.invalidateQueries({ queryKey: ["/api/contacts"] }); },
   });
   const addNote = useMutation({ mutationFn: () => request(`${path}/notes`, "POST", { content: note.trim() }), onSuccess: () => { setNote(""); cache.invalidateQueries({ queryKey: withUserQueryScope([`${path}/notes`], user?.id) }); } });
-  const back = <Link href={contactsReturnHref(search)} className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"><ArrowLeft className="h-4 w-4" /> Contacts</Link>;
-  if (details.isPending) return <main className="p-4 space-y-4">{back}<p role="status">Loading customer…</p></main>;
-  if (details.isError || !details.data) return <main className="p-4 space-y-4">{back}<p role="alert">{details.error?.message || "Contact unavailable"}</p></main>;
+  const back = <Link href={contactsReturnHref(search)} className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"><ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("contacts.title")}</Link>;
+  if (details.isPending) return <main className="p-4 space-y-4">{back}<p role="status">{t("crmUi.loadingCustomer")}</p></main>;
+  if (details.isError || !details.data) return <main className="p-4 space-y-4">{back}<p role="alert">{t("crmDetails.contactUnavailable")}</p></main>;
   const { contact, conversations, orders, activity, shopify } = details.data;
   const conversationHref = contactConversationHref(contact.id, conversations);
   const assigned = team.data?.find(member => (member.memberId || member.id) === contact.assignedTo)?.name;
   const fields = ["name", "email", "phone", "tag", "pipelineStage", "assignedTo", "followUp", "followUpDate"] as const;
   const value = (field: typeof fields[number]) => draft[field] ?? String(contact[field] || "");
   const set = (field: string, input: string) => setDraft(previous => ({ ...previous, [field]: input }));
+  const activityLabel = (eventType: string) => {
+    switch (eventType) {
+      case "shopify_order_created": return t("crmDetails.orderCreated");
+      case "shopify_order_paid": return t("crmDetails.orderPaid");
+      case "shopify_order_fulfilled": return t("crmDetails.orderFulfilled");
+      case "shopify_order_cancelled":
+      case "shopify_order_canceled": return t("crmDetails.orderCanceled");
+      case "shopify_order_refunded": return t("crmDetails.orderRefunded");
+      default: return eventType.replace(/_/g, " ");
+    }
+  };
+  const saveErrorStatus = save.error && "status" in save.error ? save.error.status : undefined;
   const history = [
-    ...activity.map(event => ({ id: event.id, title: event.eventType.replace(/_/g, " "), at: event.createdAt, detail: "" })),
-    ...(notes.data || []).map(item => ({ id: `note-${item.id}`, title: `Note · ${item.createdByName || "Team member"}`, at: item.createdAt, detail: item.content })),
-    ...(appointments.data || []).map(item => ({ id: `appointment-${item.id}`, title: item.title || item.appointmentType, at: item.appointmentDate, detail: item.status })),
+    ...activity.map(event => ({ id: event.id, title: activityLabel(event.eventType), at: event.createdAt, detail: "" })),
+    ...(notes.data || []).map(item => ({ id: `note-${item.id}`, title: t("crmDetails.noteBy", { name: item.createdByName || t("crmDetails.teamMember") }), at: item.createdAt, detail: item.content })),
+    ...(appointments.data || []).map(item => ({ id: `appointment-${item.id}`, title: item.title || crmAppointmentType(t, item.appointmentType), at: item.appointmentDate, detail: crmAppointmentStatus(t, item.status) })),
   ].sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
   return <main className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6 text-gray-900" data-testid="contact-details">
     {back}
     <header className="flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0"><h1 className="break-words text-xl font-semibold">{contact.name}</h1><p className="text-sm text-gray-500">{contact.pipelineStage || "No stage"} · {contact.tag || "No tag"}</p></div>
-      {conversationHref ? <Link href={conversationHref}><Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Open Conversation</Button></Link> : <p className="text-sm text-gray-500">No messaging conversation yet</p>}
+      <div className="min-w-0"><h1 dir="auto" className="break-words text-xl font-semibold">{contact.name}</h1><p className="text-sm text-gray-500">{crmStageLabel(t, contact.pipelineStage)} · {crmTagLabel(t, contact.tag)}</p></div>
+      {conversationHref ? <Link href={conversationHref}><Button variant="outline"><MessageSquare className="me-2 h-4 w-4" />{t("crmUi.openConversation")}</Button></Link> : <p className="text-sm text-gray-500">{t("crmUi.noConversation")}</p>}
     </header>
     <ContactSuppressionStatus contactId={contact.id} identityRevision={JSON.stringify([contact.email, contact.phone])} />
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-      <section className={section} aria-label="Contact profile">
-        <div className="flex justify-between items-center"><h2 className="font-semibold">Contact profile</h2><Button variant="ghost" size="sm" onClick={() => { setEditing(!editing); setEditVersion(contact.updatedAt ? String(contact.updatedAt) : undefined); setDraft({}); save.reset(); }}>{editing ? "Cancel" : "Edit"}</Button></div>
-        {shopify && <p className="text-xs text-gray-500">Shopify synchronizes customer identity. Name, email, and phone are read-only here; update them in Shopify.</p>}
+      <section className={section} aria-label={t("crmUi.contactProfile")}>
+        <div className="flex justify-between items-center"><h2 className="font-semibold">{t("crmUi.contactProfile")}</h2><Button variant="ghost" size="sm" onClick={() => { setEditing(!editing); setEditVersion(contact.updatedAt ? String(contact.updatedAt) : undefined); setDraft({}); save.reset(); }}>{editing ? t("inboxUi.cancel") : t("common.edit")}</Button></div>
+        {shopify && <p className="text-xs text-gray-500">{t("crmDetails.shopifyReadOnly")}</p>}
         {editing ? <form className="space-y-3" onSubmit={event => {
           event.preventDefault();
           const patch: Record<string, string | null> = {};
           for (const field of fields) if (field in draft && (!shopify || !["name", "email", "phone"].includes(field))) patch[field] = field === "followUpDate" ? (draft[field] ? new Date(draft[field]).toISOString() : null) : draft[field];
           if (Object.keys(patch).length) save.mutate(patch); else setEditing(false);
         }}>
-          {(["name", "email", "phone", "tag", "followUp"] as const).map(field => <label className="block text-sm space-y-1" key={field}><span>{({ name: "Name", email: "Email", phone: "Phone", tag: "Tag", followUp: "Follow-up" })[field]}</span><Input type={field === "email" ? "email" : "text"} disabled={(shopify || !contact.updatedAt) && ["name", "email", "phone"].includes(field)} value={value(field)} onChange={event => set(field, event.target.value)} /></label>)}
-          <label className="block text-sm space-y-1">Pipeline stage<select className="block w-full rounded-md border p-2" value={value("pipelineStage")} onChange={event => set("pipelineStage", event.target.value)}>{pipelineStageOptions(contact.pipelineStage).map(stage => <option key={stage}>{stage}</option>)}</select></label>
-          <label className="block text-sm space-y-1">Assigned team member<select className="block w-full rounded-md border p-2" value={value("assignedTo")} onChange={event => set("assignedTo", event.target.value)}><option value="">Unassigned</option>{contact.assignedTo && !assigned && <option value={contact.assignedTo}>Assigned team member</option>}{team.data?.filter(member => member.status === "active").map(member => <option key={member.id} value={member.memberId || member.id}>{member.name}</option>)}</select></label>
-          <label className="block text-sm space-y-1">Follow-up date<Input type="datetime-local" defaultValue={contact.followUpDate ? (() => { const local = new Date(contact.followUpDate); local.setMinutes(local.getMinutes() - local.getTimezoneOffset()); return local.toISOString().slice(0, 16); })() : ""} onChange={event => set("followUpDate", event.target.value)} /></label>
-          {save.isError && <p role="alert" className="text-sm text-red-700">{save.error.message}<Button type="button" variant="ghost" onClick={() => { details.refetch(); setEditing(false); setDraft({}); }}>Refresh contact</Button></p>}
-          <Button disabled={save.isPending} type="submit">{save.isPending ? "Saving…" : "Save changes"}</Button>
+          {(["name", "email", "phone", "tag", "followUp"] as const).map(field => <label className="block text-sm space-y-1" key={field}><span>{({ name: t("contacts.fieldName"), email: t("contacts.fieldEmail"), phone: t("contacts.fieldPhone"), tag: t("contacts.colTag"), followUp: t("inboxUi.followUp") })[field]}</span><Input dir={field === "email" || field === "phone" ? "ltr" : "auto"} type={field === "email" ? "email" : "text"} disabled={(shopify || !contact.updatedAt) && ["name", "email", "phone"].includes(field)} value={value(field)} onChange={event => set(field, event.target.value)} /></label>)}
+          <label className="block text-sm space-y-1">{t("crmUi.pipelineStage")}<select className="block w-full rounded-md border p-2" value={value("pipelineStage")} onChange={event => set("pipelineStage", event.target.value)}>{pipelineStageOptions(contact.pipelineStage).map(stage => <option key={stage} value={stage}>{crmStageLabel(t, stage)}</option>)}</select></label>
+          <label className="block text-sm space-y-1">{t("crmUi.assignedTeamMember")}<select className="block w-full rounded-md border p-2" value={value("assignedTo")} onChange={event => set("assignedTo", event.target.value)}><option value="">{t("crmUi.unassigned")}</option>{contact.assignedTo && !assigned && <option value={contact.assignedTo}>{t("crmUi.assignedTeamMember")}</option>}{team.data?.filter(member => member.status === "active").map(member => <option key={member.id} value={member.memberId || member.id}>{member.name}</option>)}</select></label>
+          {team.isError && <p role="alert" className="text-sm text-red-700">{t("crmDetails.teamFailed")}</p>}
+          <label className="block text-sm space-y-1">{t("crmUi.followUpDate")}<Input type="datetime-local" defaultValue={contact.followUpDate ? (() => { const local = new Date(contact.followUpDate); local.setMinutes(local.getMinutes() - local.getTimezoneOffset()); return local.toISOString().slice(0, 16); })() : ""} onChange={event => set("followUpDate", event.target.value)} /></label>
+          {save.isError && <p role="alert" className="text-sm text-red-700">{saveErrorStatus === 409 ? t("crmDetails.contactChanged") : saveErrorStatus === 400 ? t("crmDetails.invalidContactFields") : t("crmDetails.contactSaveFailed")}<Button type="button" variant="ghost" onClick={() => { details.refetch(); setEditing(false); setDraft({}); }}>{t("crmUi.refreshContact")}</Button></p>}
+          <Button disabled={save.isPending} type="submit">{save.isPending ? t("workspaceUi.saving") : t("crmUi.saveChanges")}</Button>
         </form> : <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm [&>dd]:break-words [&>dt]:text-gray-500">
-          <dt>Email</dt><dd>{contact.email || "—"}</dd><dt>Phone</dt><dd>{webchatPublicPhone(contact) || "—"}</dd>
-          <dt>Channel</dt><dd>{details.data.inquirySource ? "Contact form" : ((details.data.displayChannel ?? contact.primaryChannel) === "webchat"
-            ? "Website Chat" : getContactDisplayChannelLabel(details.data.displayChannel ?? contact.primaryChannel) || "No channel")}</dd>
-          <dt>Source</dt><dd>{details.data.inquirySource || (contact.source === "webchat" ? "Website Chat" : contact.source || "Unavailable")}</dd>
-          <dt>Assigned</dt><dd>{assigned || (contact.assignedTo ? "Assigned team member" : "Unassigned")}</dd>
-          <dt>Lead score</dt><dd>{contact.leadScore ?? "—"}</dd><dt>Created</dt><dd>{date(contact.createdAt)}</dd><dt>Updated</dt><dd>{date(contact.updatedAt)}</dd>
-          <dt>Follow-up</dt><dd>{contact.followUp || "None"}{contact.followUpDate && <div>{date(contact.followUpDate)}</div>}</dd>
+          <dt>{t("contacts.fieldEmail")}</dt><dd><bdi dir="ltr">{contact.email || "—"}</bdi></dd><dt>{t("contacts.fieldPhone")}</dt><dd><bdi dir="ltr">{webchatPublicPhone(contact) || "—"}</bdi></dd>
+          <dt>{t("contacts.colChannel")}</dt><dd>{details.data.inquirySource ? t("crmUi.contactForm") : crmChannelLabel(t, details.data.displayChannel ?? contact.primaryChannel)}</dd>
+          <dt>{t("crmUi.source")}</dt><dd>{details.data.inquirySource ? crmInquiryLabel(t, details.data.inquirySource) : (contact.source === "webchat" ? t("inboxUi.websiteChat") : contact.source || t("crmDetails.unavailable"))}</dd>
+          <dt>{t("crmUi.assigned")}</dt><dd>{assigned || (contact.assignedTo ? t("crmUi.assignedTeamMember") : t("crmUi.unassigned"))}</dd>
+          <dt>{t("inboxUi.leadScore")}</dt><dd>{contact.leadScore ?? "—"}</dd><dt>{t("crmUi.created")}</dt><dd>{date(contact.createdAt)}</dd><dt>{t("crmUi.updated")}</dt><dd>{date(contact.updatedAt)}</dd>
+          <dt>{t("inboxUi.followUp")}</dt><dd>{contact.followUp || t("common.none")}{contact.followUpDate && <div>{date(contact.followUpDate)}</div>}</dd>
         </dl>}
       </section>
       <div className="min-w-0 space-y-4">
-        {shopify && <section className={section} aria-label="Shopify purchases"><h2 className="font-semibold">Shopify purchases</h2>{details.data.commerceCustomer && <p className="text-sm">{details.data.commerceCustomer.store || "Store unavailable"}{details.data.commerceCustomer.ordersCount !== null && ` · ${details.data.commerceCustomer.ordersCount} orders`}</p>}<p className="text-xs text-gray-500">Synchronized order history. Status reflects the last stored event.</p>
-          {orders.length === 0 ? <p className="text-sm text-gray-500">No synchronized orders available.</p> : orders.map(order => <article key={order.id} id={`shopify-order-${order.id}`} tabIndex={-1}
-            className={`border-t pt-3 space-y-1 text-sm break-words rounded-sm outline-none ${selectedShopifyOrder === order.id ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}><div className="flex flex-wrap justify-between gap-2"><h3 className="font-medium">{order.number || "Order"}</h3><span>{[order.total, order.currency].filter(Boolean).join(" ") || "Total unavailable"}</span></div><p className="text-gray-500">{order.store || "Store unavailable"} · {date(order.createdAt)}</p><ul className="list-inside list-disc">{order.products.map((product, index) => <li key={index}>{product.name}{product.quantity !== null && ` × ${product.quantity}`}</li>)}</ul><p>Payment: {order.paymentStatus || "Unavailable"} · Fulfillment: {order.fulfillmentStatus || "Unavailable"}</p></article>)}
+        {shopify && <section className={section} aria-label={t("crmDetails.shopifyPurchases")}><h2 className="font-semibold">{t("crmDetails.shopifyPurchases")}</h2>{details.data.commerceCustomer && <p className="text-sm">{details.data.commerceCustomer.store || t("crmDetails.storeUnavailable")}{details.data.commerceCustomer.ordersCount !== null && ` · ${t("crmDetails.orderCount", { count: details.data.commerceCustomer.ordersCount })}`}</p>}<p className="text-xs text-gray-500">{t("crmDetails.orderHistory")}</p>
+          {orders.length === 0 ? <p className="text-sm text-gray-500">{t("crmDetails.noOrders")}</p> : orders.map(order => <article key={order.id} id={`shopify-order-${order.id}`} tabIndex={-1}
+            className={`border-t pt-3 space-y-1 text-sm break-words rounded-sm outline-none ${selectedShopifyOrder === order.id ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}><div className="flex flex-wrap justify-between gap-2"><h3 className="font-medium">{order.number || t("crmDetails.order")}</h3><span>{[order.total, order.currency].filter(Boolean).join(" ") || t("crmDetails.totalUnavailable")}</span></div><p className="text-gray-500">{order.store || t("crmDetails.storeUnavailable")} · {date(order.createdAt)}</p><ul className="list-inside list-disc">{order.products.map((product, index) => <li key={index}>{product.name}{product.quantity !== null && ` × ${product.quantity}`}</li>)}</ul><p>{t("crmDetails.orderPayment", { status: order.paymentStatus || t("crmDetails.unavailable") })} · {t("crmDetails.orderFulfillment", { status: order.fulfillmentStatus || t("crmDetails.unavailable") })}</p></article>)}
         </section>}
-        <section className={section} aria-label="CRM notes"><h2 className="font-semibold">CRM notes</h2>
-          {notes.isError ? <p role="alert">Notes could not be loaded.</p> : notes.isPending ? <p>Loading notes…</p> : !notes.data?.length ? <p className="text-sm text-gray-500">No notes yet.</p> : notes.data.map(item => <article key={item.id} className="border-t pt-2 text-sm"><p className="whitespace-pre-wrap break-words">{item.content}</p><p className="text-xs text-gray-500">{item.createdByName} · {date(item.createdAt)}</p></article>)}
-          <form className="space-y-2" onSubmit={event => { event.preventDefault(); if (note.trim()) addNote.mutate(); }}><label className="block text-sm" htmlFor="crm-note">Add a note</label><Textarea id="crm-note" value={note} onChange={event => setNote(event.target.value)} />{addNote.isError && <p role="alert" className="text-sm text-red-700">{addNote.error.message}</p>}<Button type="submit" disabled={!note.trim() || addNote.isPending}>Add note</Button></form>
+        <section className={section} aria-label={t("crmUi.notes")}><h2 className="font-semibold">{t("crmUi.notes")}</h2>
+          {notes.isError ? <p role="alert">{t("crmUi.notesFailed")}</p> : notes.isPending ? <p>{t("crmUi.loadingNotes")}</p> : !notes.data?.length ? <p className="text-sm text-gray-500">{t("crmUi.noNotes")}</p> : notes.data.map(item => <article key={item.id} className="border-t pt-2 text-sm"><p dir="auto" className="whitespace-pre-wrap break-words">{item.content}</p><p className="text-xs text-gray-500">{item.createdByName} · {date(item.createdAt)}</p></article>)}
+          <form className="space-y-2" onSubmit={event => { event.preventDefault(); if (note.trim()) addNote.mutate(); }}><label className="block text-sm" htmlFor="crm-note">{t("crmUi.writeNote")}</label><Textarea dir="auto" id="crm-note" value={note} onChange={event => setNote(event.target.value)} />{addNote.isError && <p role="alert" className="text-sm text-red-700">{t("crmDetails.noteFailed")}</p>}<Button type="submit" disabled={!note.trim() || addNote.isPending}>{t("crmUi.addNote")}</Button></form>
         </section>
-        <section className={section} aria-label="Activity timeline"><h2 className="font-semibold">Activity timeline</h2><p className="text-xs text-gray-500">Newest first · up to 200 persisted events</p>{appointments.isError && <p role="alert">Appointment activity could not be loaded.</p>}
-          {!history.length ? <p className="text-sm text-gray-500">No recorded activity.</p> : <ol className="space-y-3">{history.map(item => <li key={item.id} className="border-l-2 border-gray-200 pl-3 text-sm"><p className="font-medium capitalize">{item.title}</p>{item.detail && <p className="whitespace-pre-wrap break-words">{item.detail}</p>}<time className="text-xs text-gray-500">{date(item.at)}</time></li>)}</ol>}
+        <section className={section} aria-label={t("crmUi.activityTimeline")}><h2 className="font-semibold">{t("crmUi.activityTimeline")}</h2><p className="text-xs text-gray-500">{t("contactProfile.recentActivity")}</p>{appointments.isError && <p role="alert">{t("contactProfile.appointmentsFailed")}</p>}
+          {!history.length ? <p className="text-sm text-gray-500">{t("contactProfile.noActivity")}</p> : <ol className="space-y-3">{history.map(item => <li key={item.id} className="border-s-2 border-gray-200 ps-3 text-sm"><p className="font-medium capitalize">{item.title}</p>{item.detail && <p dir="auto" className="whitespace-pre-wrap break-words">{item.detail}</p>}<time className="text-xs text-gray-500">{date(item.at)}</time></li>)}</ol>}
         </section>
       </div>
     </div>

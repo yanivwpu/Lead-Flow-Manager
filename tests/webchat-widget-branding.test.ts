@@ -1,3 +1,4 @@
+import en from "../client/src/locales/en.json";
 /**
  * Website Chat launcher/branding: sanitization, isolation, public payload, chrome states.
  * Run: npx tsx tests/webchat-widget-branding.test.ts
@@ -447,18 +448,18 @@ function read(rel: string): string {
   assert.match(locale, /Powered by WhaChat/);
   assert.match(frame, /\[overflow-wrap:anywhere\]/);
   const website = read("client/src/pages/WebsiteWidget.tsx");
-  assert.match(website, /Launcher & Branding/);
+  assert.match(website, /t\("widgetSettingsUi.branding"\)/);
+  assert.equal(en.widgetSettingsUi.branding, "Launcher & Branding");
   assert.match(website, /WebchatChromePreview/);
   assert.match(website, /button-reset-branding/);
-  assert.match(website, /button-preview-\$\{item\.id\}/);
-  assert.match(website, /id: "collapsed"/);
-  assert.match(website, /id: "teaser"/);
-  assert.match(website, /id: "open"/);
+  assert.match(website, /button-preview-\$\{previewState\}/);
+  assert.match(website, /PREVIEW_STATES:[^=]+ = \["collapsed", "teaser", "open"\]/);
   assert.doesNotMatch(website, /WhachatCRM<\/div>/);
   assert.doesNotMatch(website, /Replies instantly/);
   assert.match(website, /setQueryData\(widgetSettingsQueryKey/);
   assert.match(website, /saveQueued \|\| saveMutation\.isPending/);
-  assert.match(website, /Could not save/);
+  assert.match(website, /t\("outreachUi\.saveError"\)/);
+  assert.ok(en.outreachUi.saveError);
   const routes = read("server/routes.ts");
   assert.match(routes, /buildWebchatPublicScript/);
   assert.match(routes, /UNSAFE_WIDGET_TEXT/);
@@ -563,7 +564,7 @@ function read(rel: string): string {
   assert.match(website, /agentName=\{settings\.agentName \|\| ""\}/);
   const brandingSection = website.slice(
     website.indexOf("section-launcher-branding"),
-    website.indexOf(">Appearance<") >= 0 ? website.indexOf(">Appearance<") : website.indexOf("Appearance"),
+    website.indexOf('t("widgetAdmin.appearance")'),
   );
   assert.doesNotMatch(brandingSection, /chatbotFlowId/);
 }

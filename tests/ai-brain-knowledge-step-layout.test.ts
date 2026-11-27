@@ -270,7 +270,7 @@ function layoutPage(viewport: number, dir: Dir): PageLayout {
 
 run("the AI behavior card and knowledge list share the same page column", () => {
   assert.match(PAGE, /data-testid="ai-behavior-card"/);
-  assert.match(PAGE, /CardTitle[^>]*>AI behavior/);
+  assert.match(PAGE, /CardTitle[^>]*>\s*\{t\("brain3d.behavior"\)\}/);
   assert.match(PAGE, /p-6 sm:p-10 max-w-\[800px\] mx-auto w-full/);
   assert.match(PAGE, /overflow-x-hidden/);
   assert.match(PAGE, /<BusinessKnowledgeSteps/);
@@ -292,10 +292,10 @@ run("the knowledge <ol> resets global list padding so it cannot indent the cards
 });
 
 run("every knowledge step uses the shared full-width Step shell", () => {
-  for (const title of ["Teach AI", "Analyze knowledge", "Review what AI learned"]) {
-    assert.match(STEPS, new RegExp(`title="${title}"`));
+  for (const key of ["teach", "analyze", "reviewLearned"]) {
+    assert.ok(STEPS.includes(`title={t("knowledge3d.${key}")}`));
   }
-  assert.match(QUESTIONS, /title="What AI should ask customers"/);
+  assert.match(QUESTIONS, /title=\{t\("brain3d.questionsTitle"\)\}/);
   assert.match(QUESTIONS, /from "\.\/WorkflowStep"/);
   assert.match(STEPS, /from "\.\/WorkflowStep"/);
   assert.match(QUESTIONS, /index=\{4\}/);

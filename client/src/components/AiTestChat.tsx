@@ -292,8 +292,14 @@ function Console() {
           <DialogDescription>{t("testChat.description")}</DialogDescription>
         </DialogHeader>
         <p className="text-sm">
-          {t("testChat.channel")}: Web Chat · {t("testChat.aiMode")}:{" "}
-          {diagnostics?.aiMode ?? "—"}
+          {t("testChat.channel")}: {t("knowledge3d.webChat")} · {t("testChat.aiMode")}:{" "}
+          {diagnostics?.aiMode === "full_auto"
+            ? t("brain3d.auto")
+            : diagnostics?.aiMode === "suggest_only"
+              ? t("brain3d.suggest")
+              : diagnostics?.aiMode === "off"
+                ? t("brain3d.off")
+                : diagnostics?.aiMode ?? "—"}
         </p>
         <p className="text-xs text-muted-foreground">{t("testChat.scope")}</p>
         {chat && <ShoppingActivityView state={chat.state} />}

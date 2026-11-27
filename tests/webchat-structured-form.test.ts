@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import en from "../client/src/locales/en.json";
 import {
   sanitizeWebchatFormDefinition,
   validateWebchatFormSubmission,
@@ -329,12 +330,15 @@ test("Chatbot Builder exposes a native Form fields editor and does not hide a ha
   assert.match(builder, /emptyWebchatFormDraft/);
   assert.match(builder, /chatbotFormNodesPublishError/);
   assert.match(builder, /demoteActiveFlowIfFormIncomplete/);
-  assert.match(builder, /Moved to Draft/);
+  assert.match(builder, /t\("builderFeedback\.movedDraft"\)/);
+  assert.equal(en.builderFeedback.movedDraft, "Moved to Draft");
   assert.doesNotMatch(builder, /id: "name", type: "name", label: "Name"/);
   const editor = read("client/src/components/chatbot/ChatbotFormFieldsEditor.tsx");
-  assert.match(editor, /Form fields/);
+  assert.match(editor, /t\("chatbotForm\.fields"\)/);
+  assert.equal(en.chatbotForm.fields, "Form fields");
   assert.match(editor, /btn-add-form-field/);
-  assert.match(editor, /Visitor preview/);
+  assert.match(editor, /t\("chatbotForm\.preview"\)/);
+  assert.equal(en.chatbotForm.preview, "Visitor preview");
   assert.match(editor, /WebchatFormCard/);
   assert.match(editor, /WEBCHAT_FORM_FIELD_TYPES\.map/);
   assert.match(editor, /TYPE_LABELS/);
@@ -343,6 +347,7 @@ test("Chatbot Builder exposes a native Form fields editor and does not hide a ha
   assert.match(editor, /btn-add-form-option/);
   assert.match(editor, /toggle-form-field-required/);
   assert.match(editor, /input-form-field-consent/);
-  assert.match(editor, /Website Chat only/);
+  assert.match(editor, /t\("chatbotForm\.websiteOnly"\)/);
+  assert.match(en.chatbotForm.websiteOnly, /Website Chat only/);
   assert.match(editor, /min-w-0/);
 });

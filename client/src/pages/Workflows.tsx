@@ -1,3 +1,10 @@
+import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
+import { builderCatalogText, builderDuration, builderStatusLabel } from "@/lib/builderPresentation";
+import { crmStageLabel, crmTagLabel } from "@/lib/crmPresentation";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Helmet } from "react-helmet";
@@ -151,6 +158,30 @@ const TAGS           = ["New", "Hot", "Quoted", "Paid", "Waiting", "Lost"];
 const STATUSES       = ["open", "pending", "resolved", "closed"];
 const PIPELINE_STAGES = ["Lead", "Contacted", "Proposal", "Negotiation", "Closed"];
 const FOLLOWUP_DAYS  = ["1", "3", "7", "14", "30"];
+const NO_REPLY_HOURS = ["1", "2", "4", "8", "12", "24", "48", "72"];
+
+function workflowActionDisplay(t: TFunction, language: string, action: WorkflowAction) {
+  switch (action.type) {
+    case "assign":
+      if (action.value === "round_robin") return t("workflowEditor.roundRobin");
+      break;
+    case "tag":
+    case "apply_tag":
+      return crmTagLabel(t, action.tag || action.value);
+    case "set_pipeline":
+    case "set_pipeline_stage":
+      return crmStageLabel(t, action.stage || action.value);
+    case "set_status":
+      if (action.value) return builderStatusLabel(t, action.value);
+      break;
+    case "set_followup":
+      if (action.value && Number.isFinite(Number(action.value))) {
+        return builderDuration(language, Number(action.value), "day");
+      }
+      break;
+  }
+  return getWorkflowActionSummary(action);
+}
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
@@ -255,6 +286,7 @@ type ViewState = "list" | "wf-start" | "wf-builder" | "seq-start" | "seq-builder
 // ─── Channel Chip ─────────────────────────────────────────────────────────────
 
 function ChannelChip({ value, selected, onClick }: { value: string; selected: boolean; onClick: () => void }) {
+  const { t } = useTranslation();
   const ch = CHANNELS.find(c => c.value === value)!;
   return (
     <button
@@ -268,7 +300,7 @@ function ChannelChip({ value, selected, onClick }: { value: string; selected: bo
       )}
     >
       <ch.icon className="w-3.5 h-3.5 shrink-0" style={{ color: ch.iconColor }} />
-      <span>{ch.label}</span>
+      <span>{builderCatalogText(t, ch.label)}</span>
     </button>
   );
 }
@@ -280,12 +312,13 @@ function StarterPlanAutomationsBanner({
   onUpgradePro: () => void;
   hideGrowthEngineCopy?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="px-4 sm:px-6 py-3 bg-amber-50/90 border-b border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-amber-950">
       <p>
         {hideGrowthEngineCopy
-          ? "You're on Starter — Basic Automations enabled. Pro unlocks more advanced workflows and AI-assisted triggers where enabled."
-          : "You're on Starter — Basic Automations enabled. Pro unlocks more advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled."}
+          ? t("builderFeedback.starter")
+          : t("builderFeedback.starterGrowth")}
       </p>
       <Button
         type="button"
@@ -294,7 +327,7 @@ function StarterPlanAutomationsBanner({
         className="shrink-0 border-amber-200 bg-white hover:bg-amber-50 text-amber-950"
         onClick={onUpgradePro}
       >
-        Upgrade to Pro
+        {t("builderUi.upgrade")}
       </Button>
     </div>
   );
@@ -313,6 +346,7 @@ function TriggerPicker({
   lockProTriggers?: boolean;
   onProTriggerLocked?: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const normalized = normalizeTriggerType(current);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
@@ -323,29 +357,29 @@ function TriggerPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 w-full text-left"
+          className="flex items-center gap-2 w-full text-start"
           data-testid="button-choose-trigger"
         >
           <div className="h-8 w-8 rounded-lg bg-brand-green/10 flex items-center justify-center shrink-0">
             <Icon className="h-4 w-4 text-brand-green" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900">{def?.label || "Choose a trigger"}</p>
+            <p className="text-sm font-semibold text-gray-900">{def ? builderCatalogText(t, def.label) : t("builderFeedback.chooseTrigger")}</p>
             <p className="text-xs text-gray-500">{def?.description || "Click to select a trigger event"}</p>
           </div>
           <span className="text-xs text-brand-green font-medium px-2 py-1 rounded hover:bg-brand-green/5 shrink-0">
-            {def ? "Change" : "Select →"}
+            {def ? t("automationUi.change") : t("builderUi.choose")}
           </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" sideOffset={8} className="w-80 p-0 max-h-[480px] overflow-y-auto">
         <div className="px-3 py-2.5 border-b bg-gray-50/80">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Choose trigger event</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("automationUi.chooseTrigger")}</p>
         </div>
         <div className="p-2 space-y-3">
           {TRIGGER_GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 py-1">{group.label}</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 py-1">{builderCatalogText(t, group.label)}</p>
               {group.triggers.map((trigger) => {
                 const TIcon = trigger.icon;
                 const isActive = normalized === trigger.value;
@@ -363,7 +397,7 @@ function TriggerPicker({
                       setOpen(false);
                     }}
                     className={cn(
-                      "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors",
+                      "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-start transition-colors",
                       locked ? "opacity-70 hover:bg-gray-50/80" : isActive ? "bg-brand-green/8 text-brand-green" : "hover:bg-gray-50"
                     )}
                   >
@@ -371,13 +405,13 @@ function TriggerPicker({
                       <TIcon className={cn("h-3.5 w-3.5", isActive ? "text-brand-green" : "text-gray-500")} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={cn("text-sm font-medium", isActive ? "text-brand-green" : "text-gray-800")}>{trigger.label}</p>
-                      <p className="text-[11px] text-gray-500 truncate">{trigger.description}</p>
+                      <p className={cn("text-sm font-medium", isActive ? "text-brand-green" : "text-gray-800")}>{builderCatalogText(t, trigger.label)}</p>
+                      <p className="text-[11px] text-gray-500 truncate">{builderCatalogText(t, trigger.description)}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {locked && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-semibold border-amber-200 bg-white text-amber-900">
-                          Advanced
+                          {t("automationUi.advanced")}
                         </Badge>
                       )}
                       {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-brand-green" />}
@@ -402,6 +436,7 @@ function ActionPickerPopover({
   onSelect: (type: string) => void;
   growthEngine?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const categories = buildActionPickerCategories(!!growthEngine);
   return (
@@ -413,31 +448,31 @@ function ActionPickerPopover({
           data-testid="button-add-action"
         >
           <Plus className="h-4 w-4" />
-          Add action
+          {t("automationUi.addAction")}
         </button>
       </PopoverTrigger>
       <PopoverContent align="center" side="bottom" sideOffset={8} className="w-72 p-0 max-h-[400px] overflow-y-auto">
         <div className="px-3 py-2.5 border-b bg-gray-50/80">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Choose an action</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("automationUi.chooseAction")}</p>
         </div>
         <div className="p-2 space-y-3">
           {categories.map((cat) => (
             <div key={cat.label}>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 py-1">{cat.label}</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 py-1">{builderCatalogText(t, cat.label)}</p>
               {cat.actions.map((action) => {
                 const AIcon = action.icon;
                 return (
                   <button
                     key={action.value}
                     onClick={() => { onSelect(action.value); setOpen(false); }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left transition-colors group"
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-start transition-colors group"
                   >
                     <div className="h-7 w-7 rounded-md bg-gray-100 flex items-center justify-center shrink-0 group-hover:bg-gray-200">
                       <AIcon className="h-3.5 w-3.5 text-gray-500" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800">{action.label}</p>
-                      <p className="text-[11px] text-gray-500 truncate">{action.description}</p>
+                      <p className="text-sm font-medium text-gray-800">{builderCatalogText(t, action.label)}</p>
+                      <p className="text-[11px] text-gray-500 truncate">{builderCatalogText(t, action.description)}</p>
                     </div>
                   </button>
                 );
@@ -477,9 +512,10 @@ function ActionBlock({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const def = getWorkflowActionDefinition(action.type);
   const Icon = def?.icon || FileText;
-  const summary = getWorkflowActionSummary(action);
+  const summary = workflowActionDisplay(t, i18n.language, action);
 
   // For "assign": value === "round_robin" means round robin, any other value is a userId (specific user)
   const assignMethod = action.type === "assign"
@@ -493,7 +529,7 @@ function ActionBlock({
           <Input
             value={action.tag || action.value || ""}
             onChange={(e) => onPatch({ tag: e.target.value, type: "apply_tag" })}
-            placeholder="Tag name..."
+            placeholder={t("automationUi.tagName")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-apply-tag-${index}`}
           />
@@ -503,7 +539,7 @@ function ActionBlock({
           <Input
             value={action.stage || action.value || ""}
             onChange={(e) => onPatch({ stage: e.target.value, type: "set_pipeline_stage" })}
-            placeholder="Pipeline stage..."
+            placeholder={t("automationUi.stage")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-pipeline-stage-${index}`}
           />
@@ -515,7 +551,7 @@ function ActionBlock({
             onValueChange={(v) => onPatch({ templateKey: v, type: "send_message_template" })}
           >
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-template-${index}`}>
-              <SelectValue placeholder="Select template..." />
+              <SelectValue placeholder={t("automationUi.template")} />
             </SelectTrigger>
             <SelectContent>
               {messageTemplateKeys.map((k) => (
@@ -527,7 +563,7 @@ function ActionBlock({
           <Input
             value={action.templateKey || ""}
             onChange={(e) => onPatch({ templateKey: e.target.value, type: "send_message_template" })}
-            placeholder="Template key (e.g. intro_fast_reply)"
+            placeholder={t("builderFeedback.templateKey")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-template-key-${index}`}
           />
@@ -538,7 +574,7 @@ function ActionBlock({
             <Input
               value={action.title || ""}
               onChange={(e) => onPatch({ title: e.target.value })}
-              placeholder="Task title..."
+              placeholder={t("automationUi.taskTitle")}
               className="h-8 text-sm bg-gray-50 border-gray-200"
               data-testid={`input-action-task-title-${index}`}
             />
@@ -547,14 +583,14 @@ function ActionBlock({
               min={0}
               value={action.dueDays != null ? String(action.dueDays) : "1"}
               onChange={(e) => onPatch({ dueDays: parseInt(e.target.value, 10) || 1 })}
-              placeholder="Due in (days)"
+              placeholder={t("automationUi.dueDays")}
               className="h-8 text-sm bg-gray-50 border-gray-200"
               data-testid={`input-action-task-due-${index}`}
             />
             {isRealtorNewLeadReview && <label className="flex items-start gap-2 text-xs text-gray-700">
               <input type="checkbox" checked={action.autoScheduleAgentPageInquiries === true}
                 onChange={(event) => onPatch({ autoScheduleAgentPageInquiries: event.target.checked })} />
-              Automatically schedule reminders for Agent Page, Neighborhood, and MLS inquiries
+              {t("builderFeedback.autoReminders")}
             </label>}
           </div>
         );
@@ -570,13 +606,13 @@ function ActionBlock({
                 fields: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
               })
             }
-            placeholder="field keys, comma-separated"
+            placeholder={t("builderFeedback.fieldKeys")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-lead-fields-${index}`}
           />
         );
       case "run_lead_scoring":
-        return <p className="text-sm text-gray-600 flex-1">Runs on inbound messages when AI Brain is enabled</p>;
+        return <p className="text-sm text-gray-600 flex-1">{t("builderFeedback.scoringHelp")}</p>;
       case "assign":
         return (
           <div className="flex-1 space-y-2">
@@ -592,8 +628,8 @@ function ActionBlock({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="round_robin">Round Robin</SelectItem>
-                <SelectItem value="specific">Specific User</SelectItem>
+                <SelectItem value="round_robin">{t("workflowEditor.roundRobin")}</SelectItem>
+                <SelectItem value="specific">{t("workflowEditor.specificUser")}</SelectItem>
               </SelectContent>
             </Select>
             {/* User dropdown — only when Specific User is chosen */}
@@ -603,14 +639,14 @@ function ActionBlock({
                 onValueChange={(v) => onUpdate("value", v)}
               >
                 <SelectTrigger className="h-8 text-sm bg-gray-50 border-gray-200" data-testid={`select-action-assign-user-${index}`}>
-                  <SelectValue placeholder="Select team member..." />
+                  <SelectValue placeholder={t("workflowEditor.selectMember")} />
                 </SelectTrigger>
                 <SelectContent>
                   {teamMembers.filter((m: any) => m.status === "active").map((m: any) => (
                     <SelectItem key={m.id} value={String(m.memberId || m.id)}>{m.name || m.email}</SelectItem>
                   ))}
                   {teamMembers.filter((m: any) => m.status === "active").length === 0 && (
-                    <div className="px-3 py-2 text-xs text-gray-400">No active members found</div>
+                    <div className="px-3 py-2 text-xs text-gray-400">{t("workflowEditor.noActiveMembers")}</div>
                   )}
                 </SelectContent>
               </Select>
@@ -621,10 +657,10 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-tag-${index}`}>
-              <SelectValue placeholder="Select tag..." />
+              <SelectValue placeholder={t("workflowEditor.selectTag")} />
             </SelectTrigger>
             <SelectContent>
-              {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              {TAGS.map(tag => <SelectItem key={tag} value={tag}>{crmTagLabel(t, tag)}</SelectItem>)}
             </SelectContent>
           </Select>
         );
@@ -632,10 +668,10 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-status-${index}`}>
-              <SelectValue placeholder="Select status..." />
+              <SelectValue placeholder={t("workflowEditor.selectStatus")} />
             </SelectTrigger>
             <SelectContent>
-              {STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+              {STATUSES.map(s => <SelectItem key={s} value={s}>{builderStatusLabel(t, s)}</SelectItem>)}
             </SelectContent>
           </Select>
         );
@@ -643,10 +679,10 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-pipeline-${index}`}>
-              <SelectValue placeholder="Select stage..." />
+              <SelectValue placeholder={t("workflowEditor.selectStage")} />
             </SelectTrigger>
             <SelectContent>
-              {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {PIPELINE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{crmStageLabel(t, stage)}</SelectItem>)}
             </SelectContent>
           </Select>
         );
@@ -655,7 +691,7 @@ function ActionBlock({
           <Input
             value={action.value}
             onChange={(e) => onUpdate("value", e.target.value)}
-            placeholder="Note text..."
+            placeholder={t("workflowEditor.note")}
             className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
             data-testid={`input-action-note-${index}`}
           />
@@ -664,10 +700,10 @@ function ActionBlock({
         return (
           <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
             <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-followup-${index}`}>
-              <SelectValue placeholder="Days..." />
+              <SelectValue placeholder={t("workflowEditor.daysPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
-              {FOLLOWUP_DAYS.map(d => <SelectItem key={d} value={d}>{d} day{d !== "1" ? "s" : ""}</SelectItem>)}
+              {FOLLOWUP_DAYS.map(d => <SelectItem key={d} value={d}>{t("workflowEditor.durationDays", { count: Number(d) })}</SelectItem>)}
             </SelectContent>
           </Select>
         );
@@ -691,19 +727,19 @@ function ActionBlock({
       <div className="flex-1 pb-4">
         <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{def?.label || "Action"}</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{def ? builderCatalogText(t, def.label) : t("builderCatalog.action")}</p>
             <div className="flex items-center gap-0.5 shrink-0">
               {index > 0 && (
-                <button onClick={onMoveUp} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Move up">
+                <button onClick={onMoveUp} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title={t("workflowEditor.moveUp")}>
                   <MoveUp className="h-3.5 w-3.5 text-gray-400" />
                 </button>
               )}
               {index < total - 1 && (
-                <button onClick={onMoveDown} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Move down">
+                <button onClick={onMoveDown} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title={t("workflowEditor.moveDown")}>
                   <MoveDown className="h-3.5 w-3.5 text-gray-400" />
                 </button>
               )}
-              <button onClick={onRemove} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-0.5" title="Remove">
+              <button onClick={onRemove} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors ms-0.5" title={t("workflowEditor.remove")}>
                 <Trash2 className="h-3.5 w-3.5 text-red-400" />
               </button>
             </div>
@@ -711,7 +747,7 @@ function ActionBlock({
           {/* Assign renders two stacked selects; all others render a single row */}
           {action.type === "assign" ? (
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-500">Assignment method</Label>
+              <Label className="text-xs text-gray-500">{t("workflowEditor.assignment")}</Label>
               {renderValue()}
             </div>
           ) : (() => {
@@ -720,7 +756,7 @@ function ActionBlock({
             return (
               <div className="flex items-center gap-3">
                 <Label className="text-xs text-gray-500 w-12 shrink-0">
-                  {action.type === "send_message_template" ? "Template" : "Value"}
+                  {action.type === "send_message_template" ? t("builderUi.template") : t("builderUi.value")}
                 </Label>
                 {valueUi}
               </div>
@@ -745,19 +781,20 @@ function ConditionsBlock({
   onUpdate: (id: string, field: "type" | "value", value: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Conditions <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 font-bold text-[10px]">{conditions.length || "0"}</span>
+          {t("automations.conditions")} <span className="ms-1.5 px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 font-bold text-[10px]">{conditions.length || "0"}</span>
         </p>
-        <span className="text-[11px] text-gray-400">All conditions must match</span>
+        <span className="text-[11px] text-gray-400">{t("workflowEditor.allConditions")}</span>
       </div>
 
       <div className="p-4 space-y-3">
         {conditions.length === 0 && (
           <p className="text-xs text-gray-400 text-center py-2">
-            No conditions — workflow runs on every trigger event.
+            {t("workflowEditor.noConditions")}
           </p>
         )}
 
@@ -772,24 +809,24 @@ function ConditionsBlock({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CONDITION_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                {CONDITION_TYPES.map(option => <SelectItem key={option.value} value={option.value}>{builderCatalogText(t, option.label)}</SelectItem>)}
               </SelectContent>
             </Select>
 
-            <span className="text-xs text-gray-400 shrink-0">is</span>
+            <span className="text-xs text-gray-400 shrink-0">{t("builderFeedback.equals")}</span>
 
             {/* Value selector — varies by type */}
             {cond.type === "channel" && (
               <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
                 <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Select channel..." />
+                  <SelectValue placeholder={t("workflowEditor.selectChannel")} />
                 </SelectTrigger>
                 <SelectContent>
                   {CHANNELS.filter(c => c.value !== "any").map(c => (
                     <SelectItem key={c.value} value={c.value}>
                       <span className="flex items-center gap-1.5">
                         <c.icon className="w-3.5 h-3.5 shrink-0" style={{ color: c.iconColor }} />
-                        <span>{c.label}</span>
+                        <span>{builderCatalogText(t, c.label)}</span>
                       </span>
                     </SelectItem>
                   ))}
@@ -801,7 +838,7 @@ function ConditionsBlock({
               <Input
                 value={cond.value}
                 onChange={(e) => onUpdate(cond.id, "value", e.target.value)}
-                placeholder="e.g. price, quote"
+                placeholder={t("builderFeedback.keywordExample")}
                 className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
               />
             )}
@@ -809,10 +846,10 @@ function ConditionsBlock({
             {cond.type === "tag" && (
               <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
                 <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Select tag..." />
+                  <SelectValue placeholder={t("workflowEditor.selectTag")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {TAGS.map(tag => <SelectItem key={tag} value={tag}>{crmTagLabel(t, tag)}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
@@ -820,10 +857,10 @@ function ConditionsBlock({
             {cond.type === "stage" && (
               <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
                 <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Select stage..." />
+                  <SelectValue placeholder={t("workflowEditor.selectStage")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {PIPELINE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{crmStageLabel(t, stage)}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
@@ -844,7 +881,7 @@ function ConditionsBlock({
           data-testid="button-add-condition"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add condition
+          {t("workflowEditor.addCondition")}
         </button>
       </div>
     </div>
@@ -868,6 +905,7 @@ function TriggerConfigBlock({
   lockProTriggers?: boolean;
   onProTriggerLocked?: () => void;
 }) {
+  const { t } = useTranslation();
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
   // Does this trigger need any config at all?
@@ -892,22 +930,22 @@ function TriggerConfigBlock({
           {/* Keyword */}
           {normalized === "keyword" && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">Keywords <span className="text-gray-400 font-normal">(comma separated)</span></Label>
-              <Input value={triggerKeywords} onChange={(e) => onChangeKeywords(e.target.value)} placeholder="e.g. price, quote, tour" className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="input-keywords" />
+              <Label className="text-xs text-gray-500 mb-1.5 block">{t("workflowEditor.keywords")} <span className="text-gray-400 font-normal">{t("builderUi.commaSeparated")}</span></Label>
+              <Input value={triggerKeywords} onChange={(e) => onChangeKeywords(e.target.value)} placeholder={t("builderFeedback.keywordListExample")} className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="input-keywords" />
             </div>
           )}
 
           {/* Tag */}
           {(normalized === "tag_added" || normalized === "tag_removed") && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">Tag <span className="text-gray-400 font-normal">(which tag fires this)</span></Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">{t("builderCatalog.tag")} <span className="text-gray-400 font-normal">{t("builderUi.firesTag")}</span></Label>
               <Select value={triggerTag} onValueChange={onChangeTag}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-tag">
-                  <SelectValue placeholder="Any tag" />
+                  <SelectValue placeholder={t("workflowEditor.anyTag")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any tag</SelectItem>
-                  {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  <SelectItem value="any">{t("workflowEditor.anyTag")}</SelectItem>
+                  {TAGS.map(tag => <SelectItem key={tag} value={tag}>{crmTagLabel(t, tag)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -916,14 +954,14 @@ function TriggerConfigBlock({
           {/* Pipeline stage */}
           {normalized === "pipeline_change" && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">Moves to stage <span className="text-gray-400 font-normal">(which stage fires this)</span></Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">{t("builderUi.movesToStage")} <span className="text-gray-400 font-normal">{t("builderUi.firesStage")}</span></Label>
               <Select value={triggerToStage} onValueChange={onChangeToStage}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-stage">
-                  <SelectValue placeholder="Any stage" />
+                  <SelectValue placeholder={t("workflowEditor.anyStage")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any stage</SelectItem>
-                  {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  <SelectItem value="any">{t("workflowEditor.anyStage")}</SelectItem>
+                  {PIPELINE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{crmStageLabel(t, stage)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -932,14 +970,18 @@ function TriggerConfigBlock({
           {/* No reply duration */}
           {normalized === "no_reply" && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">After no reply for</Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">{t("workflowEditor.noReply")}</Label>
               <Select value={triggerDuration} onValueChange={onChangeDuration}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-duration">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[["1","1 hour"],["2","2 hours"],["4","4 hours"],["8","8 hours"],["12","12 hours"],["24","24 hours"],["48","48 hours"],["72","3 days"]].map(([v,l]) => (
-                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  {NO_REPLY_HOURS.map(hours => (
+                    <SelectItem key={hours} value={hours}>
+                      {hours === "72"
+                        ? t("workflowEditor.durationDays", { count: 3 })
+                        : t("workflowEditor.durationHours", { count: Number(hours) })}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -960,40 +1002,39 @@ function WorkflowSummary({
   triggerToStage: string; triggerDuration: string;
   conditions: WorkflowCondition[]; actions: WorkflowAction[];
 }) {
+  const { t, i18n } = useTranslation();
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
   const validActions = actions.filter(isPersistableWorkflowAction);
   if (!def || validActions.length === 0) return null;
 
   const phrases = validActions.map((a) => {
-    const label = getWorkflowActionDefinition(a.type)?.label || a.type;
-    const detail = getWorkflowActionSummary(a);
-    return `${label.toLowerCase()} (${detail})`;
+    const label = builderCatalogText(t, getWorkflowActionDefinition(a.type)?.label || a.type);
+    const detail = workflowActionDisplay(t, i18n.language, a);
+    return detail === "—" ? label : `${label} (${detail})`;
   }).filter(Boolean);
 
-  let triggerPhrase = def.label.toLowerCase();
-  if (normalized === "keyword" && triggerKeywords) triggerPhrase += ` matching "${triggerKeywords.split(",")[0].trim()}"`;
+  let triggerPhrase = builderCatalogText(t, def.label);
+  if (normalized === "keyword" && triggerKeywords) triggerPhrase += ` (${triggerKeywords.split(",")[0].trim()})`;
   if ((normalized === "tag_added" || normalized === "tag_removed") && triggerTag && triggerTag !== "any") triggerPhrase += ` (${triggerTag})`;
   if (normalized === "pipeline_change" && triggerToStage && triggerToStage !== "any") triggerPhrase += ` (→ ${triggerToStage})`;
-  if (normalized === "no_reply" && triggerDuration) triggerPhrase += ` for ${triggerDuration}h`;
+  if (normalized === "no_reply" && triggerDuration) triggerPhrase = t("builderFeedback.delayTrigger", { trigger: triggerPhrase, delay: builderDuration(i18n.language, Number(triggerDuration), "hour") });
 
   const conditionPhrases = conditions.filter(c => c.value).map(c => {
-    if (c.type === "channel") { const ch = CHANNELS.find(x => x.value === c.value); return ch ? ch.label : c.value; }
-    if (c.type === "keyword") return `keyword contains "${c.value}"`;
-    if (c.type === "tag") return `tag is "${c.value}"`;
-    if (c.type === "stage") return `stage is "${c.value}"`;
+    if (c.type === "channel") { const ch = CHANNELS.find(x => x.value === c.value); return ch ? builderCatalogText(t, ch.label) : c.value; }
+    if (c.type === "keyword") return t("builderFeedback.keywordContains", { keyword: c.value });
+    if (c.type === "tag") return t("builderFeedback.tagIs", { tag: crmTagLabel(t, c.value) });
+    if (c.type === "stage") return t("builderFeedback.stageIs", { stage: crmStageLabel(t, c.value) });
     return "";
   }).filter(Boolean);
 
   return (
     <div className="rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4">
-      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1.5">What this does</p>
+      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1.5">{t("builderUi.whatThisDoes")}</p>
       <p className="text-sm text-amber-900 leading-relaxed">
-        When <span className="font-semibold">{triggerPhrase}</span>
-        {conditionPhrases.length > 0 && (
-          <>, if <span className="font-semibold">{conditionPhrases.join(" and ")}</span></>
-        )}
-        , {phrases.join(", then ")}.
+        {conditionPhrases.length
+          ? t("builderFeedback.whenIfDo", { trigger: triggerPhrase, conditions: new Intl.ListFormat(i18n.language).format(conditionPhrases), actions: phrases.join(" → ") })
+          : t("builderFeedback.whenDo", { trigger: triggerPhrase, actions: phrases.join(" → ") })}
       </p>
     </div>
   );
@@ -1002,27 +1043,28 @@ function WorkflowSummary({
 // ─── Start Screen ─────────────────────────────────────────────────────────────
 
 function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequence"; onScratch: () => void; onTemplate: (tpl: any) => void }) {
+  const { t } = useTranslation();
   const templates = type === "workflow" ? WORKFLOW_TEMPLATES : SEQUENCE_TEMPLATES;
   return (
     <div className="space-y-6 py-2">
       <button
         onClick={onScratch}
-        className="w-full flex items-center gap-4 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-brand-green hover:bg-green-50/30 transition-all text-left group"
+        className="w-full flex items-center gap-4 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-brand-green hover:bg-green-50/30 transition-all text-start group"
         data-testid="button-start-scratch"
       >
         <div className="h-11 w-11 rounded-xl bg-gray-100 flex items-center justify-center group-hover:bg-green-100 transition-colors shrink-0">
           <Plus className="h-5 w-5 text-gray-400 group-hover:text-brand-green" />
         </div>
         <div>
-          <p className="font-semibold text-gray-900">Start from scratch</p>
-          <p className="text-sm text-gray-500 mt-0.5">Build your own {type} step by step</p>
+          <p className="font-semibold text-gray-900">{t("workflowEditor.fromScratch")}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{type === "workflow" ? t("builderFeedback.scratchWorkflow") : t("builderFeedback.scratchSequence")}</p>
         </div>
-        <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-brand-green ml-auto shrink-0" />
+        <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-brand-green ms-auto shrink-0" />
       </button>
 
       <div>
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <LayoutTemplate className="h-3.5 w-3.5" />Quick templates
+          <LayoutTemplate className="h-3.5 w-3.5" />{t("workflowEditor.quickTemplates")}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {templates.map((tpl) => {
@@ -1031,15 +1073,15 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
               <button
                 key={tpl.id}
                 onClick={() => onTemplate(tpl)}
-                className={cn("flex flex-col items-start gap-3 p-4 border rounded-2xl text-left hover:shadow-md transition-all", tpl.color)}
+                className={cn("flex flex-col items-start gap-3 p-4 border rounded-2xl text-start hover:shadow-md transition-all", tpl.color)}
                 data-testid={`button-template-${tpl.id}`}
               >
                 <div className={cn("h-9 w-9 rounded-xl bg-white/70 flex items-center justify-center", tpl.iconColor)}>
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-900 leading-snug">{tpl.name}</p>
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">{tpl.description}</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-snug">{builderCatalogText(t, tpl.name)}</p>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">{builderCatalogText(t, tpl.description)}</p>
                 </div>
               </button>
             );
@@ -1052,7 +1094,57 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+function WorkflowExecutionHistory({ workflowId }: { workflowId: string }) {
+  const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const { data, isPending, isError, refetch } = useQuery<Array<{
+    id: string;
+    status: string;
+    executedAt: string | null;
+  }>>({
+    queryKey: withUserQueryScope([`/api/workflows/${encodeURIComponent(workflowId)}/executions`], user?.id),
+    enabled: Boolean(user?.id),
+    gcTime: 0,
+    retry: false,
+  });
+
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case "success": return t("builderFeedback.executedSuccessfully");
+      case "failed": return t("builderFeedback.executionFailed");
+      case "partial": return t("builderFeedback.executionPartial");
+      default: return status;
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 text-xs" data-testid="workflow-execution-history">
+      <h4 className="font-semibold text-gray-700">{t("builderFeedback.history")}</h4>
+      {isPending ? <p role="status">{t("builderFeedback.loading")}</p> : isError ? (
+        <div role="alert" className="flex items-center gap-2">
+          {t("builderFeedback.historyError")}
+          <Button type="button" size="sm" variant="outline" onClick={() => void refetch()}>{t("common.tryAgain")}</Button>
+        </div>
+      ) : data?.length ? (
+        <ul className="max-h-44 space-y-1 overflow-y-auto">
+          {data.map((run) => (
+            <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 text-gray-600">
+              <span>{statusLabel(run.status)}</span>
+              {run.executedAt && (
+                <time dateTime={run.executedAt}>
+                  {formatRegionalDate(new Date(run.executedAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })}
+                </time>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-gray-500">{t("builderFeedback.noExecutions")}</p>}
+    </div>
+  );
+}
+
 export function Workflows() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: subscriptionData, isLoading: subscriptionLoading } = useSubscription();
@@ -1112,12 +1204,12 @@ export function Workflows() {
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
-  const { data: workflows = [], isLoading } = useQuery<Workflow[]>({
+  const { data: workflows = [], isLoading, isError: workflowsError, refetch: refetchWorkflows } = useQuery<Workflow[]>({
     queryKey: ["/api/workflows"],
     retry: false,
     enabled: workflowsEnabled && !subscriptionLoading,
   });
-  const { data: dripCampaigns = [], isLoading: isLoadingCampaigns } = useQuery<DripCampaign[]>({
+  const { data: dripCampaigns = [], isLoading: isLoadingCampaigns, isError: campaignsError, refetch: refetchCampaigns } = useQuery<DripCampaign[]>({
     queryKey: ["/api/drip-campaigns"],
     retry: false,
     enabled: workflowsEnabled && !subscriptionLoading,
@@ -1140,23 +1232,23 @@ export function Workflows() {
 
   const createWorkflowMutation = useMutation({
     mutationFn: async (data: any) => { const r = await apiRequest("POST", "/api/workflows", data); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }); toast({ title: "Workflow created" }); resetWf(); setView("list"); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }); toast({ title: t("builderUi.workflowCreated") }); resetWf(); setView("list"); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const updateWorkflowMutation = useMutation({
     mutationFn: async ({ id, ...data }: any) => { const r = await apiRequest("PATCH", `/api/workflows/${id}`, data); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }); toast({ title: "Workflow saved" }); resetWf(); setView("list"); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }); toast({ title: t("builderUi.workflowSaved") }); resetWf(); setView("list"); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const deleteWorkflowMutation = useMutation({
     mutationFn: async (id: string) => { const r = await apiRequest("DELETE", `/api/workflows/${id}`); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }); toast({ title: "Workflow deleted" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }); toast({ title: t("builderUi.workflowDeleted") }); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const toggleWorkflowMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => { const r = await apiRequest("PATCH", `/api/workflows/${id}`, { isActive }); return r.json(); },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/workflows"] }),
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const createCampaignMutation = useMutation({
     mutationFn: async (data: any) => { const r = await apiRequest("POST", "/api/drip-campaigns", data); return r.json(); },
@@ -1168,34 +1260,34 @@ export function Workflows() {
         }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
-      toast({ title: "Sequence created" }); resetSeq(); setView("list");
+      toast({ title: t("builderUi.sequenceCreated") }); resetSeq(); setView("list");
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const updateCampaignMutation = useMutation({
     mutationFn: async ({ id, ...data }: any) => { const r = await apiRequest("PATCH", `/api/drip-campaigns/${id}`, data); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: "Sequence saved" }); resetSeq(); setView("list"); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: t("builderUi.sequenceSaved") }); resetSeq(); setView("list"); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const deleteCampaignMutation = useMutation({
     mutationFn: async (id: string) => { const r = await apiRequest("DELETE", `/api/drip-campaigns/${id}`); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: "Sequence deleted" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: t("builderUi.sequenceDeleted") }); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const toggleCampaignMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => { const r = await apiRequest("PATCH", `/api/drip-campaigns/${id}`, { isActive }); return r.json(); },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }),
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const enrollChatMutation = useMutation({
     mutationFn: async ({ campaignId, chatId }: any) => { const r = await apiRequest("POST", `/api/drip-campaigns/${campaignId}/enroll`, { chatId }); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: "Contact enrolled" }); setIsEnrollDialogOpen(false); setSelectedChatId(""); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: t("builderUi.enrolled") }); setIsEnrollDialogOpen(false); setSelectedChatId(""); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
   const cancelEnrollmentMutation = useMutation({
     mutationFn: async (id: string) => { const r = await apiRequest("POST", `/api/drip-enrollments/${id}/cancel`); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: "Enrollment cancelled" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] }); toast({ title: t("builderUi.enrollmentCanceled") }); },
+    onError: () => toast({ title: t("common.error"), description: t("builderFeedback.workflowError"), variant: "destructive" }),
   });
 
   // ─── Reset helpers ────────────────────────────────────────────────────────
@@ -1253,7 +1345,7 @@ export function Workflows() {
       setActiveTab("drip");
       setView("seq-builder");
     } catch {
-      toast({ title: "Error loading sequence", variant: "destructive" });
+      toast({ title: t("builderUi.sequenceLoadFailed"), variant: "destructive" });
     }
   };
 
@@ -1290,7 +1382,7 @@ export function Workflows() {
   };
 
   const handleWfSubmit = () => {
-    if (!name.trim()) { toast({ title: "Please enter a workflow name", variant: "destructive" }); return; }
+    if (!name.trim()) { toast({ title: t("builderUi.requiredWorkflowName"), variant: "destructive" }); return; }
     const data = {
       name,
       description: description || null,
@@ -1303,8 +1395,8 @@ export function Workflows() {
   };
 
   const handleSeqSubmit = () => {
-    if (!campaignName.trim()) { toast({ title: "Please enter a sequence name", variant: "destructive" }); return; }
-    if (!campaignSteps.some(s => s.messageContent.trim())) { toast({ title: "Please add at least one message step", variant: "destructive" }); return; }
+    if (!campaignName.trim()) { toast({ title: t("builderUi.requiredSequenceName"), variant: "destructive" }); return; }
+    if (!campaignSteps.some(s => s.messageContent.trim())) { toast({ title: t("builderFeedback.missingStep"), variant: "destructive" }); return; }
     const data = { name: campaignName, description: campaignDescription || null, triggerType: "manual" };
     if (editingCampaign) updateCampaignMutation.mutate({ id: editingCampaign.id, ...data });
     else createCampaignMutation.mutate(data);
@@ -1369,10 +1461,10 @@ export function Workflows() {
   const removeStep = (i: number) => { if (campaignSteps.length > 1) setCampaignSteps(campaignSteps.filter((_, j) => j !== i)); };
 
   const formatDelay = (min: number) => {
-    if (min === 0) return "Immediately";
-    if (min < 60) return `${min} min`;
-    if (min < 1440) return `${Math.round(min / 60)} hr`;
-    const d = Math.round(min / 1440); return `${d} day${d > 1 ? "s" : ""}`;
+    if (min === 0) return t("builderFeedback.immediately");
+    if (min < 60) return builderDuration(i18n.language, min, "minute");
+    if (min < 1440) return builderDuration(i18n.language, Math.round(min / 60), "hour");
+    return builderDuration(i18n.language, Math.round(min / 1440), "day");
   };
 
   const applyWfTemplate = (tpl: any) => {
@@ -1394,11 +1486,11 @@ export function Workflows() {
     const norm = normalizeTriggerType(wf.triggerType);
     const def = ALL_TRIGGERS.find(t => t.value === norm);
     const tc = wf.triggerConditions || {};
-    let label = def?.label || wf.triggerType;
+    let label = builderCatalogText(t, def?.label || wf.triggerType);
     // Show channel from conditions array or legacy triggerConditions.channel
     const savedConds: WorkflowCondition[] = tc.conditions || [];
     const chCond = savedConds.find(c => c.type === "channel") || (tc.channel ? { value: tc.channel } : null);
-    if (chCond) { const ch = CHANNELS.find(c => c.value === chCond.value); if (ch) label += ` · ${ch.label}`; }
+    if (chCond) { const ch = CHANNELS.find(c => c.value === chCond.value); if (ch) label += ` · ${builderCatalogText(t, ch.label)}`; }
     return label;
   };
 
@@ -1419,7 +1511,7 @@ export function Workflows() {
     return (
       <div className="flex flex-col h-full">
         <Helmet>
-          <title>Automations | WhachatCRM</title>
+          <title>{[t("automations.title"), "WhachatCRM"].join(" | ")}</title>
         </Helmet>
         <div className="flex-1 flex items-center justify-center p-12">
           <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
@@ -1432,7 +1524,7 @@ export function Workflows() {
     return (
       <div className="flex flex-col h-full">
         <Helmet>
-          <title>Automations | WhachatCRM</title>
+          <title>{[t("automations.title"), "WhachatCRM"].join(" | ")}</title>
         </Helmet>
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
           <div className="flex items-center gap-3">
@@ -1440,8 +1532,8 @@ export function Workflows() {
               <Zap className="h-5 w-5 text-brand-green" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Automations</h1>
-              <p className="text-xs text-gray-500">Workflows and drip sequences</p>
+              <h1 className="text-lg font-bold text-gray-900">{t("automations.title")}</h1>
+              <p className="text-xs text-gray-500">{t("builderUi.workflowAndSequences")}</p>
             </div>
           </div>
         </div>
@@ -1450,7 +1542,7 @@ export function Workflows() {
             <div className="h-14 w-14 rounded-2xl bg-brand-green/10 flex items-center justify-center mx-auto">
               <Zap className="h-7 w-7 text-brand-green" />
             </div>
-            <p className="text-gray-900 font-medium">Automations are available on the Pro plan</p>
+            <p className="text-gray-900 font-medium">{t("builderUi.automationPro")}</p>
             <InAppProUpgradeButton
               canStartInternalTrial={canStartInternalTrial}
               isShopify={isShopifyBilling}
@@ -1468,12 +1560,12 @@ export function Workflows() {
   if (view === "wf-start") {
     return (
       <div className="flex flex-col h-full">
-        <Helmet><title>New Workflow | WhachatCRM</title></Helmet>
+        <Helmet><title>{[t("builderUi.newWorkflow"), "WhachatCRM"].join(" | ")}</title></Helmet>
         <div className="px-6 py-4 border-b bg-white flex items-center gap-3">
           <button onClick={() => { resetWf(); setView("list"); }} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <ArrowLeft className="h-4 w-4 text-gray-500" />
           </button>
-          <h1 className="text-base font-semibold text-gray-900">New Workflow</h1>
+          <h1 className="text-base font-semibold text-gray-900">{t("builderUi.newWorkflow")}</h1>
         </div>
         {isStarterPlan && (
           <StarterPlanAutomationsBanner
@@ -1484,8 +1576,8 @@ export function Workflows() {
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Where would you like to start?</h2>
-              <p className="text-sm text-gray-500">Choose a template or build from scratch</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t("builderUi.chooseStart")}</h2>
+              <p className="text-sm text-gray-500">{t("builderUi.chooseTemplate")}</p>
             </div>
             <StartScreen type="workflow" onScratch={() => setView("wf-builder")} onTemplate={applyWfTemplate} />
           </div>
@@ -1499,12 +1591,12 @@ export function Workflows() {
   if (view === "seq-start") {
     return (
       <div className="flex flex-col h-full">
-        <Helmet><title>New Sequence | WhachatCRM</title></Helmet>
+        <Helmet><title>{[t("builderUi.newSequence"), "WhachatCRM"].join(" | ")}</title></Helmet>
         <div className="px-6 py-4 border-b bg-white flex items-center gap-3">
           <button onClick={() => { resetSeq(); setView("list"); }} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <ArrowLeft className="h-4 w-4 text-gray-500" />
           </button>
-          <h1 className="text-base font-semibold text-gray-900">New Sequence</h1>
+          <h1 className="text-base font-semibold text-gray-900">{t("builderUi.newSequence")}</h1>
         </div>
         {isStarterPlan && (
           <StarterPlanAutomationsBanner
@@ -1515,8 +1607,8 @@ export function Workflows() {
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Where would you like to start?</h2>
-              <p className="text-sm text-gray-500">Choose a template or build from scratch</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t("builderUi.chooseStart")}</h2>
+              <p className="text-sm text-gray-500">{t("builderUi.chooseTemplate")}</p>
             </div>
             <StartScreen type="sequence" onScratch={() => setView("seq-builder")} onTemplate={applySeqTemplate} />
           </div>
@@ -1531,7 +1623,7 @@ export function Workflows() {
     const isSaving = createWorkflowMutation.isPending || updateWorkflowMutation.isPending;
     return (
       <div className="flex flex-col h-full bg-gray-50/40">
-        <Helmet><title>{editingWorkflow ? "Edit Workflow" : "Build Workflow"} | WhachatCRM</title></Helmet>
+        <Helmet><title>{[editingWorkflow ? t("builderUi.editWorkflow") : t("builderUi.buildWorkflow"), "WhachatCRM"].join(" | ")}</title></Helmet>
 
         {/* Sticky top bar */}
         <div className="px-6 py-3.5 border-b bg-white flex items-center justify-between gap-4 shrink-0 shadow-sm">
@@ -1544,7 +1636,7 @@ export function Workflows() {
             </button>
             <div>
               <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">
-                {editingWorkflow ? "Editing workflow" : "New workflow"}
+                {editingWorkflow ? t("builderUi.editingWorkflow") : t("builderUi.newWorkflowLower")}
               </p>
               <h1 className="text-base font-semibold text-gray-900 leading-tight">
                 {name || "Untitled workflow"}
@@ -1553,7 +1645,7 @@ export function Workflows() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => { resetWf(); setView("list"); }} className="h-9">
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleWfSubmit}
@@ -1561,8 +1653,8 @@ export function Workflows() {
               className="bg-brand-green hover:bg-brand-green/90 h-9"
               data-testid="button-save-workflow"
             >
-              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingWorkflow ? "Save changes" : "Create workflow"}
+              {isSaving && <Loader2 className="h-4 w-4 me-2 animate-spin" />}
+              {editingWorkflow ? t("crmUi.saveChanges") : t("builderUi.createWorkflow")}
             </Button>
           </div>
         </div>
@@ -1581,23 +1673,23 @@ export function Workflows() {
             {/* Name + Description */}
             <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
               <div>
-                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Workflow name</Label>
+                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">{t("builderUi.workflowName")}</Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Auto-assign new leads"
+                  placeholder={t("builderUi.workflowExample")}
                   className="h-10 text-sm border-gray-200 focus:border-brand-green"
                   data-testid="input-workflow-name"
                 />
               </div>
               <div>
                 <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
-                  Description <span className="text-gray-400 font-normal normal-case">(optional)</span>
+                  {t("builderUi.description")} <span className="text-gray-400 font-normal normal-case">{t("builderUi.optional")}</span>
                 </Label>
                 <Input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What does this workflow do?"
+                  placeholder={t("builderUi.workflowPurpose")}
                   className="h-10 text-sm border-gray-200"
                 />
               </div>
@@ -1609,7 +1701,7 @@ export function Workflows() {
                 <div className="h-6 w-6 rounded-full bg-gray-900 flex items-center justify-center shrink-0">
                   <span className="text-white text-[10px] font-bold">W</span>
                 </div>
-                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">When this happens</p>
+                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">{t("builderUi.when")}</p>
               </div>
               <TriggerConfigBlock
                 triggerType={triggerType}
@@ -1631,10 +1723,10 @@ export function Workflows() {
             <div>
               <div className="flex items-center gap-2.5 mb-3">
                 <div className="h-6 w-6 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
-                  <span className="text-white text-[10px] font-bold">IF</span>
+                  <span className="text-white text-[10px] font-bold">{t("builderUi.if")}</span>
                 </div>
-                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">If these conditions match</p>
-                <span className="ml-auto text-[11px] text-gray-400 font-normal normal-case">Optional</span>
+                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">{t("builderUi.conditionMatch")}</p>
+                <span className="ms-auto text-[11px] text-gray-400 font-normal normal-case">{t("builderUi.optionalLabel")}</span>
               </div>
               <ConditionsBlock
                 conditions={conditions}
@@ -1650,13 +1742,13 @@ export function Workflows() {
                 <div className="h-6 w-6 rounded-full bg-brand-green flex items-center justify-center shrink-0">
                   <span className="text-white text-[10px] font-bold">T</span>
                 </div>
-                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">Do this</p>
+                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">{t("builderUi.doThis")}</p>
               </div>
 
               <div>
                 {showGrowthEngineWorkflowUi && (
                   <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-3">
-                    Some steps are managed automatically by the Growth Engine and may not appear in this editor.
+                    {t("builderUi.growthManaged")}
                   </p>
                 )}
                 {actions.map((action, i) => (
@@ -1696,8 +1788,8 @@ export function Workflows() {
             {/* Bottom save button (convenience) */}
             <div className="flex justify-end pt-2 pb-8">
               <Button onClick={handleWfSubmit} disabled={isSaving} className="bg-brand-green hover:bg-brand-green/90 h-10 px-6">
-                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingWorkflow ? "Save changes" : "Create workflow"}
+                {isSaving && <Loader2 className="h-4 w-4 me-2 animate-spin" />}
+                {editingWorkflow ? t("crmUi.saveChanges") : t("builderUi.createWorkflow")}
               </Button>
             </div>
           </div>
@@ -1715,7 +1807,7 @@ export function Workflows() {
 
     return (
       <div className="flex flex-col h-full bg-gray-50/40">
-        <Helmet><title>{editingCampaign ? "Edit Sequence" : "Build Sequence"} | WhachatCRM</title></Helmet>
+        <Helmet><title>{[editingCampaign ? t("builderUi.editSequence") : t("builderUi.buildSequence"), "WhachatCRM"].join(" | ")}</title></Helmet>
 
         <div className="px-6 py-3.5 border-b bg-white flex items-center justify-between gap-4 shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
@@ -1724,7 +1816,7 @@ export function Workflows() {
             </button>
             <div>
               <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">
-                {editingCampaign ? "Editing sequence" : "New sequence"}
+                {editingCampaign ? t("builderUi.editingSequence") : t("builderUi.newSequenceLower")}
               </p>
               <h1 className="text-base font-semibold text-gray-900 leading-tight">
                 {campaignName || "Untitled sequence"}
@@ -1732,10 +1824,10 @@ export function Workflows() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => { resetSeq(); setView("list"); }} className="h-9">Cancel</Button>
+            <Button variant="outline" onClick={() => { resetSeq(); setView("list"); }} className="h-9">{t("common.cancel")}</Button>
             <Button onClick={handleSeqSubmit} disabled={isSaving} className="bg-brand-green hover:bg-brand-green/90 h-9" data-testid="button-save-campaign">
-              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingCampaign ? "Save changes" : "Create sequence"}
+              {isSaving && <Loader2 className="h-4 w-4 me-2 animate-spin" />}
+              {editingCampaign ? t("crmUi.saveChanges") : t("builderUi.createSequence")}
             </Button>
           </div>
         </div>
@@ -1753,14 +1845,14 @@ export function Workflows() {
             {/* Name + Description */}
             <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
               <div>
-                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Sequence name</Label>
-                <Input value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="e.g., Welcome Series" className="h-10 text-sm border-gray-200" data-testid="input-campaign-name" />
+                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">{t("builderUi.sequenceName")}</Label>
+                <Input value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder={t("builderUi.sequenceExample")} className="h-10 text-sm border-gray-200" data-testid="input-campaign-name" />
               </div>
               <div>
                 <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
-                  Description <span className="text-gray-400 font-normal normal-case">(optional)</span>
+                  {t("builderUi.description")} <span className="text-gray-400 font-normal normal-case">{t("builderUi.optional")}</span>
                 </Label>
-                <Input value={campaignDescription} onChange={(e) => setCampaignDescription(e.target.value)} placeholder="What's this sequence for?" className="h-10 text-sm border-gray-200" />
+                <Input value={campaignDescription} onChange={(e) => setCampaignDescription(e.target.value)} placeholder={t("builderUi.sequencePurpose")} className="h-10 text-sm border-gray-200" />
               </div>
             </div>
 
@@ -1770,7 +1862,7 @@ export function Workflows() {
                 <div className="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
                   <span className="text-white text-[10px] font-bold">S</span>
                 </div>
-                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">Message steps</p>
+                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">{t("builderUi.messageSteps")}</p>
               </div>
 
               <div>
@@ -1791,7 +1883,7 @@ export function Workflows() {
                       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3.5">
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            {i === 0 ? "First message" : `Step ${i + 1}`}
+                            {i === 0 ? t("builderUi.firstMessage") : t("builderFeedback.stepNumber", { number: i + 1 })}
                           </p>
                           {campaignSteps.length > 1 && (
                             <button onClick={() => removeStep(i)} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors">
@@ -1802,25 +1894,29 @@ export function Workflows() {
                         <div>
                           <Label className="text-xs text-gray-500 mb-1.5 block flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {i === 0 ? "Send" : "Wait, then send"}
+                            {i === 0 ? t("common.send") : t("builderUi.waitThenSend")}
                           </Label>
                           <Select value={String(step.delayMinutes)} onValueChange={(v) => updateStep(i, "delayMinutes", parseInt(v))}>
                             <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {[["0","Immediately"],["5","After 5 minutes"],["30","After 30 minutes"],["60","After 1 hour"],["180","After 3 hours"],["360","After 6 hours"],["720","After 12 hours"],["1440","After 1 day"],["2880","After 2 days"],["4320","After 3 days"],["10080","After 1 week"]].map(([v,l]) => (
-                                <SelectItem key={v} value={v}>{l}</SelectItem>
+                              {[0, 5, 30, 60, 180, 360, 720, 1440, 2880, 4320, 10080].map(minutes => (
+                                <SelectItem key={minutes} value={String(minutes)}>
+                                  {minutes === 0 ? t("builderFeedback.immediately") : t("builderFeedback.afterDelay", {
+                                    delay: minutes === 10080 ? builderDuration(i18n.language, 1, "week") : formatDelay(minutes),
+                                  })}
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
                         <div>
                           <Label className="text-xs text-gray-500 mb-1.5 block flex items-center gap-1">
-                            <MessageSquare className="h-3 w-3" />Message
+                            <MessageSquare className="h-3 w-3" />{t("builderUi.message")}
                           </Label>
                           <Textarea
                             value={step.messageContent}
                             onChange={(e) => updateStep(i, "messageContent", e.target.value)}
-                            placeholder="Enter your message..."
+                            placeholder={t("builderUi.enterMessage")}
                             className="text-sm resize-none bg-gray-50 border-gray-200"
                             rows={3}
                             data-testid={`input-step-message-${i}`}
@@ -1846,7 +1942,7 @@ export function Workflows() {
                       className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors mt-2"
                       data-testid="button-add-step"
                     >
-                      <Plus className="h-4 w-4" />Add step
+                      <Plus className="h-4 w-4" />{t("builderUi.addStep")}
                     </button>
                   </PopoverTrigger>
                 </Popover>
@@ -1856,18 +1952,17 @@ export function Workflows() {
             {/* Sequence summary */}
             {validStepCount > 0 && (
               <div className="rounded-2xl bg-blue-50 border border-blue-200 px-5 py-4">
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1.5">Summary</p>
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1.5">{t("builderUi.summary")}</p>
                 <p className="text-sm text-blue-900">
-                  Send <span className="font-semibold">{validStepCount} message{validStepCount !== 1 ? "s" : ""}</span> over{" "}
-                  <span className="font-semibold">{formatDelay(totalDelay)}</span>.
+                  {t("builderFeedback.sendSummary", { count: validStepCount, delay: formatDelay(totalDelay) })}
                 </p>
               </div>
             )}
 
             <div className="flex justify-end pt-2 pb-8">
               <Button onClick={handleSeqSubmit} disabled={isSaving} className="bg-brand-green hover:bg-brand-green/90 h-10 px-6">
-                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingCampaign ? "Save changes" : "Create sequence"}
+                {isSaving && <Loader2 className="h-4 w-4 me-2 animate-spin" />}
+                {editingCampaign ? t("crmUi.saveChanges") : t("builderUi.createSequence")}
               </Button>
             </div>
           </div>
@@ -1880,7 +1975,7 @@ export function Workflows() {
   // ── List View (default) ───────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
-      <Helmet><title>Automations | WhachatCRM</title></Helmet>
+      <Helmet><title>{[t("automations.title"), "WhachatCRM"].join(" | ")}</title></Helmet>
 
       <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-3">
@@ -1888,8 +1983,8 @@ export function Workflows() {
             <Zap className="h-5 w-5 text-brand-green" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Automations</h1>
-            <p className="text-xs text-gray-500">Workflows and drip sequences</p>
+            <h1 className="text-lg font-bold text-gray-900">{t("automations.title")}</h1>
+            <p className="text-xs text-gray-500">{t("builderUi.workflowAndSequences")}</p>
           </div>
         </div>
       </div>
@@ -1905,10 +2000,10 @@ export function Workflows() {
         <div className="border-b border-gray-200 px-4 sm:px-6 bg-white">
           <TabsList className="h-12 bg-transparent border-0 p-0 gap-6">
             <TabsTrigger value="workflows" className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none text-sm font-medium">
-              <Zap className="h-4 w-4 mr-2" />Workflows
+              <Zap className="h-4 w-4 me-2" />{t("builderUi.workflows")}
             </TabsTrigger>
             <TabsTrigger value="drip" className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none text-sm font-medium">
-              <Mail className="h-4 w-4 mr-2" />Drip Sequences
+              <Mail className="h-4 w-4 me-2" />{t("builderUi.sequences")}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1917,23 +2012,28 @@ export function Workflows() {
         <TabsContent value="workflows" className="flex-1 overflow-auto m-0">
           <div className="p-4 sm:p-6 max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-gray-400">{workflows.length > 0 ? `${workflows.length} workflow${workflows.length !== 1 ? "s" : ""}` : ""}</p>
+              <p className="text-sm text-gray-400">{workflows.length > 0 ? t("builderFeedback.workflowCount", { count: workflows.length }) : ""}</p>
               <Button onClick={() => { resetWf(); setView("wf-start"); }} className="bg-brand-green hover:bg-brand-green/90 h-9" data-testid="button-create-workflow">
-                <Plus className="h-4 w-4 mr-1.5" />New Workflow
+                <Plus className="h-4 w-4 me-1.5" />{t("builderUi.newWorkflow")}
               </Button>
             </div>
 
             {isLoading ? (
-              <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-gray-300" /></div>
+              <div role="status" aria-label={t("builderFeedback.loading")} className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-gray-300" /></div>
+            ) : workflowsError ? (
+              <div role="alert" className="text-center py-8">
+                <p>{t("builderFeedback.loadFailed")}</p>
+                <Button variant="outline" onClick={() => void refetchWorkflows()}>{t("common.tryAgain")}</Button>
+              </div>
             ) : workflows.length === 0 ? (
               <div className="text-center py-16 px-4">
                 <div className="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
                   <Zap className="h-7 w-7 text-gray-300" />
                 </div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">No workflows yet</h3>
-                <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">Create your first workflow to automate repetitive tasks.</p>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">{t("builderUi.noWorkflows")}</h3>
+                <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">{t("builderUi.firstWorkflow")}</p>
                 <Button onClick={() => { resetWf(); setView("wf-start"); }} className="bg-brand-green hover:bg-brand-green/90" data-testid="button-create-workflow-empty">
-                  <Sparkles className="h-4 w-4 mr-2" />Create Workflow
+                  <Sparkles className="h-4 w-4 me-2" />{t("builderUi.createWorkflowTitle")}
                 </Button>
               </div>
             ) : (
@@ -1948,22 +2048,22 @@ export function Workflows() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className={cn("font-semibold text-sm truncate", wf.isActive ? "text-gray-900" : "text-gray-400")}>{wf.name}</p>
-                            {!wf.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>}
+                            {!wf.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">{t("automations.paused")}</Badge>}
                           </div>
-                          <p className="text-xs text-gray-500 truncate">{getTriggerLabel(wf)}{wf.executionCount > 0 && ` · ${wf.executionCount} runs`}</p>
+                          <p className="text-xs text-gray-500 truncate">{getTriggerLabel(wf)}{wf.executionCount > 0 && ` · ${t("builderFeedback.runs", { count: wf.executionCount })}`}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => toggleWorkflowMutation.mutate({ id: wf.id, isActive: !wf.isActive })} className="p-2 hover:bg-gray-100 rounded-lg" data-testid={`button-toggle-workflow-${wf.id}`}>
+                          <button onClick={() => toggleWorkflowMutation.mutate({ id: wf.id, isActive: !wf.isActive })} className="p-2 hover:bg-gray-100 rounded-lg" aria-pressed={wf.isActive} aria-label={wf.isActive ? t("builderFeedback.pause") : t("builderFeedback.enable")} data-testid={`button-toggle-workflow-${wf.id}`}>
                             {wf.isActive ? <ToggleRight className="h-5 w-5 text-brand-green" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}
                           </button>
-                          <button onClick={() => openEditWorkflow(wf)} className="p-2 hover:bg-gray-100 rounded-lg" data-testid={`button-edit-workflow-${wf.id}`}>
+                          <button onClick={() => openEditWorkflow(wf)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label={t("common.edit")} data-testid={`button-edit-workflow-${wf.id}`}>
                             <Edit2 className="h-4 w-4 text-gray-400" />
                           </button>
-                          <button onClick={() => deleteWorkflowMutation.mutate(wf.id)} className="p-2 hover:bg-red-50 rounded-lg" data-testid={`button-delete-workflow-${wf.id}`}>
+                          <button onClick={() => deleteWorkflowMutation.mutate(wf.id)} className="p-2 hover:bg-red-50 rounded-lg" aria-label={t("common.delete")} data-testid={`button-delete-workflow-${wf.id}`}>
                             <Trash2 className="h-4 w-4 text-red-400" />
                           </button>
                           <CollapsibleTrigger asChild>
-                            <button className="p-2 hover:bg-gray-100 rounded-lg">
+                            <button aria-label={t("builderFeedback.details")} className="p-2 hover:bg-gray-100 rounded-lg">
                               <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform duration-200", expandedWorkflow === wf.id && "rotate-180")} />
                             </button>
                           </CollapsibleTrigger>
@@ -1971,20 +2071,21 @@ export function Workflows() {
                       </div>
                       <CollapsibleContent>
                         <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-1.5">
-                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Actions</p>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("automations.actions")}</p>
                           {(wf.actions as WorkflowAction[])?.map((action, i) => {
                             const def = getWorkflowActionDefinition(action.type);
                             const Icon = def?.icon || FileText;
                             return (
                               <div key={i} className="flex items-center gap-2 text-sm">
                                 <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                                <span className="text-gray-700">{def?.label || action.type}</span>
-                                <ArrowRight className="h-3 w-3 text-gray-300" />
-                                <span className="text-gray-500">{getWorkflowActionSummary(action)}</span>
+                                <span className="text-gray-700">{builderCatalogText(t, def?.label || action.type)}</span>
+                                <ArrowRight className="h-3 w-3 text-gray-300 rtl:rotate-180" />
+                                <span className="text-gray-500">{workflowActionDisplay(t, i18n.language, action)}</span>
                               </div>
                             );
                           })}
-                          {wf.lastExecutedAt && <p className="text-xs text-gray-400 pt-2">Last run: {new Date(wf.lastExecutedAt).toLocaleString()}</p>}
+                          {wf.lastExecutedAt && <p className="text-xs text-gray-400 pt-2">{t("builderUi.lastRun")} {formatRegionalDate(new Date(wf.lastExecutedAt), i18n.language, { dateStyle: "medium", timeStyle: "short" })}</p>}
+                          {expandedWorkflow === wf.id && <WorkflowExecutionHistory workflowId={wf.id} />}
                         </div>
                       </CollapsibleContent>
                     </div>
@@ -1999,23 +2100,28 @@ export function Workflows() {
         <TabsContent value="drip" className="flex-1 overflow-auto m-0">
           <div className="p-4 sm:p-6 max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-gray-400">{dripCampaigns.length > 0 ? `${dripCampaigns.length} sequence${dripCampaigns.length !== 1 ? "s" : ""}` : ""}</p>
+              <p className="text-sm text-gray-400">{dripCampaigns.length > 0 ? t("builderFeedback.sequenceCount", { count: dripCampaigns.length }) : ""}</p>
               <Button onClick={() => { resetSeq(); setView("seq-start"); }} className="bg-brand-green hover:bg-brand-green/90 h-9" data-testid="button-create-campaign">
-                <Plus className="h-4 w-4 mr-1.5" />New Sequence
+                <Plus className="h-4 w-4 me-1.5" />{t("builderUi.newSequence")}
               </Button>
             </div>
 
             {isLoadingCampaigns ? (
-              <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-gray-300" /></div>
+              <div role="status" aria-label={t("builderFeedback.loading")} className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-gray-300" /></div>
+            ) : campaignsError ? (
+              <div role="alert" className="text-center py-8">
+                <p>{t("builderFeedback.loadFailed")}</p>
+                <Button variant="outline" onClick={() => void refetchCampaigns()}>{t("common.tryAgain")}</Button>
+              </div>
             ) : dripCampaigns.length === 0 ? (
               <div className="text-center py-16 px-4">
                 <div className="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
                   <Mail className="h-7 w-7 text-gray-300" />
                 </div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">No sequences yet</h3>
-                <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">Create automated message sequences to nurture leads over time.</p>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">{t("builderUi.noSequences")}</h3>
+                <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">{t("builderUi.firstSequence")}</p>
                 <Button onClick={() => { resetSeq(); setView("seq-start"); }} className="bg-brand-green hover:bg-brand-green/90" data-testid="button-create-campaign-empty">
-                  <Sparkles className="h-4 w-4 mr-2" />Create Sequence
+                  <Sparkles className="h-4 w-4 me-2" />{t("builderUi.createSequenceTitle")}
                 </Button>
               </div>
             ) : (
@@ -2030,28 +2136,28 @@ export function Workflows() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className={cn("font-semibold text-sm truncate", campaign.isActive ? "text-gray-900" : "text-gray-400")}>{campaign.name}</p>
-                            {!campaign.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>}
+                            {!campaign.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">{t("automations.paused")}</Badge>}
                           </div>
                           <p className="text-xs text-gray-500">
-                            {campaign.steps?.length || 0} step{(campaign.steps?.length || 0) !== 1 ? "s" : ""}
-                            {campaign.enrollments?.filter(e => e.status === "active").length ? ` · ${campaign.enrollments.filter(e => e.status === "active").length} active` : ""}
+                            {t("builderFeedback.stepCount", { count: campaign.steps?.length || 0 })}
+                            {campaign.enrollments?.filter(e => e.status === "active").length ? ` · ${t("builderFeedback.activeCount", { count: campaign.enrollments.filter(e => e.status === "active").length })}` : ""}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button variant="outline" size="sm" onClick={() => { setEnrollCampaignId(campaign.id); setIsEnrollDialogOpen(true); }} disabled={!campaign.isActive} className="h-7 text-xs px-2.5">
-                            <Users className="h-3 w-3 mr-1" />Enroll
+                            <Users className="h-3 w-3 me-1" />{t("builderUi.enroll")}
                           </Button>
-                          <button onClick={() => toggleCampaignMutation.mutate({ id: campaign.id, isActive: !campaign.isActive })} className="p-2 hover:bg-gray-100 rounded-lg" data-testid={`button-toggle-campaign-${campaign.id}`}>
+                          <button onClick={() => toggleCampaignMutation.mutate({ id: campaign.id, isActive: !campaign.isActive })} className="p-2 hover:bg-gray-100 rounded-lg" aria-pressed={campaign.isActive} aria-label={campaign.isActive ? t("builderFeedback.pause") : t("builderFeedback.enable")} data-testid={`button-toggle-campaign-${campaign.id}`}>
                             {campaign.isActive ? <ToggleRight className="h-5 w-5 text-brand-green" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}
                           </button>
-                          <button onClick={() => openEditCampaign(campaign)} className="p-2 hover:bg-gray-100 rounded-lg" data-testid={`button-edit-campaign-${campaign.id}`}>
+                          <button onClick={() => openEditCampaign(campaign)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label={t("common.edit")} data-testid={`button-edit-campaign-${campaign.id}`}>
                             <Edit2 className="h-4 w-4 text-gray-400" />
                           </button>
-                          <button onClick={() => deleteCampaignMutation.mutate(campaign.id)} className="p-2 hover:bg-red-50 rounded-lg" data-testid={`button-delete-campaign-${campaign.id}`}>
+                          <button onClick={() => deleteCampaignMutation.mutate(campaign.id)} className="p-2 hover:bg-red-50 rounded-lg" aria-label={t("common.delete")} data-testid={`button-delete-campaign-${campaign.id}`}>
                             <Trash2 className="h-4 w-4 text-red-400" />
                           </button>
                           <CollapsibleTrigger asChild>
-                            <button className="p-2 hover:bg-gray-100 rounded-lg">
+                            <button aria-label={t("builderFeedback.details")} className="p-2 hover:bg-gray-100 rounded-lg">
                               <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform duration-200", expandedCampaign === campaign.id && "rotate-180")} />
                             </button>
                           </CollapsibleTrigger>
@@ -2061,7 +2167,7 @@ export function Workflows() {
                         <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-4">
                           {campaign.steps && campaign.steps.length > 0 && (
                             <div>
-                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Steps</p>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("builderUi.steps")}</p>
                               <div className="space-y-2">
                                 {campaign.steps.map((step, i) => (
                                   <div key={step.id} className="flex items-start gap-3">
@@ -2070,7 +2176,7 @@ export function Workflows() {
                                       {i < (campaign.steps?.length || 0) - 1 && <div className="w-px h-4 bg-gray-200 mt-1" />}
                                     </div>
                                     <div className="flex-1 pb-2">
-                                      <p className="text-xs text-gray-500 mb-0.5"><Clock className="h-3 w-3 inline mr-1" />{formatDelay(step.delayMinutes)} after previous</p>
+                                      <p className="text-xs text-gray-500 mb-0.5"><Clock className="h-3 w-3 inline me-1" />{t("builderFeedback.afterPrevious", { delay: formatDelay(step.delayMinutes) })}</p>
                                       <p className="text-sm text-gray-700 line-clamp-2">{step.messageContent}</p>
                                     </div>
                                   </div>
@@ -2080,7 +2186,7 @@ export function Workflows() {
                           )}
                           {campaign.enrollments && campaign.enrollments.length > 0 && (
                             <div>
-                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Enrolled Contacts</p>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("builderUi.enrolledContacts")}</p>
                               <div className="space-y-1.5">
                                 {campaign.enrollments.map((enrollment) => {
                                   const chat = chats.find(c => c.id === enrollment.chatId);
@@ -2091,13 +2197,13 @@ export function Workflows() {
                                           <User className="h-3.5 w-3.5 text-gray-500" />
                                         </div>
                                         <div>
-                                          <p className="text-sm font-medium">{chat?.name || "Unknown"}</p>
-                                          <p className="text-xs text-gray-500">Step {enrollment.currentStepOrder} · {enrollment.status}</p>
+                                          <p className="text-sm font-medium">{chat?.name || t("builderFeedback.unknownContact")}</p>
+                                          <p className="text-xs text-gray-500">{t("builderUi.step")} {enrollment.currentStepOrder} · {builderStatusLabel(t, enrollment.status)}</p>
                                         </div>
                                       </div>
                                       {enrollment.status === "active" && (
                                         <Button variant="ghost" size="sm" onClick={() => cancelEnrollmentMutation.mutate(enrollment.id)} className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50">
-                                          <X className="h-3 w-3 mr-1" />Cancel
+                                          <X className="h-3 w-3 me-1" />{t("common.cancel")}
                                         </Button>
                                       )}
                                     </div>
@@ -2126,13 +2232,13 @@ export function Workflows() {
           />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
             <div className="mb-4">
-              <h3 className="text-base font-semibold text-gray-900">Enroll Contact</h3>
-              <p className="text-sm text-gray-500 mt-0.5">Select a contact to add to this sequence</p>
+              <h3 className="text-base font-semibold text-gray-900">{t("builderUi.enrollContact")}</h3>
+              <p className="text-sm text-gray-500 mt-0.5">{t("builderUi.contactToEnroll")}</p>
             </div>
             <div className="mb-5">
-              <Label className="text-sm mb-1.5 block">Select Contact</Label>
+              <Label className="text-sm mb-1.5 block">{t("builderUi.selectContact")}</Label>
               <Select value={selectedChatId} onValueChange={setSelectedChatId}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Choose a contact..." /></SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue placeholder={t("builderUi.chooseContact")} /></SelectTrigger>
                 <SelectContent>
                   {chats.filter(c => c.whatsappPhone).map((chat) => (
                     <SelectItem key={chat.id} value={chat.id}>{chat.name} {chat.whatsappPhone && `(${chat.whatsappPhone})`}</SelectItem>
@@ -2140,18 +2246,18 @@ export function Workflows() {
                 </SelectContent>
               </Select>
               {chats.filter(c => c.whatsappPhone).length === 0 && (
-                <p className="text-sm text-gray-500 mt-2">No contacts with WhatsApp numbers available.</p>
+                <p className="text-sm text-gray-500 mt-2">{t("builderUi.noWhatsappContacts")}</p>
               )}
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>{t("common.cancel")}</Button>
               <Button
                 onClick={() => { if (enrollCampaignId && selectedChatId) enrollChatMutation.mutate({ campaignId: enrollCampaignId, chatId: selectedChatId }); }}
                 disabled={!selectedChatId || enrollChatMutation.isPending}
                 className="bg-brand-green hover:bg-brand-green/90"
               >
-                {enrollChatMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Enroll
+                {enrollChatMutation.isPending && <Loader2 className="h-4 w-4 me-2 animate-spin" />}
+                {t("builderUi.enroll")}
               </Button>
             </div>
           </div>

@@ -1,6 +1,8 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { Lock, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { SavedPresetCampaignModals } from "@/components/SavedPresetCampaignModals";
@@ -12,6 +14,7 @@ import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { APP_CAMPAIGNS_PATH, parsePresetCampaignEditQuery, presetCampaignHref } from "@shared/appNav";
 
 export function Campaigns() {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const [, params] = useRoute("/app/campaigns/:id?");
@@ -66,11 +69,10 @@ export function Campaigns() {
                 <Lock className="h-8 w-8 text-gray-400" />
               </div>
               <h1 className="text-xl font-semibold text-gray-900 mb-2">
-                Campaign automation is available on Pro
+                {t("campaignUi.availableOnPro")}
               </h1>
               <p className="text-gray-500 max-w-md mb-6">
-                Preset campaigns, bulk enrollment, and automation sequences require Pro. Start from
-                Templates after upgrading.
+                {t("campaignUi.requiresPro")}
               </p>
               <InAppProUpgradeButton
                 canStartInternalTrial={canStartInternalTrial}
@@ -89,10 +91,9 @@ export function Campaigns() {
     <div className="h-full flex flex-col" data-testid="campaigns-page">
       <div className="px-4 md:px-6 py-2 md:py-4 border-b border-gray-100 flex-shrink-0">
         <div className="max-w-5xl mx-auto space-y-0.5">
-          <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">Campaigns</h1>
+          <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">{t("nav.campaigns")}</h1>
           <p className="text-gray-500 text-xs md:text-sm leading-snug">
-            Operational campaigns created from Templates. Prospect AI and Growth Engine campaigns stay
-            inside their own workspaces.
+            {t("campaignUi.scope")}
           </p>
         </div>
       </div>
@@ -101,10 +102,9 @@ export function Campaigns() {
         <div className="max-w-5xl mx-auto">
           <Card className="overflow-hidden border-gray-200/90">
             <CardHeader className="pb-2 pt-4 px-4 md:px-6">
-              <CardTitle className="text-base md:text-lg">Your campaigns</CardTitle>
+              <CardTitle className="text-base md:text-lg">{t("campaignUi.yourCampaigns")}</CardTitle>
               <CardDescription className="text-sm">
-                Draft, Active, Paused, and Completed campaigns from general templates. Enroll contacts
-                from the inbox; the scheduler sends steps on each delay.
+                {t("campaignEditor.about")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 md:px-6 pb-4">
@@ -112,13 +112,18 @@ export function Campaigns() {
                 <div className="flex justify-center py-8">
                   <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
                 </div>
+              ) : workspace.savedCampaignsError ? (
+                <div role="alert" className="flex flex-wrap items-center gap-2 py-4">
+                  {t("outreachUi.loadCampaigns")}
+                  <Button variant="outline" size="sm" onClick={() => void workspace.retrySavedCampaigns()}>{t("common.tryAgain")}</Button>
+                </div>
               ) : workspace.savedPresetCampaigns.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4 text-center" data-testid="campaigns-empty">
-                  No campaigns yet.{" "}
+                  {t("campaignUi.noCampaigns")}{" "}
                   <Link href="/app/templates">
-                    <a className="text-brand-green font-medium hover:underline">Choose a template</a>
+                    <a className="text-brand-green font-medium hover:underline">{t("outreachUi.campaignDraftHelp")}</a>
                   </Link>{" "}
-                  to create a draft.
+
                 </p>
               ) : (
                 <SavedPresetCampaignsTable

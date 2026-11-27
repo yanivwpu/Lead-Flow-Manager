@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 /**
  * The one business-knowledge workflow: Teach AI → Analyze → Review & publish → Questions.
  *
@@ -63,7 +65,7 @@ import type {
   KnowledgeReviewPayload,
   KnowledgeReviewSection,
 } from "@shared/knowledgeReview";
-import { knowledgeReviewStepStatus } from "@shared/knowledgeReview";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 
 type KnowledgeSource = {
   id: string;
@@ -115,12 +117,12 @@ type RemovalImpact = {
 const SOURCES_KEY = ["/api/ai/knowledge/sources"];
 const FACTS_KEY = ["/api/ai/knowledge/facts"];
 
-const CHANGE_STYLES: Record<KnowledgeFactView["changeType"], { label: string; className: string }> = {
-  new: { label: "New", className: "bg-emerald-100 text-emerald-900" },
-  changed: { label: "Changed", className: "bg-amber-100 text-amber-900" },
-  removing: { label: "No longer on page", className: "bg-red-100 text-red-900" },
-  suggested: { label: "Suggested", className: "bg-violet-100 text-violet-900" },
-  unchanged: { label: "Published", className: "bg-slate-100 text-slate-700" },
+const CHANGE_STYLES: Record<KnowledgeFactView["changeType"], { labelKey: string; className: string }> = {
+  new: { labelKey: "knowledge3d.newBadge", className: "bg-emerald-100 text-emerald-900" },
+  changed: { labelKey: "knowledge3d.changedBadge", className: "bg-amber-100 text-amber-900" },
+  removing: { labelKey: "knowledge3d.removingBadge", className: "bg-red-100 text-red-900" },
+  suggested: { labelKey: "knowledge3d.suggestedBadge", className: "bg-violet-100 text-violet-900" },
+  unchanged: { labelKey: "knowledge3d.publishedBadge", className: "bg-slate-100 text-slate-700" },
 };
 
 const FRESHNESS_STYLES: Record<KnowledgeFactView["freshness"]["tier"], string> = {
@@ -129,16 +131,12 @@ const FRESHNESS_STYLES: Record<KnowledgeFactView["freshness"]["tier"], string> =
   stale: "text-red-700",
 };
 
-function freshnessLabel(fact: KnowledgeFactView): string {
+function freshnessLabel(fact: KnowledgeFactView, t: TFunction): string {
   const { ageDays, tier } = fact.freshness;
-  const age = ageDays === 0 ? "today" : ageDays === 1 ? "1 day ago" : `${ageDays} days ago`;
-  if (tier === "fresh") return `Checked ${age}`;
-  if (tier === "aging") return `Checked ${age} — worth re-checking`;
-  return `Checked ${age} — out of date`;
-}
-
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+  const checked = ageDays === 0 ? t("knowledge3d.checkedToday") : t("knowledge3d.checkedDays", { count: ageDays });
+  if (tier === "aging") return t("knowledge3d.checkAging", { checked });
+  if (tier === "stale") return t("knowledge3d.checkStale", { checked });
+  return checked;
 }
 
 /** What a page is called on screen, by the kind of page it was detected to be. */
@@ -182,11 +180,11 @@ function shortSourceLabel(
   return urlKey(url) || url;
 }
 
-function formatWhen(iso: string | null | undefined): string | null {
+function formatWhen(iso: string | null | undefined, language: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+  return formatRegionalDate(d, language, { dateStyle: "medium" });
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +202,7 @@ function FactRow({
   removing: boolean;
   sourceLabel: string | null;
 }) {
+  const { t } = useTranslation();
   const change = CHANGE_STYLES[fact.changeType];
   const [showChanges, setShowChanges] = useState(false);
   const struck = fact.changeType === "removing";
@@ -268,18 +267,18 @@ function FactRow({
                   className={cn("h-3 w-3 transition-transform", showChanges && "rotate-90")}
                   aria-hidden
                 />
-                {showChanges ? "Hide changes" : "Show changes"}
+                {showChanges ? t("knowledge3d.hide") : t("knowledge3d.show")}
               </button>
               {showChanges && (
                 <p className="break-words rounded border border-slate-100 bg-slate-50/70 px-2 py-1 text-xs text-slate-500">
-                  Currently published: <span className="line-through">{fact.previousSummary}</span>
+                  {t("knowledge3d.current")} <span className="line-through">{fact.previousSummary}</span>
                 </p>
               )}
             </div>
           )}
           {fact.supersededBy && (
             <p className="text-xs text-slate-500">
-              Replaced by a more reliable source: {fact.supersededBy.summary}
+              {t("knowledge3d.replaced")} {fact.supersededBy.summary}
             </p>
           )}
         </div>
@@ -291,7 +290,7 @@ function FactRow({
           disabled={removing}
           onClick={() => onRemove(fact)}
           data-testid={`button-remove-fact-${fact.id}`}
-          aria-label="Remove this detail"
+          aria-label={t("knowledge3d.removeDetail")}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -299,12 +298,12 @@ function FactRow({
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
         <span className={cn("rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide", change.className)}>
-          {change.label}
+          {t(change.labelKey)}
         </span>
         <span className="text-slate-500">{fact.precedenceLabel}</span>
         <span className={cn("inline-flex items-center gap-1", FRESHNESS_STYLES[fact.freshness.tier])}>
           <Clock className="h-3 w-3" aria-hidden />
-          {freshnessLabel(fact)}
+          {freshnessLabel(fact, t)}
         </span>
         {fact.sourceUrl && sourceLabel && (
           <a
@@ -314,22 +313,22 @@ function FactRow({
             className="inline-flex max-w-[220px] items-center gap-1 truncate text-violet-800 hover:underline"
           >
             <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="truncate">Source: {sourceLabel}</span>
+            <span className="truncate">{t("knowledge3d.source")} {sourceLabel}</span>
           </a>
         )}
         {fact.provenanceUrls.length > 1 && (
-          <span className="text-slate-500">Confirmed by {fact.provenanceUrls.length} pages</span>
+          <span className="text-slate-500">{t("knowledge3d.confirmed")} {fact.provenanceUrls.length} {t("knowledge3d.pages")}</span>
         )}
         {fact.conflictBlocked && (
           <span className="inline-flex items-center gap-1 font-medium text-red-700">
             <AlertTriangle className="h-3 w-3" aria-hidden />
-            Needs your decision
+            {t("knowledge3d.needsDecision")}
           </span>
         )}
         {fact.needsReview && !fact.conflictBlocked && (
           <span className="inline-flex items-center gap-1 font-medium text-amber-800">
             <AlertTriangle className="h-3 w-3" aria-hidden />
-            Needs review
+            {t("knowledge3d.review")}
           </span>
         )}
       </div>
@@ -362,28 +361,29 @@ function SectionBlock({
   removingId: string | null;
   labelForSource: (url: string) => string;
 }) {
+  const { t } = useTranslation();
   const { counts } = section;
   // Spelled out rather than totalled: "7 new" and "7 changed" are different amounts of work.
   const breakdown = [
-    counts.new > 0 && `${counts.new} new`,
-    counts.changed > 0 && `${counts.changed} changed`,
-    counts.removing > 0 && `${counts.removing} no longer on page`,
-    counts.suggested > 0 && `${counts.suggested} suggested`,
+    counts.new > 0 && t("knowledge3d.newDetails", { count: counts.new }),
+    counts.changed > 0 && t("knowledge3d.changedDetails", { count: counts.changed }),
+    counts.removing > 0 && t("knowledge3d.removedDetails", { count: counts.removing }),
+    counts.suggested > 0 && t("knowledge3d.suggestedDetails", { count: counts.suggested }),
   ].filter((s): s is string => Boolean(s));
 
   return (
     <AccordionItem value={section.id} className="border-slate-200/80">
       <AccordionTrigger className="px-3 py-2.5 text-sm hover:no-underline">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pr-2 text-left">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pe-2 text-start">
           <span className="font-medium text-slate-900">{section.title}</span>
-          <span className="text-xs text-slate-500">{plural(counts.total, "detail", "details")}</span>
+          <span className="text-xs text-slate-500">{t("knowledge3d.details", { count: counts.total })}</span>
           {breakdown.length > 0 && (
             <Badge className="bg-violet-100 text-[10px] font-semibold text-violet-900 hover:bg-violet-100">
               {breakdown.join(" · ")}
             </Badge>
           )}
           {section.freshness.stale > 0 && (
-            <span className="text-[11px] text-red-700">{section.freshness.stale} out of date</span>
+            <span className="text-[11px] text-red-700">{section.freshness.stale} {t("knowledge3d.outdated")}</span>
           )}
         </div>
       </AccordionTrigger>
@@ -432,18 +432,18 @@ function liveProviderIcon(icon: string) {
   }
 }
 
-function liveProviderStatusLabel(provider: LiveBusinessDataProviderRow): string {
-  if (provider.id === "shopify" && provider.catalogReadiness) return provider.detail || "Catalog unavailable";
+function liveProviderStatusLabel(provider: LiveBusinessDataProviderRow, t: TFunction): string {
+  if (provider.id === "shopify" && provider.catalogReadiness) return provider.detail || t("knowledge3d.liveCatalogUnavailable");
   if (provider.id === "businessPackages") {
     if (provider.status === "connected") {
-      return provider.detail || "Connected";
+      return provider.detail || t("brain3d.connected");
     }
-    return provider.detail || "Not configured";
+    return provider.detail || t("knowledge3d.liveNotConfigured");
   }
-  if (provider.status === "coming_soon") return "Coming Soon";
-  if (provider.status === "error") return provider.detail || "Unavailable";
-  if (provider.status === "disconnected") return provider.detail || "Not connected";
-  return provider.detail || "Connected";
+  if (provider.status === "coming_soon") return t("knowledge3d.liveComingSoon");
+  if (provider.status === "error") return provider.detail || t("knowledge3d.liveUnavailable");
+  if (provider.status === "disconnected") return provider.detail || t("brain3d.notConnected");
+  return provider.detail || t("brain3d.connected");
 }
 
 function LiveBusinessDataPanel({
@@ -457,21 +457,22 @@ function LiveBusinessDataPanel({
   providers?: LiveBusinessDataProviderRow[];
   loading: boolean;
 }) {
+  const { t } = useTranslation();
   const rows = providers ?? [];
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className="pt-1">
       <CollapsibleTrigger
         type="button"
-        className="flex w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2.5 text-left hover:bg-slate-50"
+        className="flex w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2.5 text-start hover:bg-slate-50"
         data-testid="button-live-business-data"
       >
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Live Business Data
+            {t("knowledge3d.live")}
           </p>
           <p className="text-xs text-slate-600">
-            Offers, products, listings, and calendar AI can query directly. Manage offers in Settings.
+            {t("knowledge3d.liveHelp")}
           </p>
         </div>
         <ChevronDown
@@ -486,7 +487,7 @@ function LiveBusinessDataPanel({
         {loading && rows.length === 0 ? (
           <div className="flex items-center gap-2 px-1 py-2 text-xs text-slate-500">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            Loading…
+            {t("knowledge3d.loading")}
           </div>
         ) : (
           <ul
@@ -495,7 +496,7 @@ function LiveBusinessDataPanel({
           >
             {rows.map((provider) => {
               const Icon = liveProviderIcon(provider.icon);
-              const statusLabel = liveProviderStatusLabel(provider);
+              const statusLabel = liveProviderStatusLabel(provider, t);
               const connected = provider.status === "connected" && (!provider.catalogReadiness || provider.catalogReadiness.catalog === "ready");
               const comingSoon = provider.status === "coming_soon";
               return (
@@ -539,6 +540,7 @@ export function BusinessKnowledgeSteps({
   /** Rendered as the final step, inside this list, so the workflow stays one column. */
   questionsStep?: ReactNode;
 }) {
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState("");
   const [shopifySuggestions, setShopifySuggestions] = useState<Array<{url:string;label:string;status:"shopify_confirmed"|"unverified"}>>([]);
@@ -616,11 +618,11 @@ export function BusinessKnowledgeSteps({
     void queryClient.invalidateQueries({ queryKey: FACTS_KEY });
     if (jobQuery.data.status === "completed") {
       toast({
-        title: "Analysis finished",
+        title: t("knowledge3d.finished"),
         description:
           jobQuery.data.factsProposed > 0
-            ? `${plural(jobQuery.data.factsProposed, "change is", "changes are")} ready for you to review.`
-            : "Nothing changed. What you published stays in use.",
+            ? t("knowledge3d.readyChanges", { count: jobQuery.data.factsProposed })
+            : t("knowledge3d.noChanges"),
       });
     }
   }, [activeJobId, jobQuery.data, queryClient]);
@@ -635,13 +637,13 @@ export function BusinessKnowledgeSteps({
       void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
       if (data.created === false) {
         toast({
-          title: "Already on your list",
-          description: "That page is here already, so nothing was added.",
+          title: t("knowledge3d.alreadyListed"),
+          description: t("knowledge3d.alreadyHere"),
         });
       }
     },
     onError: (err: Error) => {
-      toast({ title: "Could not add page", description: err.message, variant: "destructive" });
+      toast({ title: t("knowledge3d.addError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -655,10 +657,10 @@ export function BusinessKnowledgeSteps({
     onSuccess: (data) => {
       setShopifySuggestions(data.suggestions);
       setSelectedShopifyUrls([]); // Do not automatically select unverified sources.
-      if (!data.connected) toast({ title: "Connect Shopify first", description: "Link your store to discover public pages." });
-      else if (!data.suggestions.length) toast({ title: "Could not suggest store pages", description: "You can still enter policy or FAQ page links manually." });
+      if (!data.connected) toast({ title: t("knowledge3d.connectFirst"), description: t("knowledge3d.linkStore") });
+      else if (!data.suggestions.length) toast({ title: t("knowledge3d.suggestError"), description: t("knowledge3d.manualLinks") });
     },
-    onError: () => toast({ title: "Could not check store pages", description: "Please try again or add a page manually.", variant: "destructive" }),
+    onError: () => toast({ title: t("knowledge3d.checkError"), description: t("knowledge3d.tryManual"), variant: "destructive" }),
   });
   const alreadyPresent = new Set((sourcesQuery.data?.sources ?? []).map(source => source.url));
   const pendingShopifySuggestions = shopifySuggestions.filter(item => !alreadyPresent.has(item.url));
@@ -673,7 +675,7 @@ export function BusinessKnowledgeSteps({
       }
       setShopifySuggestions([]);
       setSelectedShopifyUrls([]);
-      toast({ title: "Selected pages added", description: "Analyze the selected sources, review the facts, then publish only approved knowledge." });
+      toast({ title: t("knowledge3d.added"), description: t("knowledge3d.approveOnly") });
     } catch {
       // The existing mutation already shows the underlying safe error.
       void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
@@ -692,12 +694,12 @@ export function BusinessKnowledgeSteps({
       void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
       void queryClient.invalidateQueries({ queryKey: FACTS_KEY });
       toast({
-        title: "Page removed",
-        description: "Source removed — analyze again to refresh. Published knowledge is unchanged.",
+        title: t("knowledge3d.removed"),
+        description: t("knowledge3d.sourceRemoved"),
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not remove page", description: err.message, variant: "destructive" });
+      toast({ title: t("knowledge3d.removeError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -713,7 +715,7 @@ export function BusinessKnowledgeSteps({
       void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not start the analysis", description: err.message, variant: "destructive" });
+      toast({ title: t("knowledge3d.analyzeError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -728,7 +730,7 @@ export function BusinessKnowledgeSteps({
       void queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not remove that", description: err.message, variant: "destructive" });
+      toast({ title: t("knowledge3d.detailError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -752,24 +754,24 @@ export function BusinessKnowledgeSteps({
       const itemErrors = data.itemErrors ?? [];
       const held = data.blockedConflicts.length + data.skippedSuggestions + itemErrors.length;
       toast({
-        title: itemErrors.length && applied === 0 ? "Nothing published" : "Published",
+        title: itemErrors.length && applied === 0 ? t("knowledge3d.nothingPublished") : t("knowledge3d.publishedBadge"),
         description:
           itemErrors.length > 0
             ? [
-                applied > 0 ? `${plural(applied, "change is", "changes are")} now in use by AI.` : null,
-                itemErrors[0]?.reasons[0] || "Some items need review before they can be published.",
-                itemErrors.length > 1 ? `${itemErrors.length - 1} more item(s) were held back.` : null,
+                applied > 0 ? t("knowledge3d.appliedChanges", { count: applied }) : null,
+                itemErrors[0]?.reasons[0] || t("knowledge3d.publishReview"),
+                itemErrors.length > 1 ? t("knowledge3d.moreHeld", { count: itemErrors.length - 1 }) : null,
               ]
                 .filter(Boolean)
                 .join(" ")
             : held > 0
-              ? `${plural(applied, "change is", "changes are")} now in use by AI. ${plural(held, "still needs", "still need")} your decision.`
-              : `${plural(applied, "change is", "changes are")} now in use by AI.`,
+              ? [t("knowledge3d.appliedChanges", { count: applied }), t("knowledge3d.heldChanges", { count: held })].join(" ")
+              : t("knowledge3d.appliedChanges", { count: applied }),
         variant: itemErrors.length && applied === 0 ? "destructive" : "default",
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not publish", description: err.message, variant: "destructive" });
+      toast({ title: t("knowledge3d.publishError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -780,10 +782,10 @@ export function BusinessKnowledgeSteps({
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: FACTS_KEY });
-      toast({ title: "Draft changes discarded", description: "What you published stays in use." });
+      toast({ title: t("knowledge3d.discarded"), description: t("knowledge3d.publishedStays") });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not discard", description: err.message, variant: "destructive" });
+      toast({ title: t("knowledge3d.discardError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -846,8 +848,8 @@ export function BusinessKnowledgeSteps({
       .map((s) => s.lastSuccessfulScanAt || s.lastScannedAt)
       .filter((s): s is string => Boolean(s))
       .sort();
-    return formatWhen(stamps[stamps.length - 1]);
-  }, [sources]);
+    return formatWhen(stamps[stamps.length - 1], i18n.language);
+  }, [sources, i18n.language]);
 
   const teachState: StepState = sources.length > 0 ? "done" : "ready";
   const analyzeState: StepState = scanRunning
@@ -863,11 +865,10 @@ export function BusinessKnowledgeSteps({
     <section aria-labelledby="business-knowledge-heading" className="w-full min-w-0 space-y-4">
       <div className="space-y-1">
         <h2 id="business-knowledge-heading" className="text-lg font-semibold tracking-tight text-slate-900">
-          Business knowledge
+          {t("brain3d.knowledge")}
         </h2>
         <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
-          Your assistant answers from what you publish here, and nothing else. Three steps, one
-          place.
+          {t("knowledge3d.intro")}
         </p>
       </div>
 
@@ -885,16 +886,16 @@ export function BusinessKnowledgeSteps({
       >
         <Step
           index={1}
-          title="Teach AI"
-          description="Tell AI what your business does, then point it at the pages that spell out the details."
+          title={t("knowledge3d.teach")}
+          description={t("knowledge3d.teachDescription")}
           state={teachState}
-          status={sources.length > 0 ? plural(sources.length, "page", "pages") : "Start here"}
+          status={sources.length > 0 ? t("knowledge3d.sourcePages", { count: sources.length }) : t("knowledge3d.startHere")}
         >
           {aboutFields}
 
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Pages AI learns from
+              {t("knowledge3d.learnFrom")}
             </p>
             <div className="flex flex-wrap gap-2">
               <Input
@@ -915,8 +916,8 @@ export function BusinessKnowledgeSteps({
                 onClick={() => addSourceMutation.mutate(newUrl.trim())}
                 data-testid="button-add-knowledge-source"
               >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add page
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("knowledge3d.add")}
               </Button>
             </div>
 
@@ -927,10 +928,10 @@ export function BusinessKnowledgeSteps({
                     disabled={suggestShopifyPages.isPending || addingShopifyPages}
                     onClick={() => suggestShopifyPages.mutate()}
                     data-testid="button-find-shopify-knowledge-pages">
-                    {suggestShopifyPages.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin"/> : <ShoppingBag className="mr-1.5 h-3.5 w-3.5"/>}
-                    Suggest Shopify store pages
+                    {suggestShopifyPages.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin"/> : <ShoppingBag className="me-1.5 h-3.5 w-3.5"/>}
+                    {t("knowledge3d.suggestShopify")}
                   </Button>
-                  <span className="text-xs text-slate-600">Suggested common policy/FAQ links (not yet verified). You decide what AI learns.</span>
+                  <span className="text-xs text-slate-600">{t("knowledge3d.suggestHelp")}</span>
                 </div>
                 {shopifySuggestions.length > 0 && (
                   <div className="space-y-2">
@@ -949,7 +950,7 @@ export function BusinessKnowledgeSteps({
                           <div className="min-w-0 flex-1">
                             <div className="font-semibold">{item.label}
                               <span className="ms-2 font-normal text-slate-500">
-                                {alreadyPresent.has(item.url) ? "Already added" : item.status === "shopify_confirmed" ? "Configured in Shopify" : "Unverified URL"}
+                                {alreadyPresent.has(item.url) ? t("knowledge3d.alreadyAdded") : item.status === "shopify_confirmed" ? t("knowledge3d.configuredShopify") : t("knowledge3d.unverifiedUrl")}
                               </span>
                             </div>
                             <a href={item.url} target="_blank" rel="noopener noreferrer"
@@ -962,10 +963,10 @@ export function BusinessKnowledgeSteps({
                       <Button type="button" size="sm"
                         disabled={addingShopifyPages || addSourceMutation.isPending || selectedShopifySuggestions.length === 0}
                         onClick={() => void addShopifySuggestedPages()} data-testid="button-add-shopify-knowledge-pages">
-                        {addingShopifyPages ? "Adding pages…" : "Add " + selectedShopifySuggestions.length + " selected pages"}
-                      </Button> : <p className="text-xs text-slate-500">All suggested URLs are already listed.</p>}
-                    <p className="text-xs text-amber-800">Business knowledge belongs to this workspace. If you also use it for another business, do not publish unrelated Shopify policies here. Use a dedicated merchant workspace.</p>
-                    <p className="text-xs text-slate-600">Unverified URLs may be missing or password-protected. Adding selected pages does not publish facts; Analyze, review, then approve.</p>
+                        {addingShopifyPages ? t("knowledge3d.adding") : "Add " + selectedShopifySuggestions.length + " selected pages"}
+                      </Button> : <p className="text-xs text-slate-500">{t("knowledge3d.allListed")}</p>}
+                    <p className="text-xs text-amber-800">{t("knowledge3d.workspaceHelp")}</p>
+                    <p className="text-xs text-slate-600">{t("knowledge3d.unverified")}</p>
                   </div>
                 )}
               </div>
@@ -1007,10 +1008,10 @@ export function BusinessKnowledgeSteps({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="ml-auto h-7 shrink-0 px-2 text-slate-500 hover:text-red-700 sm:ml-0"
+                      className="ms-auto h-7 shrink-0 px-2 text-slate-500 hover:text-red-700 sm:ms-0"
                       onClick={() => void beginSourceRemoval(source)}
                       data-testid={`button-remove-source-${source.id}`}
-                      aria-label="Remove this page"
+                      aria-label={t("knowledge3d.removePageLabel")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -1019,8 +1020,7 @@ export function BusinessKnowledgeSteps({
               </ul>
             ) : (
               <Hint>
-                Add the pages that describe what you sell — pricing, services, FAQ, policies. Each
-                page is read on its own, so a long page can never crowd out a short one.
+                {t("knowledge3d.pagesHelp")}
               </Hint>
             )}
           </div>
@@ -1035,15 +1035,15 @@ export function BusinessKnowledgeSteps({
 
         <Step
           index={2}
-          title="Analyze knowledge"
-          description="AI reads each page separately and drafts what it found. Nothing reaches your replies at this stage."
+          title={t("knowledge3d.analyze")}
+          description={t("knowledge3d.analyzeDescription")}
           state={analyzeState}
           status={
             scanRunning && liveJob
-              ? `Reading ${liveJob.progressCurrent} of ${liveJob.progressTotal}`
+              ? t("knowledge3d.reading", { current: liveJob.progressCurrent, total: liveJob.progressTotal })
               : lastAnalyzed
-                ? `Last run ${lastAnalyzed}`
-                : "Not run yet"
+                ? t("knowledge3d.lastRun", { date: lastAnalyzed })
+                : t("knowledge3d.neverRun")
           }
         >
           <div className="flex flex-wrap items-center gap-3">
@@ -1056,13 +1056,13 @@ export function BusinessKnowledgeSteps({
             >
               {scanRunning || scanMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing {liveJob ? `${liveJob.progressCurrent}/${liveJob.progressTotal}` : ""}…
+                  <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                  {t("knowledge3d.analyzing")} {liveJob ? `${liveJob.progressCurrent}/${liveJob.progressTotal}` : ""}…
                 </>
               ) : (
                 <>
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  {lastAnalyzed ? "Analyze again" : "Analyze pages"}
+                  <RefreshCw className="me-2 h-3.5 w-3.5" />
+                  {lastAnalyzed ? t("knowledge3d.analyzeAgainButton") : t("knowledge3d.analyzePages")}
                 </>
               )}
             </Button>
@@ -1075,11 +1075,11 @@ export function BusinessKnowledgeSteps({
                 onClick={() => scanMutation.mutate({ forceReextract: true })}
                 data-testid="button-force-reextract-knowledge"
               >
-                Force re-extract
+                {t("knowledge3d.force")}
               </Button>
             ) : null}
             {sources.length === 0 && (
-              <span className="text-sm text-slate-500">Add a page in step 1 first.</span>
+              <span className="text-sm text-slate-500">{t("knowledge3d.addFirst")}</span>
             )}
           </div>
 
@@ -1092,7 +1092,7 @@ export function BusinessKnowledgeSteps({
           {jobItems.length > 0 && (
             <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white">
               <p className="border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Page by page
+                {t("knowledge3d.byPage")}
               </p>
               <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto text-xs">
                 {jobItems.map(([id, item]) => (
@@ -1113,7 +1113,7 @@ export function BusinessKnowledgeSteps({
                     </span>
                     {typeof item.added === "number" && item.added + (item.changed ?? 0) > 0 && (
                       <span className="text-[11px] text-slate-600">
-                        {item.added} new · {item.changed ?? 0} changed
+                        {item.added} {t("knowledge3d.newCount")} {item.changed ?? 0} {t("knowledge3d.changed")}
                       </span>
                     )}
                     {(item.error || item.notes?.length) && (
@@ -1130,14 +1130,18 @@ export function BusinessKnowledgeSteps({
 
         <Step
           index={3}
-          title="Review what AI learned"
-          description="Check what AI learned from your pages. Remove anything incorrect, then publish when it looks right — publishing is the only action that changes what your assistant says."
+          title={t("knowledge3d.reviewLearned")}
+          description={t("knowledge3d.reviewDescription")}
           state={reviewState}
-          status={knowledgeReviewStepStatus({
-            pendingCount,
-            publishedCount,
-            lastScanFactsProposed: liveJob?.factsProposed,
-          })}
+          status={
+            pendingCount > 0
+              ? t("knowledge3d.toReview", { count: pendingCount })
+              : publishedCount > 0
+                ? t("knowledge3d.publishedDetails", { count: publishedCount })
+                : (liveJob?.factsProposed ?? 0) > 0
+                  ? t("knowledge3d.detailsFound")
+                  : t("knowledge3d.noDetails")
+          }
           isLast={!questionsStep}
         >
           {facts && (facts.notices?.length ?? 0) > 0 && (
@@ -1152,11 +1156,10 @@ export function BusinessKnowledgeSteps({
             <div className="space-y-2 rounded-lg border border-red-200 bg-red-50/60 px-3 py-2.5">
               <p className="flex items-center gap-2 text-sm font-medium text-red-900">
                 <AlertTriangle className="h-4 w-4" aria-hidden />
-                {plural(blockedConflicts.length, "value needs", "values need")} your decision
+                {t("knowledge3d.conflictsCount", { count: blockedConflicts.length })}
               </p>
               <p className="text-xs text-red-900/80">
-                Two pages of equal standing disagree. Nothing publishes for these until you remove
-                the wrong one.
+                {t("knowledge3d.disagreement")}
               </p>
               <ul className="space-y-1.5 text-xs">
                 {blockedConflicts.map((conflict) => (
@@ -1165,7 +1168,7 @@ export function BusinessKnowledgeSteps({
                     <p className="text-slate-700">{conflict.winner.summary}</p>
                     {conflict.losers.map((loser) => (
                       <p key={loser.factId} className="text-slate-600">
-                        vs. {loser.summary}
+                        {t("knowledge3d.versus")} {loser.summary}
                       </p>
                     ))}
                   </li>
@@ -1177,22 +1180,22 @@ export function BusinessKnowledgeSteps({
           {factsQuery.isLoading ? (
             <p className="flex items-center gap-2 text-sm text-slate-600">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              Loading what AI knows…
+              {t("knowledge3d.loadingFacts")}
             </p>
           ) : facts && facts.sections.length > 0 ? (
             <>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
                 <span>
-                  <span className="font-semibold text-slate-900">{publishedCount}</span> published
+                  <span className="font-semibold text-slate-900">{publishedCount}</span> {t("knowledge3d.published")}
                 </span>
                 {pendingCount > 0 && (
-                  <span className="font-medium text-violet-800">{pendingCount} awaiting review</span>
+                  <span className="font-medium text-violet-800">{pendingCount} {t("knowledge3d.awaiting")}</span>
                 )}
                 {facts.freshness.stale > 0 && (
-                  <span className="text-red-700">{facts.freshness.stale} out of date</span>
+                  <span className="text-red-700">{facts.freshness.stale} {t("knowledge3d.outdated")}</span>
                 )}
                 {facts.freshness.oldestVerifiedAt && (
-                  <span>Oldest check: {formatWhen(facts.freshness.oldestVerifiedAt)}</span>
+                  <span>{t("knowledge3d.oldest")} {formatWhen(facts.freshness.oldestVerifiedAt, i18n.language)}</span>
                 )}
               </div>
 
@@ -1228,15 +1231,15 @@ export function BusinessKnowledgeSteps({
                 >
                   {publishMutation.isPending ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Publishing…
+                      <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                      {t("knowledge3d.publishing")}
                     </>
                   ) : (
                     <>
-                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      <Check className="me-1.5 h-3.5 w-3.5" />
                       {publishableCount > 0
-                        ? `Publish ${plural(publishableCount, "change", "changes")}`
-                        : "Publish"}
+                        ? t("knowledge3d.publishChanges", { count: publishableCount })
+                        : t("knowledge3d.publish")}
                     </>
                   )}
                 </Button>
@@ -1248,28 +1251,27 @@ export function BusinessKnowledgeSteps({
                   onClick={() => discardMutation.mutate()}
                   data-testid="button-discard-knowledge-drafts"
                 >
-                  Discard draft changes
+                  {t("knowledge3d.discard")}
                 </Button>
               </div>
 
               {publishMutation.isSuccess && (
                 <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-3 py-2 text-sm text-emerald-900">
-                  Published successfully. Your AI assistant is now using the updated business knowledge.
+                  {t("knowledge3d.publishSuccess")}
                 </div>
               )}
 
               {heldBackOnly && (
                 <p className="text-xs text-slate-600">
-                  Everything waiting needs a decision from you first — remove the value you do
-                  not want, or discard the draft changes.
+                  {t("knowledge3d.waitingHelp")}
                 </p>
               )}
             </>
           ) : (
             <Hint>
               {(liveJob?.factsProposed ?? 0) > 0
-                ? "The last analysis found details to review. If they are not listed, analyze again."
-                : "Nothing to review yet. Once you analyze your pages, everything AI picked up shows up here with its source, and you decide what goes live."}
+                ? t("knowledge3d.analyzeAgain")
+                : t("knowledge3d.nothing")}
             </Hint>
           )}
         </Step>
@@ -1285,17 +1287,16 @@ export function BusinessKnowledgeSteps({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove this page?</AlertDialogTitle>
+            <AlertDialogTitle>{t("knowledge3d.removeConfirm")}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
-                <p>{pendingRemoval?.source.label} will no longer be read.</p>
+                <p>{pendingRemoval?.source.label} {t("knowledge3d.stopReading")}</p>
                 {pendingRemoval?.impact === null ? (
-                  <p className="text-slate-500">Checking what depends on it…</p>
+                  <p className="text-slate-500">{t("knowledge3d.checkDependencies")}</p>
                 ) : pendingRemoval && pendingRemoval.impact!.orphanedFacts.length > 0 ? (
                   <>
                     <p className="font-medium text-slate-800">
-                      {plural(pendingRemoval.impact!.orphanedFacts.length, "detail comes", "details come")} only
-                      from this page and will stop being re-checked:
+                      {t("knowledge3d.onlySourceDetails", { count: pendingRemoval.impact!.orphanedFacts.length })}
                     </p>
                     <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-slate-600">
                       {pendingRemoval.impact!.orphanedFacts.slice(0, 12).map((f) => (
@@ -1307,21 +1308,21 @@ export function BusinessKnowledgeSteps({
                   </>
                 ) : (
                   <p className="text-slate-600">
-                    Everything from this page is also confirmed elsewhere, so nothing is lost.
+                    {t("knowledge3d.confirmedElsewhere")}
                   </p>
                 )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep page</AlertDialogCancel>
+            <AlertDialogCancel>{t("knowledge3d.keepPage")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (pendingRemoval) removeSourceMutation.mutate(pendingRemoval.source.id);
               }}
               data-testid="button-confirm-remove-source"
             >
-              Remove page
+              {t("knowledge3d.removePage")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,3 +1,5 @@
+import { builderCatalogText } from "@/lib/builderPresentation";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -126,6 +128,7 @@ export function ChatbotFormFieldsEditor(props: {
   form: ChatbotFormDraft | undefined;
   onFormChange: (form: ChatbotFormDraft) => void;
 }) {
+  const { t } = useTranslation();
   const form = asDraft(props.form);
   const fields = form.fields;
   const publishable = chatbotFormDefinitionIsPublishable(form);
@@ -144,24 +147,24 @@ export function ChatbotFormFieldsEditor(props: {
   return (
     <div className="space-y-3 min-w-0" data-testid={`webchat-form-editor-${props.stepId}`}>
       <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 space-y-1.5">
-        <p className="font-bold text-slate-700 mb-1">Channel support</p>
-        <p>✅ Website Chat only — visitors see this exact form</p>
-        <p>✖ Other channels receive the prompt as text, never HTML or scripts</p>
+        <p className="font-bold text-slate-700 mb-1">{t("chatbotForm.channelSupport")}</p>
+        <p>{t("chatbotForm.websiteOnly")}</p>
+        <p>{t("chatbotForm.otherChannels")}</p>
       </div>
 
       <div>
-        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Prompt</Label>
+        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotForm.prompt")}</Label>
         <Textarea
           value={props.prompt}
           onChange={(e) => props.onPromptChange(e.target.value)}
-          placeholder="Please share your details"
+          placeholder={t("chatbotForm.promptExample")}
           className="min-h-[60px] text-sm resize-none border-gray-200"
           data-testid={`input-form-prompt-${props.stepId}`}
         />
       </div>
 
       <div>
-        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Form title</Label>
+        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotForm.title")}</Label>
         <Input
           value={form.title}
           onChange={(e) => patchForm({ title: e.target.value })}
@@ -172,7 +175,7 @@ export function ChatbotFormFieldsEditor(props: {
 
       <div>
         <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
-          Description <span className="normal-case font-normal text-gray-300">(optional)</span>
+          {t("chatbotForm.description")} <span className="normal-case font-normal text-gray-300">{t("chatbotForm.optional")}</span>
         </Label>
         <Textarea
           value={form.description || ""}
@@ -183,7 +186,7 @@ export function ChatbotFormFieldsEditor(props: {
       </div>
 
       <div>
-        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Submit label</Label>
+        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{t("chatbotForm.submitLabel")}</Label>
         <Input
           value={form.submitLabel || ""}
           onChange={(e) => patchForm({ submitLabel: e.target.value })}
@@ -193,10 +196,10 @@ export function ChatbotFormFieldsEditor(props: {
       </div>
 
       <div className="space-y-2" data-testid="webchat-form-fields">
-        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Form fields</Label>
+        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">{t("chatbotForm.fields")}</Label>
         {fields.length === 0 && (
           <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2" data-testid="text-form-fields-empty">
-            Add at least one field. Incomplete forms stay Draft and are not sent to visitors.
+            {t("chatbotForm.empty")}
           </p>
         )}
         <div className="space-y-2">
@@ -217,7 +220,7 @@ export function ChatbotFormFieldsEditor(props: {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    Field {index + 1}
+                    {t("chatbotForm.field")} {index + 1}
                   </span>
                   <div className="flex items-center gap-0.5">
                     <button
@@ -226,7 +229,7 @@ export function ChatbotFormFieldsEditor(props: {
                       className="p-1 rounded-lg text-gray-400 hover:text-gray-700 disabled:opacity-20"
                       data-testid={`btn-form-field-up-${props.stepId}-${index}`}
                       onClick={() => patchForm({ fields: moveItem(fields, index, -1) })}
-                      aria-label="Move field up"
+                      aria-label={t("chatbotForm.moveFieldUp")}
                     >
                       <ChevronUp className="h-3.5 w-3.5" />
                     </button>
@@ -236,7 +239,7 @@ export function ChatbotFormFieldsEditor(props: {
                       className="p-1 rounded-lg text-gray-400 hover:text-gray-700 disabled:opacity-20"
                       data-testid={`btn-form-field-down-${props.stepId}-${index}`}
                       onClick={() => patchForm({ fields: moveItem(fields, index, 1) })}
-                      aria-label="Move field down"
+                      aria-label={t("chatbotForm.moveFieldDown")}
                     >
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
@@ -245,7 +248,7 @@ export function ChatbotFormFieldsEditor(props: {
                       className="p-1 rounded-lg text-gray-300 hover:text-red-500"
                       data-testid={`btn-form-field-remove-${props.stepId}-${index}`}
                       onClick={() => patchForm({ fields: fields.filter((_, i) => i !== index) })}
-                      aria-label="Remove field"
+                      aria-label={t("chatbotForm.removeField")}
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -254,7 +257,7 @@ export function ChatbotFormFieldsEditor(props: {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
                   <div className="min-w-0">
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Type</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">{t("chatbotForm.type")}</Label>
                     <Select
                       value={type}
                       onValueChange={(val) =>
@@ -265,9 +268,9 @@ export function ChatbotFormFieldsEditor(props: {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {WEBCHAT_FORM_FIELD_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {TYPE_LABELS[t]}
+                        {WEBCHAT_FORM_FIELD_TYPES.map((typeValue) => (
+                          <SelectItem key={typeValue} value={typeValue}>
+                            {typeValue === "email" ? t("common.email") : typeValue === "phone" ? t("common.phone") : typeValue === "name" ? t("common.name") : builderCatalogText(t, TYPE_LABELS[typeValue])}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -288,7 +291,7 @@ export function ChatbotFormFieldsEditor(props: {
                 </div>
 
                 <div>
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Label</Label>
+                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">{t("chatbotForm.label")}</Label>
                   <Input
                     value={String(field.label || "")}
                     onChange={(e) => patchField(index, { ...field, label: e.target.value })}
@@ -299,7 +302,7 @@ export function ChatbotFormFieldsEditor(props: {
 
                 {type === "consent" ? (
                   <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Consent text</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">{t("chatbotForm.consent")}</Label>
                     <Textarea
                       value={String(field.consentText || "")}
                       onChange={(e) => patchField(index, { ...field, consentText: e.target.value, required: true })}
@@ -310,7 +313,7 @@ export function ChatbotFormFieldsEditor(props: {
                 ) : (
                   <div>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">
-                      Placeholder <span className="normal-case font-normal text-gray-300">(optional)</span>
+                      {t("chatbotForm.placeholder")} <span className="normal-case font-normal text-gray-300">{t("chatbotForm.optional")}</span>
                     </Label>
                     <Input
                       value={String(field.placeholder || "")}
@@ -323,7 +326,7 @@ export function ChatbotFormFieldsEditor(props: {
 
                 {NEEDS_OPTIONS.has(type) && (
                   <div className="space-y-1.5" data-testid={`form-field-options-${props.stepId}-${index}`}>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Options</Label>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">{t("chatbotForm.options")}</Label>
                     {options.map((opt, oi) => (
                       <div key={oi} className="flex min-w-0 items-center gap-1">
                         <Input
@@ -342,7 +345,7 @@ export function ChatbotFormFieldsEditor(props: {
                           className="p-1 text-gray-400 disabled:opacity-20"
                           data-testid={`btn-form-option-up-${props.stepId}-${index}-${oi}`}
                           onClick={() => patchField(index, { ...field, options: moveItem(options, oi, -1) })}
-                          aria-label="Move option up"
+                          aria-label={t("chatbotForm.moveOptionUp")}
                         >
                           <ChevronUp className="h-3.5 w-3.5" />
                         </button>
@@ -352,7 +355,7 @@ export function ChatbotFormFieldsEditor(props: {
                           className="p-1 text-gray-400 disabled:opacity-20"
                           data-testid={`btn-form-option-down-${props.stepId}-${index}-${oi}`}
                           onClick={() => patchField(index, { ...field, options: moveItem(options, oi, 1) })}
-                          aria-label="Move option down"
+                          aria-label={t("chatbotForm.moveOptionDown")}
                         >
                           <ChevronDown className="h-3.5 w-3.5" />
                         </button>
@@ -363,7 +366,7 @@ export function ChatbotFormFieldsEditor(props: {
                           onClick={() =>
                             patchField(index, { ...field, options: options.filter((_, i) => i !== oi) })
                           }
-                          aria-label="Remove option"
+                          aria-label={t("chatbotForm.removeOption")}
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -383,7 +386,7 @@ export function ChatbotFormFieldsEditor(props: {
                       >
                         <span className="inline-flex items-center gap-1 justify-center">
                           <Plus className="h-3 w-3" />
-                          Add option
+                          {t("chatbotForm.addOption")}
                         </span>
                       </button>
                     )}
@@ -391,7 +394,7 @@ export function ChatbotFormFieldsEditor(props: {
                 )}
 
                 <label className="flex items-center justify-between gap-2 text-xs text-gray-600">
-                  <span>{type === "consent" ? "Required (always on)" : "Required"}</span>
+                  <span>{type === "consent" ? t("chatbotForm.alwaysRequired") : t("chatbotForm.required")}</span>
                   <Switch
                     checked={type === "consent" ? true : field.required === true}
                     disabled={type === "consent"}
@@ -404,7 +407,7 @@ export function ChatbotFormFieldsEditor(props: {
 
                 {error && (
                   <p className="text-[11px] text-red-600" data-testid={`text-form-field-error-${props.stepId}-${index}`} role="alert">
-                    {error}
+                    {builderCatalogText(t, error)}
                   </p>
                 )}
               </div>
@@ -423,13 +426,13 @@ export function ChatbotFormFieldsEditor(props: {
             }}
           >
             <Plus className="h-3 w-3" />
-            Add field
+            {t("chatbotForm.addField")}
           </button>
         )}
       </div>
 
       <div className="space-y-2" data-testid={`webchat-form-preview-${props.stepId}`}>
-        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Visitor preview</Label>
+        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">{t("chatbotForm.preview")}</Label>
         {preview ? (
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-2 min-w-0 overflow-x-hidden">
             <WebchatFormCard
@@ -441,12 +444,12 @@ export function ChatbotFormFieldsEditor(props: {
           </div>
         ) : (
           <p className="text-[11px] text-gray-500" data-testid="text-form-preview-unavailable">
-            Preview appears after the form has a title and at least one valid field.
+            {t("chatbotForm.noPreview")}
           </p>
         )}
         {!publishable && (
           <p className="text-[11px] text-amber-700" data-testid="text-form-publish-blocked">
-            This form cannot be published until every field is valid.
+            {t("chatbotForm.publishBlocked")}
           </p>
         )}
       </div>

@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
+import en from "../client/src/locales/en.json";
 
 describe("UnifiedInbox list Needs Reply pill removed", () => {
   const inboxSrc = fs.readFileSync(
@@ -48,6 +49,7 @@ describe("UnifiedInbox list Needs Reply pill removed", () => {
   it("Follow-ups Needs Reply KPI/filter remains intact", () => {
     assert.match(followUpsSrc, /hasNeedsReply/);
     assert.match(followUpsSrc, /filterKey:\s*['"]needs-reply['"]/);
-    assert.match(followUpsSrc, /Needs Reply/);
+    assert.match(followUpsSrc, /case "needs-reply": return t\("crmDetails\.needsReply"\)/);
+    assert.equal(en.crmDetails.needsReply, "Needs Reply");
   });
 });

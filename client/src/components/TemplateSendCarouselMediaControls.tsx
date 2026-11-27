@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ export function TemplateSendCarouselMediaControls({
   onMediaByIndexChange,
   savedDefaultsActive = false,
 }: Props) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -34,7 +36,7 @@ export function TemplateSendCarouselMediaControls({
     const cap = waUploadFileSizeCheck(mimeForCap, file.size);
     if (!cap.ok) {
       toast({
-        title: "File too large",
+        title: t("templateMedia.tooLarge"),
         description: waUploadTooLargeMessage(cap.kind),
         variant: "destructive",
       });
@@ -42,8 +44,8 @@ export function TemplateSendCarouselMediaControls({
     }
     if (!file.type.startsWith("image/")) {
       toast({
-        title: "Wrong file type",
-        description: "Choose a JPG, PNG, or WebP image for this card.",
+        title: t("templateMedia.wrongType"),
+        description: t("outreachUi.fileKind"),
         variant: "destructive",
       });
       return;
@@ -61,8 +63,8 @@ export function TemplateSendCarouselMediaControls({
       if (!res.ok) throw new Error(json.error || "Upload failed");
       if (String(json.mediaType || "").toLowerCase() !== "image") {
         toast({
-          title: "Wrong file type",
-          description: "Choose a JPG, PNG, or WebP image for this card.",
+          title: t("templateMedia.wrongType"),
+          description: t("outreachUi.fileKind"),
           variant: "destructive",
         });
         return;
@@ -77,11 +79,11 @@ export function TemplateSendCarouselMediaControls({
         ...mediaByIndex,
         [cardIndex]: { url, originalFilename: fn },
       });
-      toast({ title: "Card image added", description: `Slide ${cardIndex + 1} is ready.` });
+      toast({ title: t("templateMedia.cardAdded"), description: t("outreachUi.cardReady", { number: cardIndex + 1 }) });
     } catch (e: unknown) {
       toast({
-        title: "Upload failed",
-        description: e instanceof Error ? e.message : "Try again.",
+        title: t("templateMedia.failed"),
+        description: t("common.tryAgain"),
         variant: "destructive",
       });
     } finally {
@@ -100,15 +102,13 @@ export function TemplateSendCarouselMediaControls({
   return (
     <div className="space-y-3 rounded-lg border border-amber-200/80 bg-amber-50/40 p-3 shadow-sm">
       <div className="flex flex-col gap-0.5">
-        <Label className="text-sm font-medium text-gray-900">Carousel images</Label>
+        <Label className="text-sm font-medium text-gray-900">{t("templateMedia.cardImages")}</Label>
         <p className="text-xs text-gray-600">
-          Upload one image per slide that needs a runtime image header. Carousel sending requires media for each
-          card.
+          {t("templateMedia.cardHint")}
         </p>
         {savedDefaultsActive ? (
           <p className="text-[11px] leading-snug text-amber-900/90">
-            Using your last-sent images as defaults — use Replace or Remove on any slide before sending if you need
-            different media.
+            {t("templateMedia.lastImages")}
           </p>
         ) : null}
       </div>
@@ -126,7 +126,7 @@ export function TemplateSendCarouselMediaControls({
                   {cardIndex + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-gray-800">Card {cardIndex + 1}</p>
+                  <p className="text-xs font-medium text-gray-800">{t("templateMedia.card")} {cardIndex + 1}</p>
                   {entry?.url ? (
                     <div className="mt-1 flex items-center gap-2">
                       <img
@@ -135,11 +135,11 @@ export function TemplateSendCarouselMediaControls({
                         className="h-12 w-20 rounded border border-gray-200 object-cover"
                       />
                       <p className="truncate text-[10px] text-gray-500" title={entry.url}>
-                        Image ready
+                        {t("templateMedia.ready")}
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[10px] text-amber-800/90">Image required</p>
+                    <p className="text-[10px] text-amber-800/90">{t("templateMedia.required")}</p>
                   )}
                 </div>
               </div>
@@ -162,7 +162,7 @@ export function TemplateSendCarouselMediaControls({
                   onClick={() => fileRefs.current[cardIndex]?.click()}
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  {busy ? "Uploading…" : entry?.url ? "Replace" : "Upload"}
+                  {busy ? t("templateMedia.uploading") : entry?.url ? "Replace" : "Upload"}
                 </Button>
                 {entry?.url ? (
                   <Button
@@ -183,7 +183,7 @@ export function TemplateSendCarouselMediaControls({
       </div>
       <div className="flex items-center gap-2 text-[11px] text-gray-600">
         <ImageIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
-        <span>Each listed card must have an image before Send Template is enabled.</span>
+        <span>{t("templateMedia.requiredHint")}</span>
       </div>
     </div>
   );

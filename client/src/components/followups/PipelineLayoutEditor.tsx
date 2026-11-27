@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { crmStageLabel } from "@/lib/crmPresentation";
 import { useToast } from "@/hooks/use-toast";
 import { defaultPipelineLayout, pipelineLayoutSchema, isCustomPipelineStageId, MAX_PIPELINE_COLUMNS, PIPELINE_STAGE_IDS, type PipelineStageId, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
 
@@ -58,13 +59,13 @@ export function PipelineLayoutEditor({ layout, onClose, onSaved, onConflict }: {
             {draft.map((stage, index) => (
               <div key={stage.id} className="rounded-lg border border-slate-200 p-2.5 flex items-end gap-2">
                 <label className="flex-1 min-w-0 grid gap-1 text-xs text-slate-600">
-                  <span>{t("followups.internalStage", { stage: stage.canonicalStage ?? stage.id })}</span>
+                  <span>{t("followups.internalStage", { stage: crmStageLabel(t, stage.canonicalStage ?? stage.id) })}</span>
                   <input value={stage.label} maxLength={60} required disabled={save.isPending || conflict} className="w-full rounded-md border border-slate-200 px-2 py-2 text-sm text-slate-900" onChange={event => setDraft(prev => prev.map(item => item.id === stage.id ? { ...item, label: event.target.value } : item))} data-testid={`pipeline-layout-label-${stage.id.toLowerCase()}`} />
-                  {isCustomPipelineStageId(stage.id) && <select className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm" aria-label={t("followups.customStageMapping")} value={stage.canonicalStage} disabled={save.isPending || conflict || original.stages.some(item => item.id === stage.id)} onChange={event => setDraft(prev => prev.map(item => item.id === stage.id ? { ...item, canonicalStage: event.target.value as PipelineStageId } : item))}>{PIPELINE_STAGE_IDS.map(id => <option key={id} value={id}>{id}</option>)}</select>}
+                  {isCustomPipelineStageId(stage.id) && <select className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm" aria-label={t("followups.customStageMapping")} value={stage.canonicalStage} disabled={save.isPending || conflict || original.stages.some(item => item.id === stage.id)} onChange={event => setDraft(prev => prev.map(item => item.id === stage.id ? { ...item, canonicalStage: event.target.value as PipelineStageId } : item))}>{PIPELINE_STAGE_IDS.map(id => <option key={id} value={id}>{crmStageLabel(t, id)}</option>)}</select>}
                 </label>
                 {isCustomPipelineStageId(stage.id) && <Button type="button" variant="ghost" size="sm" disabled={save.isPending || conflict} onClick={() => setDraft(prev => prev.filter(item => item.id !== stage.id))}>{t("followups.removeCustomStage")}</Button>}
-                <Button type="button" variant="outline" size="icon" disabled={index === 0 || save.isPending || conflict} aria-label={t("followups.moveStageEarlier", { stage: stage.label })} onClick={() => move(index, -1)}><ChevronUp className="h-4 w-4" /></Button>
-                <Button type="button" variant="outline" size="icon" disabled={index === draft.length - 1 || save.isPending || conflict} aria-label={t("followups.moveStageLater", { stage: stage.label })} onClick={() => move(index, 1)}><ChevronDown className="h-4 w-4" /></Button>
+                <Button type="button" variant="outline" size="icon" disabled={index === 0 || save.isPending || conflict} aria-label={t("followups.moveStageEarlier", { stage: stage.label === stage.id ? crmStageLabel(t, stage.id) : stage.label })} onClick={() => move(index, -1)}><ChevronUp className="h-4 w-4" /></Button>
+                <Button type="button" variant="outline" size="icon" disabled={index === draft.length - 1 || save.isPending || conflict} aria-label={t("followups.moveStageLater", { stage: stage.label === stage.id ? crmStageLabel(t, stage.id) : stage.label })} onClick={() => move(index, 1)}><ChevronDown className="h-4 w-4" /></Button>
               </div>
             ))}
           </div>

@@ -1,3 +1,4 @@
+import { widgetOptionLabel } from "@/lib/outreachPresentation";
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -47,7 +48,6 @@ import {
 } from "@shared/webchatWidgetSettings";
 import {
   pageRulePathInputIssue,
-  pageRuleUrlFieldLabel,
   pageRulesHavePathInputIssues,
   WIDGET_PAGE_RULE_MAX_ALIASES,
 } from "@shared/webchatPageRuleMatch";
@@ -369,10 +369,10 @@ function brandingFieldError(
     errors.logo = "Logo must be an uploaded JPEG, PNG, or WebP (first-party /objects/uploads path). Remote URLs are not used.";
   }
   if (settings.accentColor && !sanitizeWidgetHexColor(settings.accentColor)) {
-    errors.color = "Accent color must be a 6-digit hex value such as #10b981.";
+    errors.color = "accent";
   }
   if (settings.headerTextColor !== "auto" && !sanitizeWidgetHexColor(settings.headerTextColor)) {
-    errors.color = errors.color || "Header text color must be Auto or a 6-digit hex value.";
+    errors.color = errors.color || "header";
   }
   const markup = "HTML, scripts, and markup are not allowed.";
   if (widgetTextContainsUnsafeMarkup(settings.brandName)) errors.brandName = markup;
@@ -454,11 +454,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
   };
 }
 
-const PREVIEW_STATES: { id: WebchatChromeState; label: string }[] = [
-  { id: "collapsed", label: "Collapsed" },
-  { id: "teaser", label: "Teaser" },
-  { id: "open", label: "Open Chat" },
-];
+const PREVIEW_STATES: WebchatChromeState[] = ["collapsed", "teaser", "open"];
 
 function WidgetPreview({
   settings,
@@ -477,6 +473,7 @@ function WidgetPreview({
   viewport: "desktop" | "mobile";
   onViewportChange: (viewport: "desktop" | "mobile") => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
@@ -491,7 +488,7 @@ function WidgetPreview({
             data-testid="button-preview-desktop"
           >
             <Monitor className="h-3.5 w-3.5" />
-            Desktop
+            {t("widgetSettingsUi.desktop")}
           </button>
           <button
             type="button"
@@ -503,22 +500,22 @@ function WidgetPreview({
             data-testid="button-preview-mobile"
           >
             <Smartphone className="h-3.5 w-3.5" />
-            Mobile
+            {t("widgetSettingsUi.mobile")}
           </button>
         </div>
         <div className="flex flex-wrap flex-1 gap-1 rounded-lg bg-gray-100 p-0.5">
-          {PREVIEW_STATES.map((item) => (
+          {PREVIEW_STATES.map((previewState) => (
             <button
               type="button"
-              key={item.id}
-              onClick={() => onStateChange(item.id)}
+              key={previewState}
+              onClick={() => onStateChange(previewState)}
               className={cn(
                 "flex-1 min-w-[5.5rem] py-1.5 text-xs font-medium rounded-md transition-all",
-                state === item.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+                state === previewState ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
               )}
-              data-testid={`button-preview-${item.id}`}
+              data-testid={`button-preview-${previewState}`}
             >
-              {item.label}
+              {previewState === "collapsed" ? t("outreachUi.collapsed") : previewState === "teaser" ? t("outreachUi.teaser") : t("outreachUi.openChat")}
             </button>
           ))}
         </div>
@@ -587,7 +584,7 @@ export function WebsiteWidget() {
   }, []);
 
   const widgetSettingsQueryKey = withUserQueryScope(["/api/widget-settings"], user?.id);
-  const { data: savedSettings } = useQuery<WidgetSettings>({
+  const { data: savedSettings, isError: widgetLoadError, refetch: retryWidgetLoad } = useQuery<WidgetSettings>({
     queryKey: widgetSettingsQueryKey,
     enabled: !!user?.id,
     staleTime: 0,
@@ -901,19 +898,22 @@ export function WebsiteWidget() {
 
   const activation = resolveWidgetActivationState(settings);
   const surface = widgetSurfaceStatus(activation);
+  const statusLabel = surface.switchChecked
+    ? t("automations.active")
+    : surface.channelPill === "needs_attention" ? t("outreachUi.inactive") : t("outreachUi.disabled");
   const showOriginHint = Boolean(surface.originHint) || enableBlockedHint;
   const showLeftoverLegacyRules = leftoverLegacyExamplePageRules(settings);
   const brandingErrors = brandingFieldError(settings);
   const pageRulePathIssues = pageRulesHavePathInputIssues(settings.pageRules);
   const pageRulesSaveStatus =
     saveQueued || saveMutation.isPending
-      ? "Saving…"
+      ? t("widgetSettingsUi.saving")
       : saveMutation.isError
-        ? "Could not save"
+        ? t("outreachUi.saveError")
         : pageRulePathIssues
           ? ""
           : saveMutation.isSuccess
-            ? "Saved"
+            ? t("outreachUi.saved")
             : "";
 
   const focusDomainSetup = () => {
@@ -923,6 +923,13 @@ export function WebsiteWidget() {
     el?.focus();
   };
   
+  if (widgetLoadError && savedSettings === undefined) return (
+    <div role="alert" className="flex flex-wrap gap-2 p-4">
+      {t("outreachUi.loadWidget")}
+      <Button type="button" variant="outline" onClick={() => void retryWidgetLoad()}>{t("common.tryAgain")}</Button>
+    </div>
+  );
+
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-gray-50/50">
       <div className="p-3 sm:p-4 md:p-6 max-w-4xl mx-auto pb-20">
@@ -943,8 +950,8 @@ export function WebsiteWidget() {
             <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3 bg-white">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <CardTitle className="text-base sm:text-lg font-bold">Status</CardTitle>
-                  <CardDescription className="text-xs">Public availability on your website</CardDescription>
+                  <CardTitle className="text-base sm:text-lg font-bold">{t("widgetSettingsUi.status")}</CardTitle>
+                  <CardDescription className="text-xs">{t("widgetSettingsUi.availability")}</CardDescription>
                 </div>
                 <Switch
                   checked={surface.switchChecked}
@@ -967,21 +974,21 @@ export function WebsiteWidget() {
                   <>
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-xs text-emerald-700 font-medium" data-testid="text-widget-effective-status">
-                      {surface.widgetStatusLabel}
+                      {statusLabel}
                     </span>
                   </>
                 ) : (
                   <>
                     <div className="w-2 h-2 rounded-full bg-gray-400" />
                     <span className="text-xs text-gray-600" data-testid="text-widget-effective-status">
-                      {surface.widgetStatusLabel}
+                      {statusLabel}
                     </span>
                   </>
                 )}
               </div>
               {showOriginHint && (
                 <p className="text-xs text-amber-800" data-testid="text-origin-required">
-                  Add a website domain before enabling the widget.
+                  {t("widgetSettingsUi.domainRequired")}
                 </p>
               )}
             </CardContent>
@@ -992,18 +999,18 @@ export function WebsiteWidget() {
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                   <Monitor className="w-4 h-4 text-gray-600" />
-                  Preview
+                  {t("templates.preview")}
                 </CardTitle>
                 <span
                   className="text-[11px] text-gray-500"
                   data-testid="text-widget-save-status"
                 >
                   {saveQueued || saveMutation.isPending
-                    ? "Saving..."
+                    ? t("widgetSettingsUi.saving")
                     : saveMutation.isError
-                      ? "Could not save"
+                      ? t("outreachUi.saveError")
                       : saveMutation.isSuccess
-                        ? "Saved"
+                        ? t("outreachUi.saved")
                         : ""}
                 </span>
               </div>
@@ -1020,7 +1027,7 @@ export function WebsiteWidget() {
               />
               {saveMutation.isError ? (
                 <p className="text-xs text-red-600" data-testid="text-widget-save-error">
-                  Changes were not saved. Check the fields and try again.
+                  {t("widgetSettingsUi.saveFailed")}
                 </p>
               ) : null}
             </CardContent>
@@ -1030,31 +1037,31 @@ export function WebsiteWidget() {
             <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <CardTitle className="text-base sm:text-lg font-bold">Launcher & Branding</CardTitle>
+                  <CardTitle className="text-base sm:text-lg font-bold">{t("widgetSettingsUi.branding")}</CardTitle>
                   <CardDescription className="text-[11px] sm:text-xs leading-snug">
-                    Visitor-facing name, launcher, and chat wrapper. Empty fields use placeholders until you save a value - they do not advertise WhachatCRM.
+                    {t("widgetAdmin.brandingHint")}
                   </CardDescription>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button type="button" variant="outline" size="sm" data-testid="button-reset-branding">
-                      Reset to default
+                      {t("widgetSettingsUi.resetDefault")}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Reset launcher and branding?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("widgetSettingsUi.resetConfirm")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This restores the circle launcher and empty brand fields. It does not change domains, page rules, widget ID, or the Powered by footer.
+                        {t("widgetAdmin.resetHint")}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                       <AlertDialogAction
                         data-testid="button-confirm-reset-branding"
                         onClick={() => updateSettings({ ...NEUTRAL_WEBCHAT_BRANDING })}
                       >
-                        Reset
+                        {t("widgetSettingsUi.reset")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -1063,7 +1070,7 @@ export function WebsiteWidget() {
             </CardHeader>
             <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-3">
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-gray-600">Launcher style</Label>
+                <Label className="text-[11px] font-semibold text-gray-600">{t("widgetSettingsUi.launcherStyle")}</Label>
                 <div className="flex p-0.5 bg-gray-100 rounded-lg">
                   {WEBCHAT_LAUNCHER_STYLES.map((style) => (
                     <button
@@ -1076,7 +1083,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid={`button-launcher-${style}`}
                     >
-                      {style === "circle" ? "Circle" : style === "pill" ? "Pill" : "Card"}
+                      {style === "circle" ? t("widgetSettingsUi.circle") : style === "pill" ? t("outreachUi.pill") : t("outreachUi.card")}
                     </button>
                   ))}
                 </div>
@@ -1084,7 +1091,7 @@ export function WebsiteWidget() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="brand-name" className="text-[11px] font-semibold text-gray-600">
-                    Business name
+                    {t("workspaceUi.businessName")}
                   </Label>
                   <Input
                     id="brand-name"
@@ -1100,17 +1107,17 @@ export function WebsiteWidget() {
                   />
                   {brandingErrors.brandName ? (
                     <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                      {brandingErrors.brandName}
+                      {t("outreachUi.markup")}
                     </p>
                   ) : (
                   <p className="text-[10px] text-gray-500">
-                    Placeholder is not saved. Visitors see your Business Profile name, or &quot;Website chat&quot;, until you enter one.
+                    {t("widgetAdmin.brandPlaceholder")}
                   </p>
                   )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="launcher-label" className="text-[11px] font-semibold text-gray-600">
-                    Launcher label
+                    {t("widgetEditor.launcherLabel")}
                   </Label>
                   <Input
                     id="launcher-label"
@@ -1123,31 +1130,31 @@ export function WebsiteWidget() {
                   />
                   {brandingErrors.launcherLabel ? (
                     <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                      {brandingErrors.launcherLabel}
+                      {t("outreachUi.markup")}
                     </p>
                   ) : null}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="panel-heading" className="text-[11px] font-semibold text-gray-600">
-                    Panel heading
+                    {t("widgetEditor.panelHeading")}
                   </Label>
                   <Input
                     id="panel-heading"
                     value={settings.panelHeading}
                     onChange={(e) => updateBrandingText({ panelHeading: e.target.value })}
-                    placeholder="Same as business name"
+                    placeholder={t("widgetEditor.sameName")}
                     className="h-9 text-sm border-gray-200 rounded-lg"
                     data-testid="input-panel-heading"
                   />
                   {brandingErrors.panelHeading ? (
                     <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                      {brandingErrors.panelHeading}
+                      {t("outreachUi.markup")}
                     </p>
                   ) : null}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="panel-subtitle" className="text-[11px] font-semibold text-gray-600">
-                    Subtitle
+                    {t("widgetEditor.subtitle")}
                   </Label>
                   <Input
                     id="panel-subtitle"
@@ -1159,14 +1166,14 @@ export function WebsiteWidget() {
                   />
                   {brandingErrors.panelSubtitle ? (
                     <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                      {brandingErrors.panelSubtitle}
+                      {t("outreachUi.markup")}
                     </p>
                   ) : null}
                 </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="teaser-greeting" className="text-[11px] font-semibold text-gray-600">
-                  Teaser greeting
+                  {t("widgetEditor.teaserGreeting")}
                 </Label>
                 <Input
                   id="teaser-greeting"
@@ -1178,16 +1185,16 @@ export function WebsiteWidget() {
                 />
                 {brandingErrors.teaserGreeting ? (
                   <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                    {brandingErrors.teaserGreeting}
+                    {t("outreachUi.markup")}
                   </p>
                 ) : (
                 <p className="text-[10px] text-gray-500">
-                  Page rules can override this greeting on matching URLs without changing your branding.
+                  {t("widgetAdmin.ruleOverride")}
                 </p>
                 )}
               </div>
               <div className="space-y-1" data-testid="section-widget-logo">
-                <Label className="text-[11px] font-semibold text-gray-600">Logo</Label>
+                <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.logo")}</Label>
                 <input
                   id={WIDGET_LOGO_FILE_INPUT_ID}
                   ref={logoFileRef}
@@ -1215,7 +1222,7 @@ export function WebsiteWidget() {
                         openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
                       }}
                     >
-                      {logoBusy ? "Uploading..." : "Replace"}
+                      {logoBusy ? t("widgetEditor.uploading") : t("widgetEditor.replace")}
                     </Button>
                     <Button
                       type="button"
@@ -1225,7 +1232,7 @@ export function WebsiteWidget() {
                       data-testid="button-logo-remove"
                       onClick={() => setLogoRemoveOpen(true)}
                     >
-                      Remove
+                      {t("workflowEditor.remove")}
                     </Button>
                   </div>
                 ) : (
@@ -1242,20 +1249,20 @@ export function WebsiteWidget() {
                         openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
                       }}
                     >
-                      {logoBusy ? "Uploading..." : "Upload"}
+                      {logoBusy ? t("widgetEditor.uploading") : t("common.upload")}
                     </Button>
                   </div>
                 )}
                 <AlertDialog open={logoRemoveOpen} onOpenChange={setLogoRemoveOpen}>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Remove logo?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("widgetEditor.removeLogo")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        The logo will be removed from your widget after this change is saved.
+                        {t("widgetAdmin.removeLogoHint")}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                       <AlertDialogAction
                         data-testid="button-confirm-remove-logo"
                         onClick={() => {
@@ -1265,22 +1272,22 @@ export function WebsiteWidget() {
                           updateSettings({ logoUrl: "" });
                         }}
                       >
-                        Remove
+                        {t("workflowEditor.remove")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
                 {brandingErrors.logo || logoUploadError ? (
                   <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                    {logoUploadError || brandingErrors.logo}
+                    {logoUploadError || t("outreachUi.logoValidation")}
                   </p>
                 ) : widgetLogoEditorHasImage(settings.logoUrl) ? null : (
-                  <p className="text-[10px] text-gray-500">JPEG, PNG, or WebP. Max 5 MB.</p>
+                  <p className="text-[10px] text-gray-500">{t("widgetAdmin.logoTypes")}</p>
                 )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Chat icon</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.chatIcon")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_CHAT_ICONS.map((icon) => (
                       <button
@@ -1293,13 +1300,13 @@ export function WebsiteWidget() {
                         )}
                         data-testid={`button-icon-${icon}`}
                       >
-                        {icon}
+                        {widgetOptionLabel(t, icon)}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Open behavior</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.openBehavior")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_OPEN_BEHAVIORS.map((behavior) => (
                       <button
@@ -1312,13 +1319,13 @@ export function WebsiteWidget() {
                         )}
                         data-testid={behavior === "teaser" ? "button-open-teaser" : "button-open-direct"}
                       >
-                        {behavior === "teaser" ? "Teaser first" : "Open chat"}
+                        {behavior === "teaser" ? t("widgetEditor.teaserFirst") : t("widgetEditor.openChat")}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Corner style</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.corner")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_CORNER_STYLES.map((corner) => (
                       <button
@@ -1331,13 +1338,13 @@ export function WebsiteWidget() {
                         )}
                         data-testid={`button-corner-${corner}`}
                       >
-                        {corner}
+                        {widgetOptionLabel(t, corner)}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Panel width</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.panelWidth")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg">
                     {WEBCHAT_PANEL_WIDTHS.map((width) => (
                       <button
@@ -1350,7 +1357,7 @@ export function WebsiteWidget() {
                         )}
                         data-testid={`button-width-${width}`}
                       >
-                        {width}
+                        {widgetOptionLabel(t, width)}
                       </button>
                     ))}
                   </div>
@@ -1359,7 +1366,7 @@ export function WebsiteWidget() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="accent-color" className="text-[11px] font-semibold text-gray-600">
-                    Accent color
+                    {t("widgetEditor.accent")}
                   </Label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1377,20 +1384,20 @@ export function WebsiteWidget() {
                       disabled={!settings.accentColor}
                       onClick={() => updateSettings({ accentColor: "" })}
                     >
-                      Match Color
+                      {t("widgetAdmin.matchColor")}
                     </Button>
                   </div>
                   <p className="text-[10px] text-gray-500">
-                    Visitor bubbles, send, and form buttons. Empty follows Color. Text contrast is automatic.
+                    {t("widgetAdmin.accentHint")}
                   </p>
                   {brandingErrors.color ? (
                     <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                      {brandingErrors.color}
+                      {brandingErrors.color === "accent" ? t("outreachUi.accentValidation") : t("outreachUi.headerValidation")}
                     </p>
                   ) : null}
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Header text</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetEditor.headerText")}</Label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1403,7 +1410,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid="button-header-auto"
                     >
-                      Auto contrast
+                      {t("widgetEditor.autoContrast")}
                     </button>
                     <input
                       type="color"
@@ -1415,11 +1422,11 @@ export function WebsiteWidget() {
                       onChange={(e) => updateSettings({ headerTextColor: e.target.value })}
                       className="w-8 h-8 rounded-lg cursor-pointer border-2 border-gray-200 bg-white"
                       data-testid="input-header-text-color"
-                      title="Custom header text color"
+                      title={t("widgetAdmin.customHeader")}
                     />
                   </div>
                   <p className="text-[10px] text-gray-500">
-                    Applies only to the chat header. Visitor messages use automatic contrast.
+                    {t("widgetAdmin.headerHint")}
                   </p>
                 </div>
               </div>
@@ -1428,9 +1435,9 @@ export function WebsiteWidget() {
 
           <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl" data-testid="card-widget-translations">
             <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
-              <CardTitle className="text-base sm:text-lg font-bold">Visitor languages</CardTitle>
+              <CardTitle className="text-base sm:text-lg font-bold">{t("widgetEditor.visitorLanguages")}</CardTitle>
               <CardDescription className="text-[11px] sm:text-xs leading-snug">
-                Optional Spanish and Hebrew copy. The fields above stay as the default. Empty translations use that default, then the built-in phrase for that language. Product and personal names are never translated automatically.
+                {t("widgetAdmin.languageHint")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-3">
@@ -1439,7 +1446,7 @@ export function WebsiteWidget() {
                 const fieldProps = builderLocalizedInputProps(loc);
                 return (
                   <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2" data-testid={`widget-copy-${loc}`}>
-                    <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
+                    <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? t("outreachUi.spanish") : t("outreachUi.hebrew")}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <Input
                         {...fieldProps}
@@ -1516,15 +1523,15 @@ export function WebsiteWidget() {
 
           <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl">
             <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
-              <CardTitle className="text-base sm:text-lg font-bold">Appearance</CardTitle>
+              <CardTitle className="text-base sm:text-lg font-bold">{t("widgetAdmin.appearance")}</CardTitle>
               <CardDescription className="text-[11px] sm:text-xs leading-snug">
-                Default look when no page rule overrides the greeting
+                {t("widgetAdmin.appearanceHint")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-2.5">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
                 <div className="space-y-1 min-w-0 flex-1">
-                  <Label className="text-[11px] font-semibold text-gray-600">Color</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetAdmin.color")}</Label>
                   <div className="flex flex-wrap gap-1.5">
                     {COLOR_PRESETS.map((color) => (
                       <button
@@ -1547,16 +1554,16 @@ export function WebsiteWidget() {
                       value={settings.color}
                       onChange={(e) => updateSettings({ color: e.target.value })}
                       className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg cursor-pointer border-2 border-dashed border-gray-300 bg-white shrink-0"
-                      title="Custom"
+                      title={t("widgetAdmin.custom")}
                       data-testid="input-custom-color"
                     />
                   </div>
                   <p className="text-[10px] text-gray-500">
-                    Header and launcher background. Visitor bubbles follow Accent, or this Color when Accent is empty.
+                    {t("widgetAdmin.colorHint")}
                   </p>
                 </div>
                 <div className="space-y-1 w-full md:w-auto md:min-w-[148px] shrink-0">
-                  <Label className="text-[11px] font-semibold text-gray-600">Position</Label>
+                  <Label className="text-[11px] font-semibold text-gray-600">{t("widgetAdmin.position")}</Label>
                   <div className="flex p-0.5 bg-gray-100 rounded-lg max-w-xs md:max-w-none">
                     <button
                       type="button"
@@ -1567,7 +1574,7 @@ export function WebsiteWidget() {
                       )}
                       data-testid="button-position-left"
                     >
-                      Left
+                      {t("widgetEditor.left")}
                     </button>
                     <button
                       type="button"
@@ -1578,26 +1585,26 @@ export function WebsiteWidget() {
                       )}
                       data-testid="button-position-right"
                     >
-                      Right
+                      {t("widgetEditor.right")}
                     </button>
                   </div>
                 </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="welcome-message" className="text-[11px] font-semibold text-gray-600">
-                  Default greeting
+                  {t("widgetAdmin.defaultGreeting")}
                 </Label>
                 <Input
                   id="welcome-message"
                   value={settings.welcomeMessage}
                   onChange={(e) => updateSettings({ welcomeMessage: e.target.value })}
                   className="h-9 text-sm border-gray-200 rounded-lg"
-                  placeholder="Hi! How can we help?"
+                  placeholder={t("widgetAdmin.greetingExample")}
                   data-testid="input-welcome-message"
                 />
                 {brandingErrors.welcomeMessage ? (
                   <p className="text-[10px] text-red-600" data-testid="text-branding-error">
-                    {brandingErrors.welcomeMessage}
+                    {t("outreachUi.markup")}
                   </p>
                 ) : null}
               </div>
@@ -1606,15 +1613,15 @@ export function WebsiteWidget() {
 
           <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl">
             <CardHeader className="p-3 sm:p-4 pb-2">
-              <CardTitle className="text-base sm:text-lg font-semibold">Smart Entry</CardTitle>
+              <CardTitle className="text-base sm:text-lg font-semibold">{t("widgetAdmin.smartEntry")}</CardTitle>
               <CardDescription className="text-xs">
-                Control when the floating widget appears and on which devices.
+                {t("widgetAdmin.smartEntryHint")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="trigger-type" className="text-xs font-semibold text-gray-600">
-                  When to show
+                  {t("widgetAdmin.showWhen")}
                 </Label>
                 <select
                   id="trigger-type"
@@ -1625,17 +1632,17 @@ export function WebsiteWidget() {
                   className="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   data-testid="select-widget-trigger"
                 >
-                  <option value="always">Always (after load)</option>
-                  <option value="delay">After a delay</option>
-                  <option value="scroll">After scroll depth</option>
-                  <option value="exit_intent">Exit intent</option>
+                  <option value="always">{t("widgetAdmin.always")}</option>
+                  <option value="delay">{t("widgetAdmin.afterDelay")}</option>
+                  <option value="scroll">{t("widgetAdmin.afterScroll")}</option>
+                  <option value="exit_intent">{t("widgetAdmin.exitIntent")}</option>
                 </select>
               </div>
 
               {settings.triggerType === "delay" && (
                 <div className="space-y-2">
                   <Label htmlFor="delay-sec" className="text-xs font-semibold text-gray-600">
-                    Delay (seconds)
+                    {t("widgetAdmin.delaySeconds")}
                   </Label>
                   <Input
                     id="delay-sec"
@@ -1658,8 +1665,8 @@ export function WebsiteWidget() {
                 <div className="space-y-2">
                   <Label htmlFor="scroll-pct" className="text-xs font-semibold text-gray-600">
                     {settings.triggerType === "exit_intent"
-                      ? "Scroll depth — used for scroll trigger and mobile exit fallback (%)"
-                      : "Scroll depth (%)"}
+                      ? t("widgetAdmin.depthFallback")
+                      : t("widgetAdmin.depth")}
                   </Label>
                   <Input
                     id="scroll-pct"
@@ -1685,7 +1692,7 @@ export function WebsiteWidget() {
                 <div className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Monitor className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-800">Desktop</span>
+                    <span className="text-sm text-gray-800">{t("widgetSettingsUi.desktop")}</span>
                   </div>
                   <Switch
                     checked={settings.showOnDesktop}
@@ -1697,7 +1704,7 @@ export function WebsiteWidget() {
                 <div className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Smartphone className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm text-gray-800">Mobile</span>
+                    <span className="text-sm text-gray-800">{t("widgetSettingsUi.mobile")}</span>
                   </div>
                   <Switch
                     checked={settings.showOnMobile}
@@ -1714,9 +1721,9 @@ export function WebsiteWidget() {
             <CardHeader className="p-3 sm:p-4 pb-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <CardTitle className="text-base sm:text-lg font-semibold">Page Rules</CardTitle>
+                  <CardTitle className="text-base sm:text-lg font-semibold">{t("widgetAdmin.rules")}</CardTitle>
                   <CardDescription className="text-xs">
-                    Optional rules for specific URLs. The first matching rule wins. No page-specific rules are configured until you add one.
+                    {t("widgetAdmin.rulesHint")}
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
@@ -1734,12 +1741,12 @@ export function WebsiteWidget() {
                       onClick={() => persistWidgetSettings(settingsRef.current)}
                       data-testid="button-page-rules-save-retry"
                     >
-                      Retry
+                      {t("common.tryAgain")}
                     </Button>
                   ) : null}
                   <Button type="button" variant="outline" size="sm" onClick={addPageRule} className="shrink-0">
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Add rule
+                    <Plus className="me-1.5 h-3.5 w-3.5" />
+                    {t("widgetAdmin.addRule")}
                   </Button>
                 </div>
               </div>
@@ -1751,7 +1758,7 @@ export function WebsiteWidget() {
                   data-testid="recommend-clear-legacy-rules"
                 >
                   <p>
-                    These look like starter example rules (/pricing, /contact, /services). They were not changed automatically because this widget is customized. You can remove them if they do not apply.
+                    {t("outreachUi.exampleRules")}
                   </p>
                   <Button
                     type="button"
@@ -1760,13 +1767,13 @@ export function WebsiteWidget() {
                     onClick={() => updateSettings({ pageRules: [] })}
                     data-testid="button-clear-legacy-example-rules"
                   >
-                    Remove example rules
+                    {t("widgetAdmin.removeExamples")}
                   </Button>
                 </div>
               )}
               {settings.pageRules.length === 0 ? (
                 <p className="text-sm text-gray-500" data-testid="empty-page-rules">
-                  No page-specific rules are configured.
+                  {t("widgetAdmin.noRules")}
                 </p>
               ) : null}
               {settings.pageRules.map((rule, index) => (
@@ -1776,21 +1783,21 @@ export function WebsiteWidget() {
                   data-testid={`page-rule-${index}`}
                 >
                   <div className="flex justify-between gap-2">
-                    <p className="text-xs font-semibold text-gray-700">Rule {index + 1}</p>
+                    <p className="text-xs font-semibold text-gray-700">{t("widgetAdmin.rule")} {index + 1}</p>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="h-8 text-gray-500 hover:text-red-600"
                       onClick={() => removePageRule(index)}
-                      data-testid={`button-remove-rule-${index}`}
+                      aria-label={t("outreachUi.removeRule")} data-testid={`button-remove-rule-${index}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
                     <div className="space-y-2 min-w-0">
-                      <Label className="text-xs text-gray-600">{pageRuleUrlFieldLabel(rule.matchType)}</Label>
+                      <Label className="text-xs text-gray-600">{rule.matchType === "pathname" ? t("outreachUi.primaryPath") : rule.matchType === "pathname_prefix" ? t("widgetAdmin.prefix") : t("outreachUi.urlContains")}</Label>
                       <Input
                         dir="ltr"
                         value={rule.urlContains}
@@ -1807,12 +1814,12 @@ export function WebsiteWidget() {
                       />
                       {pageRulePathInputIssue(rule.urlContains) ? (
                         <p className="text-xs text-red-600" data-testid={`error-rule-url-${index}`}>
-                          {pageRulePathInputIssue(rule.urlContains)}
+                          {t("outreachUi.separatePaths")}
                         </p>
                       ) : null}
                     </div>
                     <div className="space-y-2 min-w-0">
-                      <Label className="text-xs text-gray-600">Match</Label>
+                      <Label className="text-xs text-gray-600">{t("widgetAdmin.match")}</Label>
                       <select
                         value={rule.matchType || "contains"}
                         onChange={(e) =>
@@ -1821,27 +1828,27 @@ export function WebsiteWidget() {
                         className="h-9 w-full min-w-0 rounded-md border border-gray-200 bg-white px-2 text-sm"
                         data-testid={`select-rule-match-${index}`}
                       >
-                        <option value="contains">Contains (legacy)</option>
-                        <option value="pathname">Exact path</option>
-                        <option value="pathname_prefix">Path prefix</option>
+                        <option value="contains">{t("widgetAdmin.contains")}</option>
+                        <option value="pathname">{t("widgetAdmin.exact")}</option>
+                        <option value="pathname_prefix">{t("widgetAdmin.prefix")}</option>
                       </select>
                       {rule.matchType !== "pathname" ? (
                         <p className="text-[11px] text-gray-500" data-testid={`text-aliases-exact-only-${index}`}>
-                          Additional paths are available for Exact path matching only.
+                          {t("widgetAdmin.exactOnly")}
                         </p>
                       ) : null}
                       {clearedAliasNoticeIds.has(rule.id) ? (
                         <p className="text-[11px] text-amber-800" data-testid={`text-aliases-cleared-${index}`}>
-                          Additional paths apply only to Exact path matching and were cleared.
+                          {t("widgetAdmin.aliasesCleared")}
                         </p>
                       ) : null}
                     </div>
                   </div>
                   {rule.matchType === "pathname" ? (
                     <div className="space-y-2 min-w-0" data-testid={`section-rule-aliases-${index}`}>
-                      <Label className="text-xs text-gray-600">Additional paths</Label>
+                      <Label className="text-xs text-gray-600">{t("widgetAdmin.aliases")}</Label>
                       <p className="text-[11px] text-gray-500">
-                        Add localized or alternate URLs that should use this same greeting, actions, and funnel.
+                        {t("widgetAdmin.aliasesHint")}
                       </p>
                       {(rule.urlAliases || []).map((alias, aliasIndex) => (
                         <div key={`${rule.id}-alias-${aliasIndex}`} className="flex items-center gap-2 min-w-0">
@@ -1867,7 +1874,7 @@ export function WebsiteWidget() {
                                 urlAliases: (rule.urlAliases || []).filter((_, i) => i !== aliasIndex),
                               })
                             }
-                            data-testid={`button-remove-alias-${index}-${aliasIndex}`}
+                            aria-label={t("outreachUi.removePath")} data-testid={`button-remove-alias-${index}-${aliasIndex}`}
                           >
                             <X className="h-3.5 w-3.5" />
                           </Button>
@@ -1880,7 +1887,7 @@ export function WebsiteWidget() {
                             className="text-xs text-red-600"
                             data-testid={`error-rule-alias-${index}-${aliasIndex}`}
                           >
-                            {pageRulePathInputIssue(alias)}
+                            {t("outreachUi.separatePaths")}
                           </p>
                         ) : null,
                       )}
@@ -1894,18 +1901,18 @@ export function WebsiteWidget() {
                           }
                           data-testid={`button-add-alias-${index}`}
                         >
-                          <Plus className="mr-1.5 h-3.5 w-3.5" />
-                          Add path
+                          <Plus className="me-1.5 h-3.5 w-3.5" />
+                          {t("widgetAdmin.addPath")}
                         </Button>
                       ) : null}
                     </div>
                   ) : null}
                   <div className="space-y-2">
-                    <Label className="text-xs text-gray-600">Greeting</Label>
+                    <Label className="text-xs text-gray-600">{t("widgetAdmin.greeting")}</Label>
                     <Input
                       value={rule.greeting}
                       onChange={(e) => updatePageRule(index, { greeting: e.target.value })}
-                      placeholder="Full greeting inside the open chat"
+                      placeholder={t("widgetAdmin.fullGreeting")}
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-greeting-${index}`}
                     />
@@ -1921,7 +1928,7 @@ export function WebsiteWidget() {
                             },
                           })
                         }
-                        placeholder="Spanish greeting (optional)"
+                        placeholder={t("widgetAdmin.spanishGreeting")}
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-greeting-es-${index}`}
                       />
@@ -1936,18 +1943,18 @@ export function WebsiteWidget() {
                             },
                           })
                         }
-                        placeholder="Hebrew greeting (optional)"
+                        placeholder={t("widgetAdmin.hebrewGreeting")}
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-greeting-he-${index}`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-gray-600">Teaser (closed widget)</Label>
+                    <Label className="text-xs text-gray-600">{t("widgetAdmin.teaser")}</Label>
                     <Input
                       value={rule.teaserGreeting || ""}
                       onChange={(e) => updatePageRule(index, { teaserGreeting: e.target.value })}
-                      placeholder="Optional short bubble — leave empty to use a truncated greeting"
+                      placeholder={t("widgetAdmin.teaserHint")}
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-teaser-${index}`}
                     />
@@ -1963,7 +1970,7 @@ export function WebsiteWidget() {
                             },
                           })
                         }
-                        placeholder="Spanish teaser (optional)"
+                        placeholder={t("widgetAdmin.spanishTeaser")}
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-teaser-es-${index}`}
                       />
@@ -1978,25 +1985,25 @@ export function WebsiteWidget() {
                             },
                           })
                         }
-                        placeholder="Hebrew teaser (optional)"
+                        placeholder={t("widgetAdmin.hebrewTeaser")}
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-teaser-he-${index}`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-gray-600">Prefilled message</Label>
+                    <Label className="text-xs text-gray-600">{t("widgetAdmin.prefill")}</Label>
                     <Textarea
                       value={rule.prefilledMessage}
                       onChange={(e) => updatePageRule(index, { prefilledMessage: e.target.value })}
-                      placeholder="Optional — appears in the visitor message field"
+                      placeholder={t("widgetAdmin.prefillHint")}
                       rows={2}
                       className="text-sm border-gray-200 bg-white resize-y min-h-[60px]"
                       data-testid={`input-rule-prefill-${index}`}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-gray-600">Suggested questions (comma-separated)</Label>
+                    <Label className="text-xs text-gray-600">{t("widgetAdmin.questions")}</Label>
                     <Input
                       value={(rule.suggestedQuestions || []).join(", ")}
                       onChange={(e) =>
@@ -2008,7 +2015,7 @@ export function WebsiteWidget() {
                             .slice(0, 8),
                         })
                       }
-                      placeholder="Optional — e.g. What are your hours?"
+                      placeholder={t("widgetAdmin.questionsHint")}
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-questions-${index}`}
                     />
@@ -2031,7 +2038,7 @@ export function WebsiteWidget() {
                             },
                           })
                         }
-                        placeholder="Spanish questions (same order)"
+                        placeholder={t("widgetAdmin.spanishQuestions")}
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-questions-es-${index}`}
                       />
@@ -2053,7 +2060,7 @@ export function WebsiteWidget() {
                             },
                           })
                         }
-                        placeholder="Hebrew questions (same order)"
+                        placeholder={t("widgetAdmin.hebrewQuestions")}
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-questions-he-${index}`}
                       />
@@ -2061,14 +2068,14 @@ export function WebsiteWidget() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-2">
-                      <Label className="text-xs text-gray-600">Chatbot flow (optional)</Label>
+                      <Label className="text-xs text-gray-600">{t("widgetAdmin.flow")}</Label>
                       <select
                         value={rule.chatbotFlowId || ""}
                         onChange={(e) => updatePageRule(index, { chatbotFlowId: e.target.value })}
                         className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-sm"
                         data-testid={`select-rule-flow-${index}`}
                       >
-                        <option value="">None — use default matching</option>
+                        <option value="">{t("widgetAdmin.defaultFlow")}</option>
                         {(chatbotFlows || [])
                           .filter((f) => f.isActive !== false)
                           .map((f) => (
@@ -2079,7 +2086,7 @@ export function WebsiteWidget() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs text-gray-600">CTA label</Label>
+                      <Label className="text-xs text-gray-600">{t("widgetAdmin.ctaLabel")}</Label>
                       <Input
                         value={rule.ctaLabel || ""}
                         onChange={(e) => updatePageRule(index, { ctaLabel: e.target.value })}
@@ -2090,7 +2097,7 @@ export function WebsiteWidget() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-gray-600">CTA URL</Label>
+                    <Label className="text-xs text-gray-600">{t("widgetAdmin.ctaUrl")}</Label>
                     <Input
                       value={rule.ctaUrl || ""}
                       onChange={(e) => updatePageRule(index, { ctaUrl: e.target.value })}
@@ -2106,34 +2113,34 @@ export function WebsiteWidget() {
 
           <Card className="border border-slate-200 shadow-sm rounded-2xl">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold">Install</CardTitle>
-              <CardDescription>Add WhachatCRM to your website in seconds.</CardDescription>
+              <CardTitle className="text-lg font-semibold">{t("widgetAdmin.install")}</CardTitle>
+              <CardDescription>{t("widgetAdmin.installLead")}</CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-4">
               <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900">Public widget ID</h3>
+                    <h3 className="text-sm font-semibold text-slate-900">{t("widgetAdmin.publicId")}</h3>
                     <p className="text-xs text-slate-500">
-                      This is a public installation identifier, not a secret. Rotating it invalidates existing embed snippets until you paste the new code.
+                      {t("widgetAdmin.publicIdHint")}
                     </p>
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button size="sm" variant="outline" data-testid="button-rotate-widget-id">
-                        Rotate ID
+                        {t("widgetAdmin.rotate")}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Rotate the public widget ID?</AlertDialogTitle>
+                        <AlertDialogTitle>{t("widgetAdmin.rotateTitle")}</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Existing website snippets that use the current ID will stop loading. You will need to replace them with the new snippet. This does not change your Inbox conversations.
+                          {t("widgetAdmin.rotateHint")}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                         <AlertDialogAction
                           data-testid="button-confirm-rotate-widget-id"
                           onClick={async () => {
@@ -2147,19 +2154,19 @@ export function WebsiteWidget() {
                             }
                           }}
                         >
-                          Rotate ID
+                          {t("widgetAdmin.rotate")}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
                 <code className="block text-xs font-mono bg-slate-50 rounded p-2 break-all" data-testid="text-widget-public-id">
-                  {widgetPublicId || "Loading…"}
+                  {widgetPublicId || t("common.loading")}
                 </code>
                 <div className="space-y-1" id="widget-origins" ref={originsSectionRef}>
-                  <Label className="text-xs text-gray-600">Allowed website origins (required unless you allow any site)</Label>
+                  <Label className="text-xs text-gray-600">{t("widgetAdmin.origins")}</Label>
                   <p className="text-[11px] text-slate-500">
-                    Production origins must be HTTPS. Adding example.com also allows www.example.com (exact hosts only — subdomains are not wildcards). Localhost is allowed only in development.
+                    {t("widgetAdmin.originsHint")}
                   </p>
                   <Textarea
                     value={(settings.allowedOrigins || []).join("\n")}
@@ -2198,28 +2205,27 @@ export function WebsiteWidget() {
                       data-testid="checkbox-allow-any-origin"
                     />
                     <span>
-                      Allow on any website. Anyone who has this public widget ID can embed it. Use only if you understand the risk. This is never enabled automatically.
+                      {t("widgetAdmin.anySite")}
                     </span>
                   </label>
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2" data-testid="section-webchat-ai-mode">
-                <h3 className="text-sm font-semibold text-slate-900">Web Chat AI replies</h3>
-                <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
-                  <li>Manual: your team replies in the Inbox.</li>
-                  <li>Suggest: AI prepares a suggestion in the Inbox but does not send.</li>
-                  <li>Auto: AI Brain can respond to eligible Web Chat conversations without the Inbox being open.</li>
+                <h3 className="text-sm font-semibold text-slate-900">{t("widgetAdmin.aiReplies")}</h3>
+                <ul className="text-xs text-slate-600 space-y-1 list-disc ps-4">
+                  <li>{t("widgetAdmin.manual")}</li>
+                  <li>{t("widgetAdmin.suggest")}</li>
+                  <li>{t("widgetAdmin.auto")}</li>
                 </ul>
                 <p className="text-xs text-slate-500">
-                  Auto requires active Pro or trial AI Brain access
-                  {subscription?.limits?.effectiveHasAIBrain ? " (available on this account)" : " (not entitled on this account)"}
-                  , plus server rollout eligibility for this workspace. AI Brain availability does not automatically enable Auto.
-                  {aiSettings?.aiMode ? ` Current mode: ${aiSettings.aiMode.replace("_", " ")}.` : ""}
+                  {subscription?.limits?.effectiveHasAIBrain ? t("outreachUi.autoEligible") : t("outreachUi.autoIneligible")}{" "}
+                  {t("outreachUi.autoHint")}
+                  {aiSettings?.aiMode && <span className="ms-1">({aiSettings.aiMode === "auto" ? t("aiBrain.autoReply") : aiSettings.aiMode === "suggest" ? t("aiBrain.suggestOnly") : aiSettings.aiMode === "manual" ? t("aiBrain.off") : aiSettings.aiMode})</span>}
                 </p>
                 {savedSettings?.webchatServerAi &&
                   savedSettings.webchatServerAi.unattendedEligible !== true && (
                   <p className="text-xs text-amber-800" data-testid="text-auto-rollout-off">
-                    Unattended Auto replies are currently paused for this workspace. Inbox Auto is unchanged.
+                    {t("widgetAdmin.autoPaused")}
                   </p>
                 )}
               </div>
@@ -2227,10 +2233,10 @@ export function WebsiteWidget() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-slate-900">
-                      JavaScript <span className="text-xs font-medium text-slate-500">(Recommended)</span>
+                      JavaScript <span className="text-xs font-medium text-slate-500">{t("widgetAdmin.recommended")}</span>
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Add this snippet before <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">&lt;/body&gt;</code> on your website.
+                      {t("outreachUi.copyBeforeBody")}
                     </p>
                   </div>
 
@@ -2243,31 +2249,31 @@ export function WebsiteWidget() {
                   >
                     {copiedType === "script" ? (
                       <>
-                        <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                        Copied
+                        <Check className="me-1.5 h-3.5 w-3.5 text-emerald-600" />
+                        {t("widgetAdmin.copied")}
                       </>
                     ) : (
                       <>
-                        <Copy className="mr-1.5 h-3.5 w-3.5" />
-                        Copy Script
+                        <Copy className="me-1.5 h-3.5 w-3.5" />
+                        {t("widgetAdmin.copyScript")}
                       </>
                     )}
                   </Button>
                 </div>
 
-                <pre className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
-                  <code>{scriptCode || "Loading…"}</code>
+                <pre dir="ltr" className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
+                  <code>{scriptCode || t("common.loading")}</code>
                 </pre>
 
                 <p className="text-xs text-slate-500">
-                  Works on WordPress, Shopify, Wix, Webflow, Squarespace, or any HTML site.
+                  {t("widgetAdmin.installPlatforms")}
                 </p>
               </div>
 
               <Accordion type="single" collapsible className="rounded-xl border border-slate-200 px-4">
                 <AccordionItem value="advanced" className="border-none">
                   <AccordionTrigger className="text-sm font-medium py-3 hover:no-underline">
-                    Advanced options
+                    {t("widgetAdmin.advanced")}
                   </AccordionTrigger>
 
                   <AccordionContent className="space-y-3 pb-4">
@@ -2276,7 +2282,7 @@ export function WebsiteWidget() {
                         <div className="min-w-0">
                           <h4 className="text-sm font-medium text-slate-900">iFrame</h4>
                           <p className="text-xs text-slate-500">
-                            Simple floating chat — paste on any page that allows iframes.
+                            {t("widgetAdmin.iframeHint")}
                           </p>
                         </div>
 
@@ -2290,36 +2296,32 @@ export function WebsiteWidget() {
                         >
                           {copiedType === "iframe" ? (
                             <>
-                              <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                              Copied
+                              <Check className="me-1.5 h-3.5 w-3.5 text-emerald-600" />
+                              {t("widgetAdmin.copied")}
                             </>
                           ) : (
                             <>
-                              <Copy className="mr-1.5 h-3.5 w-3.5" />
-                              Copy iFrame
+                              <Copy className="me-1.5 h-3.5 w-3.5" />
+                              {t("widgetAdmin.copyFrame")}
                             </>
                           )}
                         </Button>
                       </div>
 
-                      <pre className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
-                        <code>{iframeFloatingCode || "Loading…"}</code>
+                      <pre dir="ltr" className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
+                        <code>{iframeFloatingCode || t("common.loading")}</code>
                       </pre>
 
                       <p className="text-xs text-slate-500">
-                        Page rules and Smart Entry triggers work best with the JavaScript install.
+                        {t("widgetAdmin.preferScript")}
                       </p>
 
                       <div className="border-t border-slate-100 pt-3 space-y-2">
                         <p className="text-xs font-medium text-slate-800">
-                          Optional: iframe + script (parent URL for page rules)
+                          {t("outreachUi.iframeParent")}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Plain HTML cannot put <code className="rounded bg-slate-100 px-1">window.location.href</code>{" "}
-                          inside a static <code className="rounded bg-slate-100 px-1">src</code>. This snippet creates the
-                          iframe and appends{" "}
-                          <code className="rounded bg-slate-100 px-1">?parentUrl=…</code> so greetings and prefills can
-                          match your real page URL (e.g. <code className="rounded bg-slate-100 px-1">/about</code>).
+                          {t("outreachUi.iframeParentHint")}
                         </p>
                         <div className="flex justify-end">
                           <Button
@@ -2332,19 +2334,19 @@ export function WebsiteWidget() {
                           >
                             {copiedType === "iframeParent" ? (
                               <>
-                                <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                                Copied
+                                <Check className="me-1.5 h-3.5 w-3.5 text-emerald-600" />
+                                {t("widgetAdmin.copied")}
                               </>
                             ) : (
                               <>
-                                <Copy className="mr-1.5 h-3.5 w-3.5" />
-                                Copy snippet
+                                <Copy className="me-1.5 h-3.5 w-3.5" />
+                                {t("widgetAdmin.copySnippet")}
                               </>
                             )}
                           </Button>
                         </div>
-                        <pre className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
-                          <code>{iframeWithParentScript || "Loading…"}</code>
+                        <pre dir="ltr" className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-slate-100">
+                          <code>{iframeWithParentScript || t("common.loading")}</code>
                         </pre>
                       </div>
                     </div>
@@ -2352,9 +2354,9 @@ export function WebsiteWidget() {
                     <div className="rounded-lg border border-slate-200 p-3 space-y-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <h4 className="text-sm font-medium text-slate-900">Hosted Link</h4>
+                          <h4 className="text-sm font-medium text-slate-900">{t("widgetAdmin.hosted")}</h4>
                           <p className="text-xs text-slate-500">
-                            Use this URL for buttons, QR codes, or redirects. Optional lead source below.
+                            {t("widgetAdmin.hostedHint")}
                           </p>
                         </div>
 
@@ -2368,20 +2370,20 @@ export function WebsiteWidget() {
                         >
                           {copiedType === "hosted" ? (
                             <>
-                              <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                              Copied
+                              <Check className="me-1.5 h-3.5 w-3.5 text-emerald-600" />
+                              {t("widgetAdmin.copied")}
                             </>
                           ) : (
                             <>
-                              <Copy className="mr-1.5 h-3.5 w-3.5" />
-                              Copy Link
+                              <Copy className="me-1.5 h-3.5 w-3.5" />
+                              {t("widgetAdmin.copyLink")}
                             </>
                           )}
                         </Button>
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="lead-source" className="text-xs text-slate-600">
-                          Lead source (optional)
+                          {t("widgetAdmin.leadSource")}
                         </Label>
                         <Input
                           id="lead-source"
@@ -2404,7 +2406,7 @@ export function WebsiteWidget() {
             <div>
               <p className="text-xs font-semibold text-amber-900">Tip</p>
               <p className="text-[10px] sm:text-xs text-amber-800/80">
-                Test in incognito mode after installing.
+                {t("widgetAdmin.incognito")}
               </p>
             </div>
           </div>
