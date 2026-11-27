@@ -117,7 +117,7 @@ type RemovalImpact = {
 const SOURCES_KEY = ["/api/ai/knowledge/sources"];
 const FACTS_KEY = ["/api/ai/knowledge/facts"];
 
-const CHANGE_STYLES: Record<KnowledgeFactView["changeType"], { label: string; className: string }> = {
+const CHANGE_STYLES: Record<KnowledgeFactView["changeType"], { labelKey: string; className: string }> = {
   new: { labelKey: "knowledge3d.newBadge", className: "bg-emerald-100 text-emerald-900" },
   changed: { labelKey: "knowledge3d.changedBadge", className: "bg-amber-100 text-amber-900" },
   removing: { labelKey: "knowledge3d.removingBadge", className: "bg-red-100 text-red-900" },
@@ -131,16 +131,12 @@ const FRESHNESS_STYLES: Record<KnowledgeFactView["freshness"]["tier"], string> =
   stale: "text-red-700",
 };
 
-function freshnessLabel(fact: KnowledgeFactView): string {
+function freshnessLabel(fact: KnowledgeFactView, t: TFunction): string {
   const { ageDays, tier } = fact.freshness;
-  const age = ageDays === 0 ? "today" : ageDays === 1 ? "1 day ago" : `${ageDays} days ago`;
-  if (tier === "fresh") return `Checked ${age}`;
-  if (tier === "aging") return `Checked ${age} — worth re-checking`;
-  return `Checked ${age} — out of date`;
-}
-
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+  const checked = ageDays === 0 ? t("knowledge3d.checkedToday") : t("knowledge3d.checkedDays", { count: ageDays });
+  if (tier === "aging") return t("knowledge3d.checkAging", { checked });
+  if (tier === "stale") return t("knowledge3d.checkStale", { checked });
+  return checked;
 }
 
 /** What a page is called on screen, by the kind of page it was detected to be. */
@@ -307,7 +303,7 @@ function FactRow({
         <span className="text-slate-500">{fact.precedenceLabel}</span>
         <span className={cn("inline-flex items-center gap-1", FRESHNESS_STYLES[fact.freshness.tier])}>
           <Clock className="h-3 w-3" aria-hidden />
-          {freshnessLabel(fact)}
+          {freshnessLabel(fact, t)}
         </span>
         {fact.sourceUrl && sourceLabel && (
           <a
@@ -369,18 +365,18 @@ function SectionBlock({
   const { counts } = section;
   // Spelled out rather than totalled: "7 new" and "7 changed" are different amounts of work.
   const breakdown = [
-    counts.new > 0 && `${counts.new} new`,
-    counts.changed > 0 && `${counts.changed} changed`,
-    counts.removing > 0 && `${counts.removing} no longer on page`,
-    counts.suggested > 0 && `${counts.suggested} suggested`,
+    counts.new > 0 && t("knowledge3d.newDetails", { count: counts.new }),
+    counts.changed > 0 && t("knowledge3d.changedDetails", { count: counts.changed }),
+    counts.removing > 0 && t("knowledge3d.removedDetails", { count: counts.removing }),
+    counts.suggested > 0 && t("knowledge3d.suggestedDetails", { count: counts.suggested }),
   ].filter((s): s is string => Boolean(s));
 
   return (
     <AccordionItem value={section.id} className="border-slate-200/80">
       <AccordionTrigger className="px-3 py-2.5 text-sm hover:no-underline">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pr-2 text-left">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pe-2 text-start">
           <span className="font-medium text-slate-900">{section.title}</span>
-          <span className="text-xs text-slate-500">{plural(counts.total, "detail", "details")}</span>
+          <span className="text-xs text-slate-500">{t("knowledge3d.details", { count: counts.total })}</span>
           {breakdown.length > 0 && (
             <Badge className="bg-violet-100 text-[10px] font-semibold text-violet-900 hover:bg-violet-100">
               {breakdown.join(" · ")}
@@ -468,7 +464,7 @@ function LiveBusinessDataPanel({
     <Collapsible open={open} onOpenChange={onOpenChange} className="pt-1">
       <CollapsibleTrigger
         type="button"
-        className="flex w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2.5 text-left hover:bg-slate-50"
+        className="flex w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2.5 text-start hover:bg-slate-50"
         data-testid="button-live-business-data"
       >
         <div className="min-w-0">
@@ -625,8 +621,8 @@ export function BusinessKnowledgeSteps({
         title: t("knowledge3d.finished"),
         description:
           jobQuery.data.factsProposed > 0
-            ? `${plural(jobQuery.data.factsProposed, "change is", "changes are")} ready for you to review.`
-            : "Nothing changed. What you published stays in use.",
+            ? t("knowledge3d.readyChanges", { count: jobQuery.data.factsProposed })
+            : t("knowledge3d.noChanges"),
       });
     }
   }, [activeJobId, jobQuery.data, queryClient]);
@@ -762,15 +758,15 @@ export function BusinessKnowledgeSteps({
         description:
           itemErrors.length > 0
             ? [
-                applied > 0 ? `${plural(applied, "change is", "changes are")} now in use by AI.` : null,
-                itemErrors[0]?.reasons[0] || "Some items need review before they can be published.",
-                itemErrors.length > 1 ? `${itemErrors.length - 1} more item(s) were held back.` : null,
+                applied > 0 ? t("knowledge3d.appliedChanges", { count: applied }) : null,
+                itemErrors[0]?.reasons[0] || t("knowledge3d.publishReview"),
+                itemErrors.length > 1 ? t("knowledge3d.moreHeld", { count: itemErrors.length - 1 }) : null,
               ]
                 .filter(Boolean)
                 .join(" ")
             : held > 0
-              ? `${plural(applied, "change is", "changes are")} now in use by AI. ${plural(held, "still needs", "still need")} your decision.`
-              : `${plural(applied, "change is", "changes are")} now in use by AI.`,
+              ? [t("knowledge3d.appliedChanges", { count: applied }), t("knowledge3d.heldChanges", { count: held })].join(" ")
+              : t("knowledge3d.appliedChanges", { count: applied }),
         variant: itemErrors.length && applied === 0 ? "destructive" : "default",
       });
     },
@@ -920,7 +916,7 @@ export function BusinessKnowledgeSteps({
                 onClick={() => addSourceMutation.mutate(newUrl.trim())}
                 data-testid="button-add-knowledge-source"
               >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                <Plus className="me-1.5 h-3.5 w-3.5" />
                 {t("knowledge3d.add")}
               </Button>
             </div>
@@ -932,7 +928,7 @@ export function BusinessKnowledgeSteps({
                     disabled={suggestShopifyPages.isPending || addingShopifyPages}
                     onClick={() => suggestShopifyPages.mutate()}
                     data-testid="button-find-shopify-knowledge-pages">
-                    {suggestShopifyPages.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin"/> : <ShoppingBag className="mr-1.5 h-3.5 w-3.5"/>}
+                    {suggestShopifyPages.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin"/> : <ShoppingBag className="me-1.5 h-3.5 w-3.5"/>}
                     {t("knowledge3d.suggestShopify")}
                   </Button>
                   <span className="text-xs text-slate-600">{t("knowledge3d.suggestHelp")}</span>
@@ -1012,7 +1008,7 @@ export function BusinessKnowledgeSteps({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="ml-auto h-7 shrink-0 px-2 text-slate-500 hover:text-red-700 sm:ml-0"
+                      className="ms-auto h-7 shrink-0 px-2 text-slate-500 hover:text-red-700 sm:ms-0"
                       onClick={() => void beginSourceRemoval(source)}
                       data-testid={`button-remove-source-${source.id}`}
                       aria-label={t("knowledge3d.removePageLabel")}
@@ -1060,12 +1056,12 @@ export function BusinessKnowledgeSteps({
             >
               {scanRunning || scanMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="me-2 h-4 w-4 animate-spin" />
                   {t("knowledge3d.analyzing")} {liveJob ? `${liveJob.progressCurrent}/${liveJob.progressTotal}` : ""}…
                 </>
               ) : (
                 <>
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  <RefreshCw className="me-2 h-3.5 w-3.5" />
                   {lastAnalyzed ? t("knowledge3d.analyzeAgainButton") : t("knowledge3d.analyzePages")}
                 </>
               )}
@@ -1160,7 +1156,7 @@ export function BusinessKnowledgeSteps({
             <div className="space-y-2 rounded-lg border border-red-200 bg-red-50/60 px-3 py-2.5">
               <p className="flex items-center gap-2 text-sm font-medium text-red-900">
                 <AlertTriangle className="h-4 w-4" aria-hidden />
-                {plural(blockedConflicts.length, "value needs", "values need")} {t("knowledge3d.decision")}
+                {t("knowledge3d.conflictsCount", { count: blockedConflicts.length })}
               </p>
               <p className="text-xs text-red-900/80">
                 {t("knowledge3d.disagreement")}
@@ -1235,15 +1231,15 @@ export function BusinessKnowledgeSteps({
                 >
                   {publishMutation.isPending ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="me-2 h-4 w-4 animate-spin" />
                       {t("knowledge3d.publishing")}
                     </>
                   ) : (
                     <>
-                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      <Check className="me-1.5 h-3.5 w-3.5" />
                       {publishableCount > 0
-                        ? `Publish ${plural(publishableCount, "change", "changes")}`
-                        : "Publish"}
+                        ? t("knowledge3d.publishChanges", { count: publishableCount })
+                        : t("knowledge3d.publish")}
                     </>
                   )}
                 </Button>
@@ -1300,7 +1296,7 @@ export function BusinessKnowledgeSteps({
                 ) : pendingRemoval && pendingRemoval.impact!.orphanedFacts.length > 0 ? (
                   <>
                     <p className="font-medium text-slate-800">
-                      {plural(pendingRemoval.impact!.orphanedFacts.length, "detail comes", "details come")} {t("knowledge3d.onlyHere")}
+                      {t("knowledge3d.onlySourceDetails", { count: pendingRemoval.impact!.orphanedFacts.length })}
                     </p>
                     <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-slate-600">
                       {pendingRemoval.impact!.orphanedFacts.slice(0, 12).map((f) => (

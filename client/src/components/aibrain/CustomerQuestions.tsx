@@ -126,7 +126,7 @@ function QuestionCard({
           >
             {draft.required ? t("brain3d.required") : t("brain3d.optional")}
           </button>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ms-auto flex items-center gap-1">
             <Button
               type="button"
               size="sm"
@@ -318,7 +318,7 @@ export function CustomerQuestions({
               onClick={() => applySuggestions(suggestions)}
               data-testid="button-generate-questions"
             >
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              <Sparkles className="me-1.5 h-3.5 w-3.5" />
               {t("brain3d.generate")}
             </Button>
             <Button
@@ -374,7 +374,7 @@ export function CustomerQuestions({
               onClick={() => setAdding(true)}
               data-testid="button-add-question"
             >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              <Plus className="me-1.5 h-3.5 w-3.5" />
               {t("brain3d.addQuestion")}
             </Button>
           )}
@@ -387,7 +387,7 @@ export function CustomerQuestions({
               onClick={() => setConfirmRegenerate(true)}
               data-testid="button-regenerate-questions"
             >
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              <Sparkles className="me-1.5 h-3.5 w-3.5" />
               {t("brain3d.regenerate")}
             </Button>
           )}
@@ -486,7 +486,7 @@ function NewQuestionRow({
         >
           {required ? t("brain3d.required") : t("brain3d.optional")}
         </button>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-1">
           <Button
             type="button"
             size="sm"

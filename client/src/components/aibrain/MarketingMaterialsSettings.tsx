@@ -306,9 +306,9 @@ function MarketingAssetRow({
           </p>
           <p className="text-xs text-slate-500">
             {asset.kind === "image" ? (
-              <ImageIcon className="mr-1 inline h-3 w-3" />
+              <ImageIcon className="me-1 inline h-3 w-3" />
             ) : (
-              <FileText className="mr-1 inline h-3 w-3" />
+              <FileText className="me-1 inline h-3 w-3" />
             )}
             {asset.originalFilename} · {formatSize(asset.size)}
           </p>
@@ -339,7 +339,7 @@ function MarketingAssetRow({
             onClick={() => onDelete(asset.id)}
             data-testid={`btn-marketing-delete-${asset.id}`}
           >
-            <Trash2 className="mr-1 h-4 w-4" />
+            <Trash2 className="me-1 h-4 w-4" />
             {t("common.delete")}
           </Button>
         </div>
@@ -503,7 +503,7 @@ export function MarketingMaterialsSettings() {
               onClick={() => fileRef.current?.click()}
               data-testid="btn-marketing-choose-file"
             >
-              <Plus className="mr-1.5 h-4 w-4" />
+              <Plus className="me-1.5 h-4 w-4" />
               {pendingFile ? pendingFile.name : t("brain3d.chooseMaterial")}
             </Button>
             <Button
@@ -512,7 +512,7 @@ export function MarketingMaterialsSettings() {
               disabled={!pendingFile || uploadMutation.isPending}
               data-testid="btn-marketing-upload"
             >
-              {uploadMutation.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              {uploadMutation.isPending ? <Loader2 className="me-1.5 h-4 w-4 animate-spin" /> : null}
               {t("common.upload")}
             </Button>
           </div>

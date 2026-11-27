@@ -856,7 +856,7 @@ function AIBrainContent() {
                   </div>
                   <div className="shrink-0 sm:pt-0.5">
                     {knowledge.calendlyBookingConnected ? (
-                      <Badge className="border border-emerald-200/90 bg-emerald-50 text-emerald-900 text-xs font-medium gap-1 pr-2">
+                      <Badge className="border border-emerald-200/90 bg-emerald-50 text-emerald-900 text-xs font-medium gap-1 pe-2">
                         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                         {t("brain3d.connected")}
                       </Badge>
@@ -886,7 +886,7 @@ function AIBrainContent() {
                     }
                   >
                     {knowledge.calendlyBookingConnected ? t("brain3d.manageIntegration") : t("brain3d.connectCalendly")}
-                    <ChevronRight className="ml-1 h-4 w-4" />
+                    <ChevronRight className="ms-1 h-4 w-4 rtl:rotate-180" />
                   </Button>
                 </Link>
               </CardContent>
@@ -1000,7 +1000,7 @@ function AIBrainContent() {
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between text-left p-5 hover:bg-violet-50/40 transition-colors rounded-2xl"
+                  className="flex w-full items-center justify-between text-start p-5 hover:bg-violet-50/40 transition-colors rounded-2xl"
                 >
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">{t("automationUi.advanced")}</p>
