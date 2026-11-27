@@ -1,3 +1,5 @@
+import { InboxDetailChoice } from "@/components/InboxDetailChoice";
+import { crmStageLabel, crmTagLabel } from "@/lib/crmPresentation";
 import { copilotActionLabel, quickFollowUpDate, quickFollowUpOptions, type QuickFollowUpValue } from "@/lib/inboxCopilotPresentation";
 import i18n from "@/lib/i18n";
 import { useTranslation } from "react-i18next";
@@ -109,7 +111,7 @@ import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { formatRegionalDate, formattingLocale } from "@/lib/regionalFormatting";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, pipelineStageOptions } from "@/lib/data";
-import { CONVERSATION_STATUS_ROWS, getConversationStatusRow } from "@/lib/conversationStatusUi";
+import { CONVERSATION_STATUS_ROWS, conversationStatusLabel, getConversationStatusRow } from "@/lib/conversationStatusUi";
 import {
   analyzeConversation,
   computeWorkflow,
@@ -213,21 +215,23 @@ function resolveContactSourceLabel(contact: {
   source?: string | null;
   sourceDetails?: unknown;
   customFields?: Record<string, unknown> | null;
-}): string | null {
+}, t: typeof i18n.t): string | null {
   const inquiryLabel = agentInquiryLabel(contact);
   if (inquiryLabel) return inquiryLabel;
-  if (contact.source === "webchat") return i18n.t("inboxUi.websiteChat");
+  if (contact.source === "email_inbox") return t("inboxUi.emailChannel");
+  if (contact.source === "webchat") return t("inboxUi.websiteChat");
   const cf = contact.customFields || {};
-  if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `${i18n.t("inboxUi.agentPageSource")} · ${cf.agentNeighborhoodName}`;
+  if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `${t("inboxUi.agentPageSource")} · ${cf.agentNeighborhoodName}`;
   if (typeof cf.leadSource === 'string' && cf.leadSource.trim()) {
-    return cf.leadSource.trim();
+    const source = cf.leadSource.trim();
+    return source === 'email_inbox' ? t("inboxUi.emailChannel") : source;
   }
-  if (cf.sourcePage === 'agent_page') return i18n.t("inboxUi.agentPageSource");
+  if (cf.sourcePage === 'agent_page') return t("inboxUi.agentPageSource");
   switch (contact.source) {
-    case "manual": return i18n.t("inboxUi.manualSource");
-    case "import": return i18n.t("inboxUi.csvImportSource");
-    case "email": return i18n.t("inboxUi.emailChannel");
-    case "website_form": return i18n.t("inboxUi.websiteFormSource");
+    case "manual": return t("inboxUi.manualSource");
+    case "import": return t("inboxUi.csvImportSource");
+    case "email": return t("inboxUi.emailChannel");
+    case "website_form": return t("inboxUi.websiteFormSource");
   }
   if (contact.source) return SOURCE_LABELS[contact.source] || contact.source;
   return null;
@@ -249,6 +253,11 @@ function formatTime24to12(t: string) {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12  = h % 12 || 12;
   return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+function formatTimeSlot(value: string, language: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return formatRegionalDate(new Date(2000, 0, 1, hour, minute), language, { hour: "numeric", minute: "2-digit" });
 }
 
 function getFollowUpStatus(d: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
@@ -380,7 +389,7 @@ interface AddNoteModalProps {
   onClose: () => void;
 }
 function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers, onSave, onDelete, onClose }: AddNoteModalProps) {
-  const { t: inboxText } = useTranslation();
+  const { t: inboxText, i18n: locale } = useTranslation();
   const { toast } = useToast();
   const [noteText, setNoteText] = useState('');
   const [saving,   setSaving]   = useState(false);
@@ -480,7 +489,7 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
                     <span className="text-[10px] text-gray-400">·</span>
                     <span className="text-[10px] text-gray-400">
                       {note.createdAt
-                        ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                        ? formatRegionalDate(new Date(note.createdAt), locale.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
                         : ''}
                     </span>
                   </div>
@@ -563,7 +572,7 @@ interface EditNoteModalProps {
   onClose: () => void;
 }
 function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteModalProps) {
-  const { t: inboxText } = useTranslation();
+  const { t: inboxText, i18n: locale } = useTranslation();
   const [text, setText] = useState(note.content);
   const [saving, setSaving] = useState(false);
 
@@ -612,7 +621,7 @@ function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteM
             <h2 className="text-[15px] font-semibold text-gray-900">{inboxText("inboxUi.editNote")}</h2>
             <p className="text-[11px] text-gray-400 mt-0.5">
               {note.createdByName || 'Team member'} · {note.createdAt
-                ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                ? formatRegionalDate(new Date(note.createdAt), locale.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
                 : ''}
             </p>
           </div>
@@ -738,7 +747,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     }
     return {
       title: i18n.t("inboxUi.tagUpdated"),
-      detail: from && to ? `${from} → ${to}` : sanitizeUserFacingText(to || from) || i18n.t("inboxUi.contactTagUpdated"),
+      detail: from && to ? `${crmTagLabel(i18n.t, from)} → ${crmTagLabel(i18n.t, to)}` : to || from ? sanitizeUserFacingText(crmTagLabel(i18n.t, to || from)) : i18n.t("inboxUi.contactTagUpdated"),
       tone: "gray",
     };
   }
@@ -748,7 +757,7 @@ function formatContactActivity(event: TimelineEventLike): { title: string; detai
     const to = typeof data.to === "string" ? data.to : "";
     return {
       title: i18n.t("inboxUi.pipelineStageUpdated"),
-      detail: from && to ? `${from} → ${to}` : to || from || i18n.t("inboxUi.stageChanged"),
+      detail: from && to ? `${crmStageLabel(i18n.t, from)} → ${crmStageLabel(i18n.t, to)}` : to || from ? crmStageLabel(i18n.t, to || from) : i18n.t("inboxUi.stageChanged"),
       tone: "gray",
     };
   }
@@ -890,7 +899,7 @@ export function InboxLeadDetailsPanel({
   onCopilotExpandedChange,
   workspaceIntelligence: workspaceIntelligenceProp,
 }: InboxLeadDetailsPanelProps) {
-  const { t: inboxText } = useTranslation();
+  const { t: inboxText, i18n: locale } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
@@ -1459,6 +1468,7 @@ export function InboxLeadDetailsPanel({
       .finally(() => setFollowOpen(false));
   };
 
+  const contactSourceLabel = resolveContactSourceLabel(contact, inboxText);
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
   const followUpSt = getFollowUpStatus(contact.followUpDate);
@@ -2350,7 +2360,7 @@ export function InboxLeadDetailsPanel({
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-gray-700 font-medium shrink-0">{a.appointmentType}</span>
                             <span className="text-gray-400">·</span>
-                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), locale.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                           </div>
                           <button
                             onClick={() => void deleteContactAppointment(a.id).catch(() => {
@@ -2380,7 +2390,7 @@ export function InboxLeadDetailsPanel({
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-gray-700 font-medium shrink-0">{a.appointmentType}</span>
                             <span className="text-gray-300">·</span>
-                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                            <span className="truncate">{formatRegionalDate(new Date(a.appointmentDate), locale.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                           </div>
                           <button
                             onClick={(e) => {
@@ -2439,7 +2449,7 @@ export function InboxLeadDetailsPanel({
                               ? "bg-gray-100 text-gray-800 border-gray-300 font-semibold"
                               : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
                           )}
-                        >{formatTime24to12(t)}</button>
+                        >{formatTimeSlot(t, locale.language)}</button>
                       ))}
                     </div>
                   </div>
@@ -2602,7 +2612,7 @@ export function InboxLeadDetailsPanel({
                           )}
                           data-testid={`followup-time-${t}`}
                         >
-                          {formatTime24to12(t)}
+                          {formatTimeSlot(t, locale.language)}
                         </button>
                       ))}
                     </div>
@@ -2949,13 +2959,13 @@ export function InboxLeadDetailsPanel({
                       <div className="min-w-0">
                         <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{inboxText("inboxUi.suggestedStage")}</div>
                         <div className="text-[12px] font-semibold text-gray-800 truncate">
-                          {stageSuggestion}
+                          {crmStageLabel(inboxText, stageSuggestion)}
                         </div>
                       </div>
                       <button
                         onClick={() => {
                           onUpdateContact({ pipelineStage: stageSuggestion });
-                          completeAction("stage", `Moved to ${stageSuggestion}`);
+                          completeAction("stage", inboxText("inboxUi.stageMoved", { stage: crmStageLabel(inboxText, stageSuggestion) }));
                         }}
                         className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors"
                         data-testid="button-apply-stage-suggestion"
@@ -3024,9 +3034,9 @@ export function InboxLeadDetailsPanel({
                     <TrendingUp className="w-3 h-3 shrink-0" />{inboxText("inboxUi.leadSourceWebsiteForm")}</div>
                   <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">{inboxText("inboxUi.viaEmail")}</div>
                 </>
-              ) : resolveContactSourceLabel(contact) ? (
+              ) : contactSourceLabel ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">
-                  <TrendingUp className="w-3 h-3 shrink-0" />{inboxText("inboxUi.via") + " "}{resolveContactSourceLabel(contact)}
+                  <TrendingUp className="w-3 h-3 shrink-0" />{inboxText("inboxUi.via") + " "}{contactSourceLabel}
                 </div>
               ) : null}
             </div>
@@ -3037,47 +3047,23 @@ export function InboxLeadDetailsPanel({
             <div>
               <RowLabel>{inboxText("inboxUi.statusStage")}</RowLabel>
               <div className="flex gap-1.5 mt-1">
-                <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
-                  <SelectTrigger
-                    className={cn(
-                      "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
-                      conversationStatusRow.textClass
-                    )}
-                    data-testid="select-conversation-status"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONVERSATION_STATUS_ROWS.map((s) => (
-                      <SelectItem
-                        key={s.value}
-                        value={s.value}
-                        className={cn(
-                          "text-[11px] font-medium rounded-sm",
-                          "focus:!bg-gray-100 focus:!text-gray-900",
-                          "data-[highlighted]:!bg-gray-100 data-[highlighted]:!text-gray-900",
-                          s.textClass
-                        )}
-                      >
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
+                <InboxDetailChoice
+                  value={convStatus}
+                  label={inboxText("inboxUi.status")}
+                  options={CONVERSATION_STATUS_ROWS.map(status => ({ ...status, label: conversationStatusLabel(inboxText, status.value) }))}
+                  onChange={onUpdateConversationStatus}
+                  dir={locale.dir()}
+                  testId="select-conversation-status"
+                  className={cn("font-medium", conversationStatusRow.textClass)}
+                />
+                <InboxDetailChoice
                   value={contact.pipelineStage}
-                  onValueChange={val => onUpdateContact({ pipelineStage: val })}
-                >
-                  <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
-                    <SelectValue placeholder={inboxText("inboxUi.stage")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {contactPipelineStageOptions.map(stage => (
-                      <SelectItem key={stage} value={stage} className="text-[11px]">{stage}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  label={inboxText("inboxUi.stage")}
+                  options={contactPipelineStageOptions.map(stage => ({ value: stage, label: crmStageLabel(inboxText, stage) }))}
+                  onChange={stage => onUpdateContact({ pipelineStage: stage })}
+                  dir={locale.dir()}
+                  testId="select-pipeline"
+                />
               </div>
             </div>
           )}
@@ -3309,7 +3295,7 @@ export function InboxLeadDetailsPanel({
                   )}
                   data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
                 >
-                  {tag}
+                  {crmTagLabel(inboxText, tag)}
                 </button>
               ))}
             </div>
@@ -3364,7 +3350,7 @@ export function InboxLeadDetailsPanel({
                           {a.title || a.appointmentType || inboxText("inboxUi.calendlyMeeting")}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {formatRegionalDate(new Date(a.appointmentDate), i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                          {formatRegionalDate(new Date(a.appointmentDate), locale.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                           {a.status ? ` · ${a.status}` : ""}
                         </p>
                       </div>
@@ -3411,7 +3397,7 @@ export function InboxLeadDetailsPanel({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[11px] font-semibold text-gray-800">{formatted.title}</p>
                           <p className="line-clamp-2 text-[10px] leading-snug text-gray-500">{formatted.detail}</p>
-                          <p className="mt-0.5 text-[10px] text-gray-400">{formatRelativeTime(event.createdAt, i18n.language)}</p>
+                          <p className="mt-0.5 text-[10px] text-gray-400">{formatRelativeTime(event.createdAt, locale.language)}</p>
                         </div>
                       </div>
                     </div>
@@ -3709,7 +3695,7 @@ export function InboxLeadDetailsPanel({
                     <div className="flex items-center gap-1 mb-1.5">
                       <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
                       <span className="text-[10px] text-gray-300">·</span>
-                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt, i18n.language)}</span>
+                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt, locale.language)}</span>
                     </div>
                     <p
                       className="text-[12px] text-gray-800"

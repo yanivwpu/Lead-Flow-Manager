@@ -3357,6 +3357,14 @@
     "chooseYear": "Elegir año"
   },
   "inboxUi": {
+    "whatsappSetupIncomplete": "La configuración de WhatsApp está incompleta. Complétala en Configuración para poder enviar mensajes.",
+    "conversationOpen": "Abierta",
+    "conversationPending": "Pendiente",
+    "conversationResolved": "Resuelta",
+    "conversationClosed": "Cerrada",
+    "emailKeyboardHint": "Enter para una nueva línea • Ctrl/⌘+Enter para enviar",
+    "stageMoved": "Movido a {{stage}}",
+    "chatKeyboardHint": "Enter para enviar • Shift+Enter para una nueva línea",
     "customerAskedForAShowing": "El cliente solicitó una visita",
     "contactTagUpdated": "Se actualizó la etiqueta del contacto",
     "stageChanged": "Cambió la etapa",

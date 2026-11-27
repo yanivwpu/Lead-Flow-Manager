@@ -31,21 +31,21 @@ const inboxSrc = readFileSync(join(process.cwd(), "client/src/pages/UnifiedInbox
 run("row outer is relative positioning root; body reserves right pad", () => {
   assert.match(INBOX_ROW_OUTER_BASE, /relative/);
   assert.match(INBOX_ROW_OUTER_BASE, /h-\[75px\]/);
-  assert.match(INBOX_ROW_BODY, /pr-14/);
+  assert.match(INBOX_ROW_BODY, /pe-14/);
   assert.match(INBOX_ROW_BODY, /overflow-hidden/);
 });
 
 run("timestamp is absolute top-right (not LINE1 flex sibling)", () => {
   assert.match(INBOX_ROW_TIME, /absolute/);
   assert.match(INBOX_ROW_TIME, /top-1\.5/);
-  assert.match(INBOX_ROW_TIME, /right-3/);
+  assert.match(INBOX_ROW_TIME, /end-3/);
   assert.doesNotMatch(INBOX_ROW_TIME, /shrink-0/);
 });
 
 run("trash is absolute bottom-right with group-hover opacity", () => {
   assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /absolute/);
   assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /bottom-1\.5/);
-  assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /right-3/);
+  assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /end-3/);
   assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /opacity-0/);
   assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /group-hover:opacity-100/);
   assert.match(INBOX_ROW_EMAIL_TRASH_BUTTON, /group-hover:pointer-events-auto/);
@@ -96,7 +96,7 @@ run("fixed row height unchanged", () => {
   assert.match(contract.outer, /h-\[75px\]/);
   assert.match(contract.outer, /relative/);
   assert.equal(contract.inner, INBOX_ROW_INNER);
-  assert.match(contract.body, /pr-14/);
+  assert.match(contract.body, /pe-14/);
   assert.match(INBOX_ROW_LINE1, /overflow-hidden/);
 });
 

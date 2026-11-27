@@ -158,13 +158,14 @@ test("helper text matches channel mapping", () => {
   );
 });
 
-test("AIComposer wires shared keyboard helper and hint", () => {
+test("AIComposer wires shared keyboard behavior and localized hints", () => {
   const source = readFileSync(
     join(__dirname, "..", "client", "src", "components", "AIComposer.tsx"),
     "utf8",
   );
   assert.match(source, /resolveComposerEnterAction/);
-  assert.match(source, /composerKeyboardHelperText/);
+  assert.match(source, /inboxUi\.emailKeyboardHint/);
+  assert.match(source, /inboxUi\.chatKeyboardHint/);
   assert.match(source, /composer-keyboard-hint/);
   assert.match(source, /aria-describedby/);
   assert.doesNotMatch(source, /Enter to send, Shift\+Enter for new line/);

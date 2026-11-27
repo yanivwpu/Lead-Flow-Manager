@@ -179,3 +179,10 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 - Six synthetic Chromium runs passed at 390 and 1366 px in English, Hebrew RTL and Spanish LTR. Desktop drag events and the mobile stage selector sent the same canonical stage. Calendar navigation, task completion and reminder saves preserved the scheduled ISO timestamp and authored title.
 - The pricing assertion for `Realtor Growth Engine: $199 one-time` also fails in an isolated checkout of main `0f72353a`, as it did at the Batch 3C starting commit. Pricing and knowledge behavior and the assertion remain unchanged.
 - Required GitHub workflows and CodeQL results for the integrated branch are tracked on the [PR checks page](https://github.com/yanivwpu/Lead-Flow-Manager/pull/387/checks).
+
+## Unified Inbox production follow-up
+
+- Added a focused EN, HE and ES correction for lead stage and conversation status, system tag and activity labels, email source labels, composer keyboard instructions and regional time display. Canonical status, stage and tag values, authored labels, and scheduling payloads stay independent of dashboard language.
+- The former modal Select applied a document scroll lock, scrollbar compensation and selected-option scrolling on open. A scrolled synthetic desktop fixture reproduced a 60 px composer and panel shift when the document scroll offset reset to zero. Both controls now use anchored non-modal radio menus with keyboard dismissal and normal RTL placement.
+- Conversation rows retain the English layout dimensions. Logical spacing mirrors the avatar group, badges and timestamps in Hebrew. Email identities keep LTR text and truncate at the address end.
+- The localization baseline declined from **5,353 to 5,349** with no new fingerprints. Verification uses synthetic contacts and intercepted mutations. Live messaging and native-device viewport behavior remain outside this verification.

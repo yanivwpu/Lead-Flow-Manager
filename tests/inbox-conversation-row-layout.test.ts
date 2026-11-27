@@ -49,7 +49,7 @@ run("all row variants share identical outer height/padding/border-width contract
     assert.equal(c.line3, base.line3, `${c.name} line3`);
     assert.match(c.outer, /h-\[75px\]/, `${c.name} fixed height`);
     assert.match(c.outer, /px-3 py-1\.5/, `${c.name} padding`);
-    assert.match(c.outer, /border-l-2/, `${c.name} border-l-2`);
+    assert.match(c.outer, /border-s-2/, `${c.name} border-s-2`);
     assert.match(c.outer, /overflow-hidden/, `${c.name} overflow`);
     assert.doesNotMatch(c.outer, /\bring-1\b/, `${c.name} no ring`);
     assert.doesNotMatch(c.outer, /\bshadow-sm\b/, `${c.name} no outer shadow`);
@@ -67,7 +67,7 @@ run("selected only changes background/accent color, not box model", () => {
   assert.match(normal, /px-3 py-1\.5/);
   assert.match(selected, /px-3 py-1\.5/);
   assert.match(selected, /bg-white/);
-  assert.match(selected, /border-l-gray-300|!border-l-gray-300/);
+  assert.match(selected, /border-s-gray-300|!border-s-gray-300/);
   // Selected must not introduce extra vertical padding classes
   assert.doesNotMatch(selected, /\bpy-3\b/);
   assert.doesNotMatch(selected, /\bpy-2\b/);

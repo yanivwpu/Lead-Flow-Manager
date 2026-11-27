@@ -1,3 +1,5 @@
+import { differenceInCalendarDays } from "date-fns";
+import { crmTagLabel } from "@/lib/crmPresentation";
 import { InboxReplyConflict } from "@/components/InboxReplyConflict";
 import { agentInquiryLabel, isAgentInquiryThread } from "@shared/agent/agentPageInquiry";
 import { useInboxDraftClaim, useInboxReplySnapshot, replySnapshotKey } from "@/lib/useInboxCollaboration";
@@ -156,7 +158,7 @@ import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
 import { isCrmDisplayTag, nextActiveAppointmentByContact } from "@shared/activeAppointment";
-import { getConversationStatusRow } from "@/lib/conversationStatusUi";
+import { conversationStatusLabel, getConversationStatusRow } from "@/lib/conversationStatusUi";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
@@ -512,7 +514,7 @@ export function UnifiedInbox() {
   const { t: inboxText, i18n } = useTranslation();
   const channelLabel = (channel: string) => {
     if (channel === "webchat") return inboxText("inboxUi.websiteChat");
-    if (channel === "email") return inboxText("inboxUi.emailChannel");
+    if (channel === "email" || channel === "email_inbox") return inboxText("inboxUi.emailChannel");
     return CHANNEL_CONFIG[channel]?.label;
   };
   const presenceSocket=useRef<WebSocket|null>(null);
@@ -3194,8 +3196,9 @@ export function UnifiedInbox() {
     if (!dateStr) return "";
     const date = new Date(dateStr);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return formatRegionalDate(date, i18n.language, { hour: "numeric", minute: "2-digit" });
+    if (!Number.isFinite(date.getTime())) return "";
+    const diffDays = differenceInCalendarDays(now, date);
+    if (diffDays <= 0) return formatRegionalDate(date, i18n.language, { hour: "numeric", minute: "2-digit" });
     if (diffDays === 1) return inboxText("inboxUi.yesterday");
     if (diffDays < 7) return formatRegionalDate(date, i18n.language, { weekday: "long" });
     return formatRegionalDate(date, i18n.language, { month: "short", day: "numeric" });
@@ -3709,7 +3712,7 @@ export function UnifiedInbox() {
                   (rowFormIdentity?.subjectLine ||
                     (item.conversation as Conversation | null)?.subject)) ||
                 item.lastMessage ||
-                "No messages yet";
+                inboxText("inboxUi.noMessagesYet");
               const rowIsForm = Boolean(rowFormIdentity?.isWebsiteForm);
               return (
               <div
@@ -3754,7 +3757,9 @@ export function UnifiedInbox() {
                         )}
                         data-testid={rowIsForm ? `inbox-form-row-name-${item.contact.id}` : undefined}
                       >
-                        {rowDisplayName}
+                        {/^[^\s@]+@[^\s@]+$/.test(rowDisplayName) ? (
+                          <bdi dir="ltr" className="inline-block max-w-full truncate text-left align-top">{rowDisplayName}</bdi>
+                        ) : <bdi>{rowDisplayName}</bdi>}
                       </span>
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
@@ -3770,7 +3775,7 @@ export function UnifiedInbox() {
                       </span>}
                       {rowIsForm ? (
                         <span
-                          className="mr-1 shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-900"
+                          className="me-1 shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-900"
                           data-testid={`badge-form-row-${item.contact.id}`}
                         >{inboxText("inboxUi.form")}</span>
                       ) : null}
@@ -3780,7 +3785,7 @@ export function UnifiedInbox() {
                           needsReply && INBOX_ROW_PREVIEW_UNREAD,
                         )}
                       >
-                        {rowPreview}
+                        <bdi>{rowPreview}</bdi>
                       </p>
                     </div>
                     {(showFollowUpBadge && ["overdue", "today", "upcoming"].includes(fuStatus)) || crmTag || bookedAppt ? <div className={INBOX_ROW_LINE3}>
@@ -3810,7 +3815,7 @@ export function UnifiedInbox() {
                           )}
                           data-testid={`badge-tag-${item.contact.id}`}
                         >
-                          {crmTag}
+                          {crmTagLabel(inboxText, crmTag)}
                         </span>
                       ) : null}
                       {bookedAppt ? (
@@ -3871,7 +3876,7 @@ export function UnifiedInbox() {
 
       {/* ── CENTER COLUMN: Conversation View ── */}
       <div className={cn(
-        "flex-1 flex flex-col min-w-0 overflow-hidden border-r",
+        "flex-1 flex flex-col min-w-0 overflow-hidden border-e",
         selectedContactId ? "flex" : "hidden md:flex"
       )}>
         {selectedContactId && contact ? (
@@ -3904,7 +3909,7 @@ export function UnifiedInbox() {
                   ) : null}
                   {hasConversation ? (
                     <span className={cn("text-[10px] font-medium tracking-tight", conversationStatusRow.textClass)}>
-                      {conversationStatusRow.label}
+                      {conversationStatusLabel(inboxText, conversationStatusRow.value)}
                     </span>
                   ) : (
                     <span className="text-[10px] font-medium tracking-tight text-muted-foreground">{inboxText("inboxUi.noConversation")}</span>
@@ -4757,7 +4762,9 @@ export function UnifiedInbox() {
               <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-950 flex gap-2 items-start shrink-0">
                 <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" aria-hidden />
                 <p className="font-medium leading-snug min-w-0 flex-1">
-                  {whatsappAvailability?.bannerText || WHATSAPP_SETUP_INCOMPLETE_BANNER}
+                  {whatsappAvailability?.bannerText && whatsappAvailability.bannerText !== WHATSAPP_SETUP_INCOMPLETE_BANNER
+                    ? whatsappAvailability.bannerText
+                    : inboxText("inboxUi.whatsappSetupIncomplete")}
                 </p>
               </div>
             )}

@@ -62,8 +62,8 @@ run("date remains absolute top-right; trash absolute bottom-right", () => {
     join(process.cwd(), "client/src/lib/inboxConversationRow.ts"),
     "utf8",
   );
-  assert.match(rowLib, /INBOX_ROW_TIME[\s\S]*absolute[\s\S]*top-1\.5[\s\S]*right-3/);
-  assert.match(rowLib, /INBOX_ROW_EMAIL_TRASH_BUTTON[\s\S]*absolute[\s\S]*bottom-1\.5[\s\S]*right-3/);
+  assert.match(rowLib, /INBOX_ROW_TIME[\s\S]*absolute[\s\S]*top-1\.5[\s\S]*end-3/);
+  assert.match(rowLib, /INBOX_ROW_EMAIL_TRASH_BUTTON[\s\S]*absolute[\s\S]*bottom-1\.5[\s\S]*end-3/);
   assert.ok(inboxSrc.includes("INBOX_ROW_TIME"));
   // Timestamp must not live inside LINE1 content before LINE2.
   const line1Marker = inboxSrc.indexOf("INBOX_ROW_LINE1");

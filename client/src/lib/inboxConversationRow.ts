@@ -118,33 +118,33 @@ export function mergeInboxUnreadPreservingLocalRead<T extends InboxUnreadItem>(
  *   → 75px leaves ~2px slack so status pills are not clipped.
  */
 /**
- * Outer row is the positioning root for absolute right-edge meta:
- *   top-right  → timestamp (always)
- *   bottom-right → email trash (email rows, hover-visible)
- * Body reserves right padding so name/preview/chips never run underneath.
+ * Outer row is the positioning root for absolute inline-end meta:
+ *   top end  → timestamp (always)
+ *   bottom end → email trash (email rows, hover-visible)
+ * Body reserves inline-end padding so name/preview/chips never run underneath.
  */
 export const INBOX_ROW_OUTER_BASE =
-  "relative box-border h-[75px] px-3 py-1.5 border-b border-l-2 border-l-transparent cursor-pointer overflow-hidden transition-colors bg-transparent hover:bg-gray-100/70";
+  "relative box-border h-[75px] px-3 py-1.5 border-b border-s-2 border-s-transparent cursor-pointer overflow-hidden transition-colors bg-transparent hover:bg-gray-100/70";
 
 export const INBOX_ROW_INNER =
   "flex h-full min-h-0 items-center gap-2.5";
 
-/** Right pad clears absolute timestamp (~weekday) + trash column. */
+/** Inline-end padding clears absolute timestamp (~weekday) + trash column. */
 export const INBOX_ROW_BODY =
-  "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden pr-14";
+  "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden pe-14";
 
 /**
- * @deprecated Sibling flex slot removed — trash is absolute bottom-right on the row.
+ * @deprecated Sibling flex slot removed — trash is absolute bottom end on the row.
  * Kept for test/migration references only; do not use in new layout.
  */
 export const INBOX_ROW_EMAIL_ACTIONS =
-  "pointer-events-none absolute bottom-1.5 right-3 z-20 flex h-4 w-4 items-center justify-center overflow-visible";
+  "pointer-events-none absolute bottom-1.5 end-3 z-20 flex h-4 w-4 items-center justify-center overflow-visible";
 
-/** Email trash — fixed bottom-right; opacity only (no layout shift). */
+/** Email trash — fixed bottom end; opacity only (no layout shift). */
 export const INBOX_ROW_EMAIL_TRASH_BUTTON =
-  "absolute bottom-1.5 right-3 z-20 inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 opacity-0 transition-opacity duration-150 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none";
+  "absolute bottom-1.5 end-3 z-20 inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 opacity-0 transition-opacity duration-150 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none";
 
-/** Line 1 — name / unread (timestamp is absolute top-right, not here) */
+/** Line 1 — name / unread (timestamp is absolute top end, not here) */
 export const INBOX_ROW_LINE1 =
   "flex h-5 min-h-[20px] max-h-[20px] items-center gap-1 overflow-hidden";
 
@@ -157,19 +157,19 @@ export const INBOX_ROW_LINE3 =
   "flex h-5 min-h-[20px] max-h-[20px] items-center gap-1 overflow-hidden whitespace-nowrap";
 
 export const INBOX_ROW_NAME =
-  "min-w-0 flex-1 truncate text-sm font-medium leading-5";
+  "min-w-0 flex-1 truncate text-start text-sm font-medium leading-5";
 
 export const INBOX_ROW_NAME_UNREAD = "font-semibold";
 
-/** Fixed top-right timestamp — independent of name/preview width and trash hover. */
+/** Fixed top end timestamp — independent of name/preview width and trash hover. */
 export const INBOX_ROW_TIME =
-  "pointer-events-none absolute top-1.5 right-3 z-10 text-[10px] leading-none text-muted-foreground whitespace-nowrap";
+  "pointer-events-none absolute top-1.5 end-3 z-10 text-[10px] leading-none text-muted-foreground whitespace-nowrap";
 
 export const INBOX_ROW_UNREAD_BADGE =
-  "ml-0.5 inline-flex h-4 min-h-[16px] max-h-[16px] shrink-0 items-center justify-center rounded-full bg-gray-200 px-1.5 text-[10px] font-medium leading-none text-gray-800";
+  "ms-0.5 inline-flex h-4 min-h-[16px] max-h-[16px] shrink-0 items-center justify-center rounded-full bg-gray-200 px-1.5 text-[10px] font-medium leading-none text-gray-800";
 
 export const INBOX_ROW_PREVIEW =
-  "min-w-0 flex-1 truncate text-xs leading-4 text-muted-foreground whitespace-nowrap";
+  "min-w-0 flex-1 truncate text-start text-xs leading-4 text-muted-foreground whitespace-nowrap";
 
 export const INBOX_ROW_PREVIEW_UNREAD = "font-medium text-gray-700";
 
@@ -193,9 +193,9 @@ export function inboxConversationRowChromeClassName(input: InboxRowChromeInput):
   const parts = [INBOX_ROW_OUTER_BASE];
   if (input.selected) {
     parts.push("bg-white hover:bg-white");
-    parts.push(input.overdue ? "!border-l-red-400" : "!border-l-gray-300");
+    parts.push(input.overdue ? "!border-s-red-400" : "!border-s-gray-300");
   } else if (input.overdue) {
-    parts.push("!border-l-red-400");
+    parts.push("!border-s-red-400");
   }
   return parts.join(" ");
 }
@@ -222,7 +222,7 @@ export function inboxConversationRowLayoutContract(input: InboxRowChromeInput): 
     line3: INBOX_ROW_LINE3,
     heightClass: "h-[75px]",
     paddingClass: "px-3 py-1.5",
-    borderWidthClass: "border-l-2",
+    borderWidthClass: "border-s-2",
   };
 }
 

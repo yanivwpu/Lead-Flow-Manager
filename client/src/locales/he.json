@@ -3357,6 +3357,14 @@
     "chooseYear": "בחירת שנה"
   },
   "inboxUi": {
+    "whatsappSetupIncomplete": "ההגדרה של WhatsApp לא הושלמה. כדי לשלוח הודעות, יש להשלים אותה במסך ההגדרות.",
+    "conversationOpen": "פתוחה",
+    "conversationPending": "בהמתנה",
+    "conversationResolved": "טופלה",
+    "conversationClosed": "סגורה",
+    "emailKeyboardHint": "Enter לשורה חדשה • Ctrl/⌘+Enter לשליחה",
+    "stageMoved": "הועבר לשלב {{stage}}",
+    "chatKeyboardHint": "Enter לשליחה • Shift+Enter לשורה חדשה",
     "customerAskedForAShowing": "הלקוח ביקש לראות את הנכס",
     "contactTagUpdated": "תגית איש הקשר עודכנה",
     "stageChanged": "השלב השתנה",

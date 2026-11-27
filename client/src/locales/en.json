@@ -3332,6 +3332,14 @@
     "chooseYear": "Choose year"
   },
   "inboxUi": {
+    "whatsappSetupIncomplete": "WhatsApp setup incomplete — finish WhatsApp setup in Settings to send messages.",
+    "conversationOpen": "Open",
+    "conversationPending": "Pending",
+    "conversationResolved": "Resolved",
+    "conversationClosed": "Closed",
+    "emailKeyboardHint": "Enter = New line • Ctrl/⌘+Enter = Send",
+    "stageMoved": "Moved to {{stage}}",
+    "chatKeyboardHint": "Enter = Send • Shift+Enter = New line",
     "customerAskedForAShowing": "Customer asked for a showing",
     "contactTagUpdated": "Contact tag updated",
     "stageChanged": "Stage changed",
