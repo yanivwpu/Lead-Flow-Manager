@@ -1,9 +1,12 @@
+import type { TFunction } from "i18next";
+import { crmStageLabel } from "@/lib/crmPresentation";
+import { formatRegionalDate } from "@/lib/regionalFormatting";
 import React, { useState, useEffect, Component } from "react";
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 interface EBState { hasError: boolean; error?: Error }
-class RealtorEngineErrorBoundary extends Component<{ children: React.ReactNode }, EBState> {
-  constructor(props: { children: React.ReactNode }) {
+class RealtorEngineErrorBoundary extends Component<{ children: React.ReactNode; t: TFunction }, EBState> {
+  constructor(props: { children: React.ReactNode; t: TFunction }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -22,9 +25,9 @@ class RealtorEngineErrorBoundary extends Component<{ children: React.ReactNode }
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900">Something went wrong loading this template</h2>
+          <h2 className="text-xl font-semibold text-gray-900">{this.props.t("rgeApp.boundaryTitle")}</h2>
           <p className="text-sm text-muted-foreground max-w-md">
-            {this.state.error?.message || "An unexpected error occurred. Try refreshing the page."}
+            {this.props.t("rgeApp.boundaryBody")}
           </p>
           <div className="flex gap-3">
             <button
@@ -32,14 +35,14 @@ class RealtorEngineErrorBoundary extends Component<{ children: React.ReactNode }
               className="px-4 py-2 rounded-md bg-brand-green text-white text-sm font-medium hover:bg-brand-green/90"
               data-testid="button-error-retry"
             >
-              Retry
+              {this.props.t("inboxUi.retry")}
             </button>
             <button
               onClick={() => { window.location.href = TEMPLATES_GROWTH_ENGINES_TAB_PATH; }}
               className="px-4 py-2 rounded-md border text-sm font-medium hover:bg-gray-50"
               data-testid="button-error-back"
             >
-              Back to Templates
+              {this.props.t("rgeApp.backTemplates")}
             </button>
           </div>
         </div>
@@ -96,7 +99,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -194,28 +196,28 @@ interface TemplateData {
   };
 }
 
-const onboardingSchema = z.object({
-  legalName: z.string().min(2, "Business name is required"),
-  country: z.string().min(2, "Country is required"),
+const onboardingSchema = (t: TFunction) => z.object({
+  legalName: z.string().min(2, t("rgeApp.businessRequired")),
+  country: z.string().min(2, t("rgeApp.countryRequired")),
   website: z
     .string()
     .trim()
     .optional()
     .transform((v) => (v === undefined ? "" : v))
     .refine((v) => v === "" || /^https?:\/\/.+/i.test(v), {
-      message: "Use a full link starting with https://",
+      message: t("rgeApp.fullUrl"),
     }),
   teamType: z.enum(["solo", "team"]),
   estimatedSeats: z.string(),
   notificationsEnabled: z.boolean().default(true),
-  leadSources: z.string().min(3, "Add a short note about where leads come from"),
-  primaryGoal: z.string().min(3, "Tell us what you want this system to do for you"),
-  timezone: z.string().min(2, "Select your timezone"),
+  leadSources: z.string().min(3, t("rgeApp.sourcesRequired")),
+  primaryGoal: z.string().min(3, t("rgeApp.goalRequired")),
+  timezone: z.string().min(2, t("rgeApp.timezoneRequired")),
   conciergeLaunchAvailability: z.string().optional(),
   additionalNotes: z.string().optional(),
 });
 
-type OnboardingValues = z.infer<typeof onboardingSchema>;
+type OnboardingValues = z.infer<ReturnType<typeof onboardingSchema>>;
 
 type RgeEngineStatusPayload = {
   onboardingComplete?: boolean;
@@ -228,10 +230,10 @@ type RgeEngineStatusPayload = {
   calendlyConnected?: boolean;
 };
 
-function formatLaunchSessionWhen(iso: string | null | undefined): string | null {
+function formatLaunchSessionWhen(iso: string | null | undefined, language: string): string | null {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return formatRegionalDate(new Date(iso), language, {
       weekday: "long",
       year: "numeric",
       month: "long",
@@ -242,6 +244,27 @@ function formatLaunchSessionWhen(iso: string | null | undefined): string | null 
     });
   } catch {
     return iso;
+  }
+}
+
+// Native options keep the surrounding scroll context and use the device picker on mobile.
+function RgeSelect({ onValueChange, className, ...props }:
+  Omit<React.ComponentProps<"select">, "onChange"> & { onValueChange: (value: string) => void }
+) {
+  return <select
+    className={cn("h-9 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring", className)}
+    onChange={event => onValueChange(event.target.value)}
+    {...props}
+  />;
+}
+
+function localizeDetailCta(t: TFunction, label: string) {
+  switch (label) {
+    case "Activate Engine": return t("rgeApp.activateEngineShort");
+    case "Resume onboarding": return t("rgeApp.resumeOnboarding");
+    case "Continue setup": return t("rgeApp.continueSetup");
+    case "Open Growth Engine": return t("rgeApp.openEngine");
+    default: return label;
   }
 }
 
@@ -256,6 +279,7 @@ function ChannelStatusRow({
   href: string;
   actionLabel: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-white px-4 py-3">
       <div className="flex items-center gap-2 min-w-0">
@@ -268,7 +292,7 @@ function ChannelStatusRow({
         <span className="text-sm font-medium text-gray-900 truncate">{label}</span>
       </div>
       {ok ? (
-        <span className="text-xs font-medium text-emerald-700 shrink-0">Connected</span>
+        <span className="text-xs font-medium text-emerald-700 shrink-0">{t("rgeApp.connected")}</span>
       ) : (
         <Button variant="outline" size="sm" className="shrink-0 text-xs h-8" asChild>
           <Link href={href}>
@@ -299,6 +323,7 @@ function RGEOnboardingWizard({
   submitOnboardingMutation: UseMutationResult<any, Error, OnboardingValues, unknown>;
   setLocation: (path: string) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();
   const bookingReturnHandledRef = React.useRef(false);
@@ -373,8 +398,8 @@ function RGEOnboardingWizard({
     !!engineStatusData?.setupTask?.sessionBookedAt ||
     !!sessionBooking?.startTime;
   const sessionWhen =
-    formatLaunchSessionWhen(sessionBooking?.startTime) ||
-    formatLaunchSessionWhen(engineStatusData?.setupTask?.sessionBookedAt);
+    formatLaunchSessionWhen(sessionBooking?.startTime, i18n.language) ||
+    formatLaunchSessionWhen(engineStatusData?.setupTask?.sessionBookedAt, i18n.language);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -392,8 +417,8 @@ function RGEOnboardingWizard({
       void refetchEngineStatus();
       void queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
       toast({
-        title: "Launch session booked successfully",
-        description: "Your time is confirmed. Continue to finish onboarding.",
+        title: t("rgeApp.bookingSuccess"),
+        description: t("rgeApp.bookingToast"),
       });
       const url = new URL(window.location.href);
       url.searchParams.delete("booking");
@@ -426,8 +451,8 @@ function RGEOnboardingWizard({
   const nextStep = async () => {
     if (step === 4 && conciergeCalendarUrl && !launchSessionBooked) {
       toast({
-        title: "Book your launch session first",
-        description: "Choose a time with your specialist, then continue here after confirmation.",
+        title: t("rgeApp.bookFirst"),
+        description: t("rgeApp.chooseTime"),
         variant: "destructive",
       });
       return;
@@ -437,7 +462,7 @@ function RGEOnboardingWizard({
       if (availability.length < 5) {
         form.setError("conciergeLaunchAvailability", {
           type: "manual",
-          message: "Share a few times that work for your launch session",
+          message: t("rgeApp.availabilityError"),
         });
         return;
       }
@@ -470,7 +495,7 @@ function RGEOnboardingWizard({
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <Button variant="ghost" size="sm" className="text-gray-600" onClick={() => setLocation("/app/templates/realtor-growth-engine")}>
-          <ChevronLeft className="w-4 h-4 mr-1" /> Back
+          <ChevronLeft className="w-4 h-4 me-1" /> {t("inboxUi.back")}
         </Button>
       </div>
 
@@ -478,42 +503,42 @@ function RGEOnboardingWizard({
         <Card className="border-emerald-100 bg-emerald-50/30 shadow-sm" data-testid="card-onboarding-complete">
           <CardContent className="py-10 px-6 space-y-5 text-center max-w-lg mx-auto">
             <CheckCircle2 className="w-12 h-12 text-brand-green mx-auto" />
-            <h3 className="text-2xl font-bold text-gray-900 tracking-tight">Your onboarding is complete</h3>
+            <h3 className="text-2xl font-bold text-gray-900 tracking-tight">{t("rgeApp.onboardingDone")}</h3>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Your Growth Engine onboarding has been submitted and your launch session has been scheduled.
+              {t("rgeApp.onboardingSubmitted")}
             </p>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Our team will review your setup and contact you if anything else is needed.
+              {t("rgeApp.teamReview")}
             </p>
             {sessionWhen ? (
               <div className="rounded-lg border border-emerald-100 bg-white px-4 py-3 text-sm text-gray-700">
-                <p className="font-medium text-gray-900">Launch session confirmed</p>
+                <p className="font-medium text-gray-900">{t("rgeApp.bookingConfirmed")}</p>
                 <p className="mt-1">{sessionWhen}</p>
                 {engineStatusData?.setupTask?.specialist ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Specialist: {engineStatusData.setupTask.specialist.name}
+                    {t("rgeApp.specialist")} {engineStatusData.setupTask.specialist.name}
                   </p>
                 ) : null}
               </div>
             ) : null}
             <p className="text-xs text-muted-foreground leading-relaxed">
-              If your availability changes, update your booking using the calendar link sent to your email.
+              {t("rgeApp.reschedule")}
             </p>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Manage automation layers anytime from Growth Engine or Automations.
+              {t("rgeApp.manageAutomation")}
             </p>
             <p className="text-xs text-muted-foreground">
-              Need help?{" "}
+              {t("rgeApp.needHelp")}{" "}
               <a href="mailto:support@whachatcrm.com" className="text-brand-green font-medium hover:underline">
                 support@whachatcrm.com
               </a>
             </p>
             <p className="text-sm text-gray-700 pt-1">
-              Your Growth Engine is included with Pro. We wish you lots of business.
+              {t("rgeApp.includedWish")}
             </p>
             <div className="flex justify-center pt-2">
               <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-open-automations">
-                <Link href="/app/workflows">Open Automations</Link>
+                <Link href="/app/workflows">{t("rgeApp.openAutomations")}</Link>
               </Button>
             </div>
           </CardContent>
@@ -522,33 +547,32 @@ function RGEOnboardingWizard({
         <div className="mb-8">
           <div className="text-center mb-6">
             <Badge className="mb-4 bg-brand-green/10 text-brand-green border-brand-green/20">
-              Step {step} of {totalSteps}
+              {t("rgeApp.stepCount", { step, total: totalSteps })}
             </Badge>
-            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Guided launch</h2>
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t("rgeApp.guidedLaunch")}</h2>
             <p className="text-sm text-muted-foreground mt-2 max-w-lg mx-auto">
-              A concise setup so we can install your Growth Engine, align channels, and book your concierge launch session.
+              {t("rgeApp.guidedHelp")}
             </p>
           </div>
-          <Progress value={(step / totalSteps) * 100} className="mb-8 h-1.5" />
+          <Progress aria-label={t("rgeApp.stepCount", { step, total: totalSteps })} value={(step / totalSteps) * 100} className="mb-8 h-1.5" />
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               {step === 1 && (
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Welcome</CardTitle>
+                    <CardTitle className="text-lg">{t("rgeApp.welcome")}</CardTitle>
                     <CardDescription className="text-base leading-relaxed">
-                      The <RealtorMark /> Growth Engine configures your workspace for multi-channel conversations, AI qualification,
-                      automated follow-ups, and booking-ready flows, with a concierge-led launch to validate everything is live.
+                      {t("rgeApp.welcomeBody")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm text-gray-600">
-                    <ul className="list-disc pl-5 space-y-2">
-                      <li>Channels wired for inbound leads (WhatsApp recommended; connect anytime in Settings)</li>
-                      <li>AI qualification and routing tuned for real estate conversations</li>
-                      <li>Automation sequences for speed-to-lead and nurture</li>
-                      <li>Optional calendar connection so prospects can self-book showings</li>
-                      <li>Concierge launch session to review setup and optimize performance</li>
+                    <ul className="list-disc ps-5 space-y-2">
+                      <li>{t("rgeApp.channelsReady")}</li>
+                      <li>{t("rgeApp.aiRouting")}</li>
+                      <li>{t("rgeApp.sequences")}</li>
+                      <li>{t("rgeApp.optionalCalendar")}</li>
+                      <li>{t("rgeApp.conciergeReview")}</li>
                     </ul>
                   </CardContent>
                 </Card>
@@ -557,10 +581,9 @@ function RGEOnboardingWizard({
               {step === 2 && (
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Channel readiness</CardTitle>
+                    <CardTitle className="text-lg">{t("rgeApp.channelReadiness")}</CardTitle>
                     <CardDescription>
-                      Connect what you use today. Only WhatsApp is required before we activate the template; everything else
-                      improves coverage and can be added anytime.
+                      {t("rgeApp.channelRequirement")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -569,36 +592,37 @@ function RGEOnboardingWizard({
                         label="WhatsApp"
                         ok={!!activationStatus?.whatsappConnected}
                         href={settingsChannelsHref({ provider: "whatsapp" })}
-                        actionLabel="Connect WhatsApp"
+                        actionLabel={t("rgeApp.connectWhatsApp")}
                       />
                       <ChannelStatusRow
                         label="Facebook"
                         ok={!!activationStatus?.facebookConnected}
                         href={settingsChannelsHref({ provider: "facebook" })}
-                        actionLabel="Connect Facebook"
+                        actionLabel={t("rgeApp.connectFacebook")}
                       />
                       <ChannelStatusRow
                         label="Instagram"
                         ok={!!activationStatus?.instagramConnected}
                         href={settingsChannelsHref({ provider: "instagram" })}
-                        actionLabel="Connect Instagram"
+                        actionLabel={t("rgeApp.connectInstagram")}
                       />
                       <ChannelStatusRow
                         label="Calendly"
                         ok={calendlyConnected}
                         href="/app/integrations"
-                        actionLabel="Connect Calendly"
+                        actionLabel={t("rgeApp.connectCalendly")}
                       />
                       <ChannelStatusRow
                         label="Website chat widget"
                         ok={webchatConnected}
                         href="/app/settings?section=channels"
-                        actionLabel="Open web chat"
+                        actionLabel={t("rgeApp.openWebChat")}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      WhatsApp uses Meta&apos;s embedded signup from Settings (no manual API keys). You can finish onboarding and book
-                      your launch session before WhatsApp is connected — connect when you are ready for live automations.
+                      {t("rgeApp.whatsappSetup")}
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">{t("rgeApp.setupExplanation")}
                     </p>
                   </CardContent>
                 </Card>
@@ -607,8 +631,8 @@ function RGEOnboardingWizard({
               {step === 3 && (
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Business profile</CardTitle>
-                    <CardDescription>Helps us tailor your setup and concierge launch session.</CardDescription>
+                    <CardTitle className="text-lg">{t("rgeApp.businessProfile")}</CardTitle>
+                    <CardDescription>{t("rgeApp.businessProfileHelp")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <FormField
@@ -616,9 +640,9 @@ function RGEOnboardingWizard({
                       name="legalName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Business name</FormLabel>
+                          <FormLabel>{t("rgeApp.businessName")}</FormLabel>
                           <FormControl>
-                            <Input placeholder="As you present it to clients" {...field} data-testid="input-legal-name" />
+                            <Input placeholder={t("rgeApp.businessNameHint")} {...field} data-testid="input-legal-name" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -630,9 +654,9 @@ function RGEOnboardingWizard({
                         name="country"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Country</FormLabel>
+                            <FormLabel>{t("rgeApp.country")}</FormLabel>
                             <FormControl>
-                              <Input placeholder="United States" {...field} data-testid="input-country" />
+                              <Input placeholder={t("rgeApp.countryExample")} {...field} data-testid="input-country" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -643,9 +667,9 @@ function RGEOnboardingWizard({
                         name="website"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Website (optional)</FormLabel>
+                            <FormLabel>{t("rgeApp.websiteOptional")}</FormLabel>
                             <FormControl>
-                              <Input placeholder="https://your-site.com" {...field} data-testid="input-website" />
+                              <Input dir="ltr" placeholder="https://your-site.com" {...field} data-testid="input-website" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -657,19 +681,19 @@ function RGEOnboardingWizard({
                       name="teamType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Team</FormLabel>
+                          <FormLabel>{t("rgeApp.team")}</FormLabel>
                           <FormControl>
                             <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
                               <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="solo" id="team-solo" data-testid="radio-team-solo" />
                                 <Label htmlFor="team-solo" className="font-normal cursor-pointer">
-                                  Solo
+                                  {t("rgeApp.solo")}
                                 </Label>
                               </div>
                               <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="team" id="team-team" data-testid="radio-team-team" />
                                 <Label htmlFor="team-team" className="font-normal cursor-pointer">
-                                  Team
+                                  {t("rgeApp.team")}
                                 </Label>
                               </div>
                             </RadioGroup>
@@ -683,19 +707,14 @@ function RGEOnboardingWizard({
                       name="estimatedSeats"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Seats</FormLabel>
+                          <FormLabel>{t("rgeApp.seats")}</FormLabel>
                           <FormControl>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <SelectTrigger data-testid="select-estimated-seats">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="1">1</SelectItem>
-                                <SelectItem value="2-5">2-5</SelectItem>
-                                <SelectItem value="6-10">6-10</SelectItem>
-                                <SelectItem value="10+">10+</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <RgeSelect value={field.value} name={field.name} onBlur={field.onBlur} ref={field.ref} onValueChange={field.onChange} data-testid="select-estimated-seats">
+                              <option value="1">1</option>
+                              <option value="2-5">2-5</option>
+                              <option value="6-10">6-10</option>
+                              <option value="10+">10+</option>
+                            </RgeSelect>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -707,8 +726,8 @@ function RGEOnboardingWizard({
                       render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                           <div className="space-y-0.5">
-                            <FormLabel className="text-base">Notifications</FormLabel>
-                            <FormDescription>Alerts for high-intent leads and handoffs</FormDescription>
+                            <FormLabel className="text-base">{t("common.toastNotifications")}</FormLabel>
+                            <FormDescription>{t("rgeApp.alerts")}</FormDescription>
                           </div>
                           <FormControl>
                             <Checkbox checked={field.value} onCheckedChange={field.onChange} data-testid="checkbox-notifications" />
@@ -721,10 +740,10 @@ function RGEOnboardingWizard({
                       name="leadSources"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Lead sources</FormLabel>
+                          <FormLabel>{t("rgeApp.leadSources")}</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="Ads, referrals, Zillow, open houses..."
+                              placeholder={t("rgeApp.leadSourcesExample")}
                               className="min-h-[88px]"
                               {...field}
                               data-testid="textarea-lead-sources"
@@ -739,10 +758,10 @@ function RGEOnboardingWizard({
                       name="primaryGoal"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Primary outcome</FormLabel>
+                          <FormLabel>{t("rgeApp.primaryOutcome")}</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="e.g. faster showings booked, cleaner handoffs to my ISA"
+                              placeholder={t("rgeApp.outcomeExample")}
                               className="min-h-[88px]"
                               {...field}
                               data-testid="textarea-primary-goal"
@@ -759,10 +778,9 @@ function RGEOnboardingWizard({
               {step === 4 && (
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Book your concierge launch session</CardTitle>
+                    <CardTitle className="text-lg">{t("rgeApp.conciergeBook")}</CardTitle>
                     <CardDescription className="text-base leading-relaxed">
-                      Choose a time with your assigned launch specialist so we can review your setup, confirm channels, and
-                      prepare your Growth Engine for activation.
+                      {t("rgeApp.conciergeBookHelp")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -773,12 +791,12 @@ function RGEOnboardingWizard({
                             className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900"
                             data-testid="banner-launch-session-booked"
                           >
-                            <p className="font-medium">Launch session booked successfully</p>
+                            <p className="font-medium">{t("rgeApp.bookingSuccess")}</p>
                             {sessionWhen ? (
                               <p className="mt-1 text-emerald-800/90">{sessionWhen}</p>
                             ) : (
                               <p className="mt-1 text-emerald-800/90">
-                                Your booking is confirmed. Continue to the next step when you are ready.
+                                {t("rgeApp.confirmContinue")}
                               </p>
                             )}
                           </div>
@@ -789,8 +807,8 @@ function RGEOnboardingWizard({
                             onClick={openLaunchSessionBooking}
                             data-testid="button-book-launch-session"
                           >
-                            Book launch session
-                            <ExternalLink className="ml-2 h-4 w-4" />
+                            {t("rgeApp.bookSession")}
+                            <ExternalLink className="ms-2 h-4 w-4" />
                           </Button>
                         )}
                         <FormField
@@ -798,10 +816,10 @@ function RGEOnboardingWizard({
                           name="additionalNotes"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Notes for your specialist (optional)</FormLabel>
+                              <FormLabel>{t("rgeApp.specialistNotes")}</FormLabel>
                               <FormControl>
                                 <Textarea
-                                  placeholder="Markets, specialties, or anything you want emphasized in the session"
+                                  placeholder={t("rgeApp.specialtyExample")}
                                   className="min-h-[88px]"
                                   {...field}
                                   data-testid="textarea-additional-notes"
@@ -815,28 +833,23 @@ function RGEOnboardingWizard({
                     ) : (
                       <>
                         <p className="rounded-lg border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm leading-relaxed text-gray-600">
-                          Your launch specialist calendar is not connected yet. We&apos;ll contact you to schedule your session.
+                          {t("rgeApp.noSpecialistCalendar")}
                         </p>
                         <FormField
                           control={form.control}
                           name="timezone"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Timezone</FormLabel>
+                              <FormLabel>{t("rgeApp.timezone")}</FormLabel>
                               <FormControl>
-                                <Select value={field.value} onValueChange={field.onChange}>
-                                  <SelectTrigger data-testid="select-timezone">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="America/New_York">Eastern</SelectItem>
-                                    <SelectItem value="America/Chicago">Central</SelectItem>
-                                    <SelectItem value="America/Denver">Mountain</SelectItem>
-                                    <SelectItem value="America/Los_Angeles">Pacific</SelectItem>
-                                    <SelectItem value="America/Anchorage">Alaska</SelectItem>
-                                    <SelectItem value="Pacific/Honolulu">Hawaii</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                <RgeSelect value={field.value} name={field.name} onBlur={field.onBlur} ref={field.ref} onValueChange={field.onChange} data-testid="select-timezone">
+                                  <option value="America/New_York">{t("rgeApp.eastern")}</option>
+                                  <option value="America/Chicago">{t("rgeApp.central")}</option>
+                                  <option value="America/Denver">{t("rgeApp.mountain")}</option>
+                                  <option value="America/Los_Angeles">{t("rgeApp.pacific")}</option>
+                                  <option value="America/Anchorage">{t("rgeApp.alaska")}</option>
+                                  <option value="Pacific/Honolulu">{t("rgeApp.hawaii")}</option>
+                                </RgeSelect>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -847,16 +860,16 @@ function RGEOnboardingWizard({
                           name="conciergeLaunchAvailability"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>When are you usually available?</FormLabel>
+                              <FormLabel>{t("rgeApp.availability")}</FormLabel>
                               <FormControl>
                                 <Textarea
-                                  placeholder="e.g. Tue-Thu 2-5pm ET; avoid Friday mornings"
+                                  placeholder={t("rgeApp.availabilityExample")}
                                   className="min-h-[100px]"
                                   {...field}
                                   data-testid="textarea-concierge-availability"
                                 />
                               </FormControl>
-                              <FormDescription>Share a few windows that work for your launch session.</FormDescription>
+                              <FormDescription>{t("rgeApp.availabilityHelp")}</FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -866,10 +879,10 @@ function RGEOnboardingWizard({
                           name="additionalNotes"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Notes for your concierge (optional)</FormLabel>
+                              <FormLabel>{t("rgeApp.conciergeNotes")}</FormLabel>
                               <FormControl>
                                 <Textarea
-                                  placeholder="Markets, specialties, or anything you want emphasized in the session"
+                                  placeholder={t("rgeApp.specialtyExample")}
                                   className="min-h-[88px]"
                                   {...field}
                                   data-testid="textarea-additional-notes-fallback"
@@ -888,26 +901,26 @@ function RGEOnboardingWizard({
               {step === 5 && (
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Review and activate</CardTitle>
+                    <CardTitle className="text-lg">{t("rgeApp.reviewActivate")}</CardTitle>
                     <CardDescription>
-                      When you continue, we save your launch details and install the Growth Engine into your workspace.
+                      {t("rgeApp.reviewHelp")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-4 space-y-2 text-sm text-gray-700">
-                      <p className="font-medium text-gray-900">Before you finish</p>
+                      <p className="font-medium text-gray-900">{t("rgeApp.beforeFinish")}</p>
                       <p>
                         {whatsappReady ? (
                           <span className="text-emerald-700 font-medium">
-                            WhatsApp is connected — your automations can go live as soon as setup is complete.
+                            {t("rgeApp.whatsappReady")}
                           </span>
                         ) : (
                           <span>
-                            WhatsApp is not connected yet. You can still complete onboarding and book your concierge launch session.{" "}
+                            {t("rgeApp.whatsappLater")}{" "}
                             <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
-                              <a className="text-brand-green font-medium underline-offset-2 hover:underline">Connect WhatsApp</a>
+                              <a className="text-brand-green font-medium underline-offset-2 hover:underline">{t("rgeApp.connectWhatsApp")}</a>
                             </Link>{" "}
-                            in Settings when you are ready for live messaging.
+                            {t("rgeApp.whatsappLaterLink")}
                           </span>
                         )}
                       </p>
@@ -918,7 +931,7 @@ function RGEOnboardingWizard({
 
               <div className="flex gap-3 justify-between pt-4">
                 <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1} data-testid="button-prev-step">
-                  <ChevronLeft className="mr-1 w-4 h-4" /> Previous
+                  <ChevronLeft className="me-1 w-4 h-4" /> {t("common.previousPage")}
                 </Button>
                 {step < totalSteps ? (
                   <Button
@@ -929,9 +942,9 @@ function RGEOnboardingWizard({
                     data-testid="button-next-step"
                   >
                     {step === 4 && conciergeCalendarUrl && !launchSessionBooked
-                      ? "Book session to continue"
-                      : "Next"}{" "}
-                    <ChevronRight className="ml-1 w-4 h-4" />
+                      ? t("rgeApp.bookContinue")
+                      : t("common.nextPage")}{" "}
+                    <ChevronRight className="ms-1 w-4 h-4" />
                   </Button>
                 ) : (
                   <Button
@@ -942,10 +955,10 @@ function RGEOnboardingWizard({
                   >
                     {submitOnboardingMutation.isPending ? (
                       <>
-                        <Loader2 className="mr-2 w-4 h-4 animate-spin" /> Activating...
+                        <Loader2 className="me-2 w-4 h-4 animate-spin" /> {t("rgeApp.activating")}
                       </>
                     ) : (
-                      <>Activate Growth Engine</>
+                      <>{t("rgeApp.activateEngine")}</>
                     )}
                   </Button>
                 )}
@@ -961,6 +974,7 @@ function RGEOnboardingWizard({
 // --- Components ---
 
 export function RealtorGrowthEngine() {
+  const { t } = useTranslation();
   const { i18n } = useTranslation();
   const [location, setLocation] = useLocation();
   const [step, setStep] = useState(1);
@@ -1022,14 +1036,14 @@ export function RealtorGrowthEngine() {
     onSuccess: (data: { alreadyInstalled?: boolean; onboardingComplete?: boolean }) => {
       void queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
       toast({
-        title: data.alreadyInstalled ? "Growth Engine already installed" : "Growth Engine installed",
-        description: data.onboardingComplete ? "Opening your Growth Engine." : "Continue your guided launch setup.",
+        title: data.alreadyInstalled ? t("rgeApp.alreadyInstalled") : t("rgeApp.installed"),
+        description: data.onboardingComplete ? t("rgeApp.opening") : t("rgeApp.guidedNext"),
       });
       setLocation(data.onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH);
     },
     onError: (err: Error & { code?: string; status?: number }) => {
       if (err.message === "session_expired") return;
-      toast({ title: "Could not install Growth Engine", description: err.message, variant: "destructive" });
+      toast({ title: t("rgeApp.installError"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -1050,7 +1064,7 @@ export function RealtorGrowthEngine() {
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not activate",
+        title: t("rgeApp.activateError"),
         description: err.message,
         variant: "destructive",
       });
@@ -1058,7 +1072,7 @@ export function RealtorGrowthEngine() {
   });
 
   const form = useForm<OnboardingValues>({
-    resolver: zodResolver(onboardingSchema),
+    resolver: zodResolver(onboardingSchema(t)),
     defaultValues: {
       website: "",
       teamType: "solo",
@@ -1125,24 +1139,27 @@ export function RealtorGrowthEngine() {
   const subscriptionActive = templateData?.subscription?.accessOk !== false;
   const isPaused = !subscriptionActive && (status === 'purchased' || status === 'submitted' || status === 'installed');
 
+  const detailCta = localizeDetailCta(t, getRgeDetailCtaLabel(status, entitlement, onboardingStep));
   const primaryMarketingCta = React.useMemo(() => {
     if (isPaused) {
-      return { label: "Restore Pro to resume", disabled: true as const };
+      return { label: t("rgeApp.restorePro"), disabled: true as const };
     }
     if (!hasPurchased) {
       return {
-        label: templateData?.subscription?.accessOk === false ? "Upgrade to Pro" : "Install Growth Engine",
+        label: templateData?.subscription?.accessOk === false ? t("rgeApp.upgradePro") : t("rgeApp.installEngine"),
         disabled: installMutation.isPending || checkingSubscription,
       };
     }
     if (!onboardingComplete) {
       return {
-        label: getRgeDetailCtaLabel(status, entitlement, onboardingStep),
+        label: detailCta,
         disabled: false as const,
       };
     }
-    return { label: "Open Growth Engine", disabled: false as const };
+    return { label: t("rgeApp.openEngine"), disabled: false as const };
   }, [
+    t,
+    detailCta,
     isPaused,
     hasPurchased,
     onboardingComplete,
@@ -1158,7 +1175,7 @@ export function RealtorGrowthEngine() {
     if (subscriptionActive && sessionStorage.getItem("rge_reactivating")) {
       sessionStorage.removeItem("rge_reactivating");
       toast({
-        title: "Subscription active",
+        title: t("rgeApp.subscriptionActive"),
         description: "You can now continue your Realtor® Growth Engine.",
       });
     }
@@ -1181,26 +1198,26 @@ export function RealtorGrowthEngine() {
     return (
       <div className="flex h-full items-center justify-center gap-3 text-muted-foreground" data-testid="state-loading">
         <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">Loading template…</span>
+        <span className="text-sm">{t("rgeApp.loadingTemplate")}</span>
       </div>
     );
   }
 
   if (isError || !templateData) {
-    const msg = (queryError as Error)?.message || "Could not load template data.";
+    const msg = (queryError as Error)?.message || t("rgeApp.loadDescription");
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center" data-testid="state-error">
         <div className="rounded-full bg-red-100 p-4">
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
-        <h2 className="text-xl font-semibold text-gray-900">Failed to load template</h2>
+        <h2 className="text-xl font-semibold text-gray-900">{t("rgeApp.loadTemplateError")}</h2>
         <p className="text-sm text-muted-foreground max-w-md">{msg}</p>
         <div className="flex gap-3">
           <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] })} data-testid="button-error-retry">
-            Retry
+            {t("inboxUi.retry")}
           </Button>
           <Button variant="outline" onClick={() => setLocation(TEMPLATES_GROWTH_ENGINES_TAB_PATH)} data-testid="button-error-back">
-            Back to Templates
+            {t("rgeApp.backTemplates")}
           </Button>
         </div>
       </div>
@@ -1239,7 +1256,7 @@ export function RealtorGrowthEngine() {
       installMutation.mutate();
     } catch {
       setCheckingSubscription(false);
-      toast({ title: "Error", description: "Could not verify your subscription. Please try again.", variant: "destructive" });
+      toast({ title: t("common.error"), description: t("rgeApp.verifySubscription"), variant: "destructive" });
     }
   };
 
@@ -1276,7 +1293,7 @@ export function RealtorGrowthEngine() {
       <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
         <div className="flex flex-col items-center gap-1.5">
           <div className={circle(s1, false)}>{s1 ? <Check className="h-5 w-5" /> : "1"}</div>
-          <span className={cn("text-xs font-medium", s1 ? "text-emerald-600" : "text-gray-400")}>Activate</span>
+          <span className={cn("text-xs font-medium", s1 ? "text-emerald-600" : "text-gray-400")}>{t("rgeApp.activate")}</span>
         </div>
         <div
           className={cn(
@@ -1286,7 +1303,7 @@ export function RealtorGrowthEngine() {
         />
         <div className="flex flex-col items-center gap-1.5">
           <div className={circle(s2, s2Active && !s2)}>{s2 ? <Check className="h-5 w-5" /> : "2"}</div>
-          <span className={cn("text-xs font-medium", s2 || s2Active ? "text-emerald-600" : "text-gray-400")}>Setup</span>
+          <span className={cn("text-xs font-medium", s2 || s2Active ? "text-emerald-600" : "text-gray-400")}>{t("rgeApp.setup")}</span>
         </div>
         <div
           className={cn(
@@ -1296,7 +1313,7 @@ export function RealtorGrowthEngine() {
         />
         <div className="flex flex-col items-center gap-1.5">
           <div className={circle(s3, false)}>{s3 ? <Check className="h-5 w-5" /> : "3"}</div>
-          <span className={cn("text-xs font-medium", s3 ? "text-emerald-600" : "text-gray-400")}>Go Live</span>
+          <span className={cn("text-xs font-medium", s3 ? "text-emerald-600" : "text-gray-400")}>{t("rgeApp.goLive")}</span>
         </div>
       </div>
     );
@@ -1315,13 +1332,13 @@ export function RealtorGrowthEngine() {
     ];
 
     const whatItDoesLines = [
-      "Captures new real estate leads the moment they message you.",
-      "Replies instantly across connected messaging channels with context-aware conversation.",
-      "Qualifies buyers and sellers using budget, financing, and timeline from the conversation.",
-      "Detects booking intent and moves the thread toward a showing or call.",
-      "Schedules showings or calls when your calendar is connected.",
-      "Follows up automatically when leads go quiet — next-day re-engagement, then multi-step nurture with channel-aware delivery.",
-      "Updates CRM stage, score, tags, and next step so your pipeline stays honest.",
+      t("rgeApp.leadCapture"),
+      t("rgeApp.smartReply"),
+      t("rgeApp.qualifyPeople"),
+      t("rgeApp.bookIntent"),
+      t("rgeApp.calendarBookings"),
+      t("rgeApp.nurtureOverview"),
+      t("rgeApp.crmOverview"),
     ];
 
     return (
@@ -1334,7 +1351,7 @@ export function RealtorGrowthEngine() {
             onClick={() => setLocation(TEMPLATES_GROWTH_ENGINES_TAB_PATH)}
           >
             <ChevronLeft className="h-4 w-4" />
-            Back to Growth Engines
+            {t("rgeApp.backEngines")}
           </Button>
         </header>
 
@@ -1362,18 +1379,18 @@ export function RealtorGrowthEngine() {
                   </div>
                 </div>
                 <Badge className="border border-emerald-400/30 bg-emerald-500/20 px-4 py-1.5 font-medium text-emerald-100 shadow-lg backdrop-blur-md hover:bg-emerald-500/30">
-                  Premium Growth Engine
+                  {t("rgeApp.premiumEngine")}
                 </Badge>
               </div>
 
               <h1 className="mb-3 text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl">
-                <RealtorMark /> Growth Engine
+                <RealtorMark /> {t("rgeApp.engine")}
               </h1>
               <p className="mb-2 text-xl font-medium text-emerald-100/90 md:text-2xl">
-                AI-powered messaging automation across connected channels for real estate
+                {t("rgeApp.engineSubtitle")}
               </p>
               <p className="text-base text-gray-300/80">
-                Convert inquiries into qualified buyers &amp; booked showings — automatically.
+                {t("rgeApp.engineOutcome")}
               </p>
             </div>
           </section>
@@ -1385,18 +1402,17 @@ export function RealtorGrowthEngine() {
               className="mb-8 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/50 via-white to-white px-6 py-8 shadow-sm md:px-8"
               data-testid="banner-incomplete-onboarding"
             >
-              <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+              <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center sm:flex-row sm:text-start">
                 <div className="flex-1 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Setup in progress</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">{t("rgeApp.setupInProgress")}</p>
                   <h2 className="text-xl font-semibold tracking-tight text-gray-900 md:text-2xl">
-                    Continue your <RealtorMark /> Growth Engine launch
+                    {t("rgeApp.resumeTitle")}
                   </h2>
                   <p className="text-sm leading-relaxed text-gray-600">
-                    Your installation is saved. Resume guided onboarding to book your concierge session and finish activation.
-                    WhatsApp can be connected anytime — it is not required to continue setup.
+                    {t("rgeApp.resumeHelp")}
                   </p>
                   {onboardingStep && onboardingStep > 1 ? (
-                    <p className="text-xs text-muted-foreground">Last saved: step {onboardingStep} of 5</p>
+                    <p className="text-xs text-muted-foreground">{t("rgeApp.lastSaved", { step: onboardingStep, total: totalSteps })}</p>
                   ) : null}
                 </div>
                 <Button
@@ -1405,8 +1421,8 @@ export function RealtorGrowthEngine() {
                   onClick={() => setLocation(RGE_TEMPLATE_ONBOARDING_PATH)}
                   data-testid="button-continue-setup-banner"
                 >
-                  {getRgeDetailCtaLabel(status, entitlement, onboardingStep)}
-                  <ChevronRight className="ml-1.5 h-5 w-5" />
+                  {detailCta}
+                  <ChevronRight className="ms-1.5 h-5 w-5 rtl:rotate-180" />
                 </Button>
               </div>
             </section>
@@ -1417,12 +1433,11 @@ export function RealtorGrowthEngine() {
             <CardContent className="flex items-start gap-3 px-5 py-4 sm:px-6">
               <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-amber-900">Growth Engine Paused</p>
+                <p className="text-sm font-semibold text-amber-900">{t("rgeApp.enginePaused")}</p>
                 <p className="mt-0.5 text-xs text-amber-800">
-                  Your <RealtorMark /> Growth Engine requires an active Pro plan to run automations and handle conversations.
-                  Reactivate your plan to resume your system instantly.
+                  {t("rgeApp.pausedBody")}
                 </p>
-                <p className="mt-1 text-[11px] text-amber-700">Your installation and configuration are saved — nothing is lost.</p>
+                <p className="mt-1 text-[11px] text-amber-700">{t("rgeApp.savedInstallation")}</p>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {!templateData?.subscription?.hasPro && (
                     <Button
@@ -1435,7 +1450,7 @@ export function RealtorGrowthEngine() {
                       }}
                       data-testid="button-reactivate-pro"
                     >
-                      Reactivate Pro
+                      {t("rgeApp.reactivatePro")}
                     </Button>
                   )}
                 </div>
@@ -1445,9 +1460,9 @@ export function RealtorGrowthEngine() {
         )}
 
         <section className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
-          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">What it does</h2>
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">{t("rgeApp.whatItDoes")}</h2>
           <p className="mb-6 text-sm text-gray-500">
-            A coordinated automation engine that runs alongside your inbox and CRM — built for real estate speed-to-lead.
+            {t("rgeApp.whatItDoesHelp")}
           </p>
 
           <div className="grid gap-8 lg:grid-cols-2">
@@ -1506,12 +1521,12 @@ export function RealtorGrowthEngine() {
 
                     <div className="min-h-[260px] space-y-2 bg-[#efeae2] p-3">
                       <div className="flex justify-center">
-                        <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[9px] text-gray-500 shadow-sm">Today</span>
+                        <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[9px] text-gray-500 shadow-sm">{t("inboxUi.today")}</span>
                       </div>
                       <div className="flex justify-start">
                         <div className="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 shadow-sm">
                           <p className="text-[11px] leading-relaxed text-gray-800">Hi! I&apos;m looking for a 3 bedroom house in Miami.</p>
-                          <span className="float-right ml-2 mt-0.5 text-[9px] text-gray-400">10:24 AM</span>
+                          <span className="float-right ms-2 mt-0.5 text-[9px] text-gray-400">10:24 AM</span>
                         </div>
                       </div>
                       <div className="flex justify-end">
@@ -1529,7 +1544,7 @@ export function RealtorGrowthEngine() {
                       <div className="flex justify-start">
                         <div className="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 shadow-sm">
                           <p className="text-[11px] leading-relaxed text-gray-800">Around $600k - $800k</p>
-                          <span className="float-right ml-2 mt-0.5 text-[9px] text-gray-400">10:25 AM</span>
+                          <span className="float-right ms-2 mt-0.5 text-[9px] text-gray-400">10:25 AM</span>
                         </div>
                       </div>
                       <div className="flex justify-end">
@@ -1555,7 +1570,7 @@ export function RealtorGrowthEngine() {
                       <div className="flex-1 rounded-full bg-white px-3 py-1.5 text-[11px] text-gray-400 shadow-sm">Type a message</div>
                       <Paperclip className="h-4 w-4 text-gray-500" aria-hidden />
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 shadow-md">
-                        <Send className="ml-0.5 h-3.5 w-3.5 text-white" aria-hidden />
+                        <Send className="ms-0.5 h-3.5 w-3.5 text-white" aria-hidden />
                       </div>
                     </div>
                   </div>
@@ -1566,7 +1581,7 @@ export function RealtorGrowthEngine() {
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100">
                       <Target className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
                     </div>
-                    <span className="text-[10px] font-semibold text-gray-700">Lead Score</span>
+                    <span className="text-[10px] font-semibold text-gray-700">{t("rgeApp.leadScore")}</span>
                   </div>
                   <div className="flex items-end gap-1.5">
                     <span className="text-2xl font-bold text-emerald-600">87</span>
@@ -1598,8 +1613,8 @@ export function RealtorGrowthEngine() {
         <WorkflowWalkthrough config={realtorWorkflowWalkthrough} locale={workflowLocale(i18n.resolvedLanguage ?? i18n.language)} />
 
         <section id="rge-whats-included" className="mb-6 scroll-mt-24 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
-          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">What&apos;s included</h2>
-          <p className="mb-6 text-sm text-gray-500">Everything installed as a system — not a loose pile of message templates.</p>
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">{t("rgeApp.included")}</h2>
+          <p className="mb-6 text-sm text-gray-500">{t("rgeApp.includedHelp")}</p>
 
           <div className="grid gap-4 md:grid-cols-3">
             {includedItems.map(({ Icon, t, d }) => (
@@ -1620,9 +1635,9 @@ export function RealtorGrowthEngine() {
         </section>
 
         <section className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8" id="rge-architecture">
-          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">Automation architecture</h2>
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">{t("rgeApp.architecture")}</h2>
           <p className="mb-6 text-sm text-gray-500">
-            How inbound messages, timers, and CRM updates connect — a real system, not a single static template.
+            {t("rgeApp.architectureHelp")}
           </p>
 
           <div className="relative rounded-xl border border-gray-200 bg-gray-50 p-4 md:p-6">
@@ -1632,7 +1647,7 @@ export function RealtorGrowthEngine() {
                   <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
                     <MessageCircle className="h-3.5 w-3.5 text-gray-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[10px] font-semibold text-gray-800">New inquiry</p>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">{t("rgeApp.newInquiry")}</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
@@ -1641,7 +1656,7 @@ export function RealtorGrowthEngine() {
                   <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50">
                     <Sparkles className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[10px] font-semibold text-gray-800">AI reply</p>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">{t("rgeApp.aiReply")}</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
@@ -1650,7 +1665,7 @@ export function RealtorGrowthEngine() {
                   <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
                     <Filter className="h-3.5 w-3.5 text-gray-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[10px] font-semibold text-gray-800">Qualify</p>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">{t("rgeApp.qualify")}</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
@@ -1659,22 +1674,22 @@ export function RealtorGrowthEngine() {
                   <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
                     <Target className="h-3.5 w-3.5 text-gray-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[10px] font-semibold text-gray-800">Intent score</p>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">{t("rgeApp.intentScore")}</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
               <div className="flex shrink-0 flex-col gap-1">
                 <div className="flex items-center gap-1.5 rounded border border-emerald-200/60 bg-emerald-50/70 px-2 py-1">
                   <Calendar className="h-3 w-3 text-emerald-600" aria-hidden />
-                  <span className="text-[9px] font-medium text-gray-700">Booking</span>
+                  <span className="text-[9px] font-medium text-gray-700">{t("rgeApp.booking")}</span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1">
                   <Timer className="h-3 w-3 text-gray-500" aria-hidden />
-                  <span className="text-[9px] font-medium text-gray-600">Follow-up</span>
+                  <span className="text-[9px] font-medium text-gray-600">{t("inboxUi.followUp")}</span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1">
                   <UserCheck className="h-3 w-3 text-gray-500" aria-hidden />
-                  <span className="text-[9px] font-medium text-gray-600">Handoff</span>
+                  <span className="text-[9px] font-medium text-gray-600">{t("rgeApp.handoff")}</span>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
@@ -1683,7 +1698,7 @@ export function RealtorGrowthEngine() {
                   <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600">
                     <ClipboardList className="h-3.5 w-3.5 text-white" aria-hidden />
                   </div>
-                  <p className="text-center text-[10px] font-semibold text-gray-800">CRM update</p>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">{t("rgeApp.crmUpdate")}</p>
                   <div className="mt-1 flex justify-center gap-0.5">
                     <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">stage</Badge>
                     <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">tag</Badge>
@@ -1698,43 +1713,43 @@ export function RealtorGrowthEngine() {
                   <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-gray-100">
                     <MessageCircle className="h-3 w-3 text-gray-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[9px] font-semibold text-gray-800">Inquiry</p>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">{t("rgeApp.inquiry")}</p>
                 </div>
                 <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
                 <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
                   <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-emerald-200 bg-emerald-50">
                     <Sparkles className="h-3 w-3 text-emerald-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[9px] font-semibold text-gray-800">AI reply</p>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">{t("rgeApp.aiReply")}</p>
                 </div>
                 <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
                 <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
                   <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-gray-100">
                     <Filter className="h-3 w-3 text-gray-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[9px] font-semibold text-gray-800">Qualify</p>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">{t("rgeApp.qualify")}</p>
                 </div>
                 <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
                 <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
                   <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-gray-100">
                     <Target className="h-3 w-3 text-gray-600" aria-hidden />
                   </div>
-                  <p className="text-center text-[9px] font-semibold text-gray-800">Score</p>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">{t("rgeApp.score")}</p>
                 </div>
               </div>
               <div className="mt-2 flex w-full items-center justify-center gap-3">
                 <div className="flex gap-1.5">
                   <div className="flex items-center gap-1 rounded border border-emerald-200/60 bg-emerald-50/70 px-2 py-1">
                     <Calendar className="h-2.5 w-2.5 text-emerald-600" aria-hidden />
-                    <span className="text-[8px] font-medium text-gray-700">Book</span>
+                    <span className="text-[8px] font-medium text-gray-700">{t("inboxUi.book")}</span>
                   </div>
                   <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1">
                     <Timer className="h-2.5 w-2.5 text-gray-500" aria-hidden />
-                    <span className="text-[8px] text-gray-600">Nurture</span>
+                    <span className="text-[8px] text-gray-600">{t("rgeApp.nurture")}</span>
                   </div>
                   <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1">
                     <UserCheck className="h-2.5 w-2.5 text-gray-500" aria-hidden />
-                    <span className="text-[8px] text-gray-600">Human</span>
+                    <span className="text-[8px] text-gray-600">{t("rgeApp.human")}</span>
                   </div>
                 </div>
                 <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
@@ -1753,62 +1768,62 @@ export function RealtorGrowthEngine() {
                   <MessageCircle className="h-4 w-4 text-gray-600" aria-hidden />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-gray-800">New inquiry received</p>
-                  <p className="text-[10px] text-gray-500">Inbound messages from connected channels</p>
+                  <p className="text-xs font-semibold text-gray-800">{t("rgeApp.inquiryReceived")}</p>
+                  <p className="text-[10px] text-gray-500">{t("rgeApp.inboundChannels")}</p>
                 </div>
               </div>
-              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="ms-4 h-3 w-px bg-gray-200" />
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50">
                   <Sparkles className="h-4 w-4 text-emerald-600" aria-hidden />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-gray-800">Instant AI reply</p>
-                  <p className="text-[10px] text-gray-500">Context-aware response</p>
+                  <p className="text-xs font-semibold text-gray-800">{t("rgeApp.instantReply")}</p>
+                  <p className="text-[10px] text-gray-500">{t("rgeApp.contextReply")}</p>
                 </div>
               </div>
-              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="ms-4 h-3 w-px bg-gray-200" />
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
                   <Filter className="h-4 w-4 text-gray-600" aria-hidden />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-gray-800">Qualification</p>
-                  <p className="text-[10px] text-gray-500">Budget, timeline, readiness</p>
+                  <p className="text-xs font-semibold text-gray-800">{t("rgeApp.qualification")}</p>
+                  <p className="text-[10px] text-gray-500">{t("rgeApp.budgetTimeline")}</p>
                 </div>
               </div>
-              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="ms-4 h-3 w-px bg-gray-200" />
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
                   <Target className="h-4 w-4 text-gray-600" aria-hidden />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-gray-800">Intent scoring</p>
-                  <p className="text-[10px] text-gray-500">Lead qualification score</p>
+                  <p className="text-xs font-semibold text-gray-800">{t("rgeApp.intentScoring")}</p>
+                  <p className="text-[10px] text-gray-500">{t("rgeApp.qualificationScore")}</p>
                 </div>
               </div>
-              <div className="ml-4 h-3 w-px bg-gray-200" />
-              <div className="ml-11 flex flex-wrap gap-2">
+              <div className="ms-4 h-3 w-px bg-gray-200" />
+              <div className="ms-11 flex flex-wrap gap-2">
                 <div className="flex items-center gap-1.5 rounded border border-emerald-200/60 bg-emerald-50/70 px-2.5 py-1.5">
                   <Calendar className="h-3 w-3 text-emerald-600" aria-hidden />
-                  <span className="text-[10px] font-medium text-gray-700">Booking</span>
+                  <span className="text-[10px] font-medium text-gray-700">{t("rgeApp.booking")}</span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2.5 py-1.5">
                   <Timer className="h-3 w-3 text-gray-500" aria-hidden />
-                  <span className="text-[10px] text-gray-600">Follow-up</span>
+                  <span className="text-[10px] text-gray-600">{t("inboxUi.followUp")}</span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2.5 py-1.5">
                   <UserCheck className="h-3 w-3 text-gray-500" aria-hidden />
-                  <span className="text-[10px] text-gray-600">Handoff</span>
+                  <span className="text-[10px] text-gray-600">{t("rgeApp.handoff")}</span>
                 </div>
               </div>
-              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="ms-4 h-3 w-px bg-gray-200" />
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600">
                   <ClipboardList className="h-4 w-4 text-white" aria-hidden />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-gray-800">CRM update</p>
+                  <p className="text-xs font-semibold text-gray-800">{t("rgeApp.crmUpdate")}</p>
                   <div className="mt-0.5 flex gap-1">
                     <Badge className="border-0 bg-gray-100 px-1.5 py-0 text-[8px] text-gray-600">stage</Badge>
                     <Badge className="border-0 bg-gray-100 px-1.5 py-0 text-[8px] text-gray-600">tag</Badge>
@@ -1821,21 +1836,21 @@ export function RealtorGrowthEngine() {
 
           <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50/50 px-4 py-2.5 text-sm text-gray-600">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
-            <span className="text-xs">All paths update your CRM so your pipeline stays accurate in real time.</span>
+            <span className="text-xs">{t("rgeApp.crmAccurate")}</span>
           </div>
         </section>
 
         <section className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
-          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">Inside your workspace</h2>
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">{t("rgeApp.workspace")}</h2>
           <p className="mb-6 text-sm text-gray-500">
-            Representative surfaces this engine uses — from inbox to automations and pipeline.
+            {t("rgeApp.workspaceHelp")}
           </p>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="group">
               <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
                 <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
-                  <span className="text-[10px] font-semibold text-white">Inbox</span>
+                  <span className="text-[10px] font-semibold text-white">{t("inboxUi.inbox")}</span>
                   <div className="flex items-center gap-1.5">
                     <Search className="h-3 w-3 text-white/60" aria-hidden />
                     <Bell className="h-3 w-3 text-white/60" aria-hidden />
@@ -1869,14 +1884,14 @@ export function RealtorGrowthEngine() {
                   </div>
                 </div>
               </div>
-              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Inbox + Copilot</h3>
-              <p className="text-xs leading-relaxed text-gray-500">AI drafts and smart replies inside your unified inbox.</p>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">{t("rgeApp.inboxCopilot")}</h3>
+              <p className="text-xs leading-relaxed text-gray-500">{t("rgeApp.inboxCopilotHelp")}</p>
             </div>
 
             <div className="group">
               <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
                 <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
-                  <span className="text-[10px] font-semibold text-white">Automations</span>
+                  <span className="text-[10px] font-semibold text-white">{t("nav.automations")}</span>
                   <Plus className="h-3 w-3 text-white/60" aria-hidden />
                 </div>
                 <div className="bg-gray-50 p-3">
@@ -1895,17 +1910,17 @@ export function RealtorGrowthEngine() {
                     </div>
                     <div className="h-2 w-px bg-gray-300" />
                     <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[8px] font-medium text-gray-700">
-                      <Calendar className="h-2.5 w-2.5 text-gray-500" aria-hidden /> Book
+                      <Calendar className="h-2.5 w-2.5 text-gray-500" aria-hidden /> {t("inboxUi.book")}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
                   <span className="text-[8px] text-gray-500">Lead Nurture</span>
-                  <Badge className="border-0 bg-emerald-100 px-1.5 py-0 text-[7px] text-emerald-700">Active</Badge>
+                  <Badge className="border-0 bg-emerald-100 px-1.5 py-0 text-[7px] text-emerald-700">{t("inboxUi.active")}</Badge>
                 </div>
               </div>
-              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Flow automation</h3>
-              <p className="text-xs leading-relaxed text-gray-500">Visual flows that run so you never miss a lead.</p>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">{t("rgeApp.flowAutomation")}</h3>
+              <p className="text-xs leading-relaxed text-gray-500">{t("rgeApp.flowAutomationHelp")}</p>
             </div>
 
             <div className="group">
@@ -1916,7 +1931,7 @@ export function RealtorGrowthEngine() {
                 </div>
                 <div className="flex gap-1.5 overflow-hidden p-2">
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">NEW</div>
+                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">{t("rge.preview.lead3Tag")}</div>
                     <div className="space-y-1 rounded bg-gray-50 p-1">
                       <div className="rounded border border-gray-100 bg-white p-1.5 shadow-sm">
                         <p className="text-[8px] font-medium text-gray-800">Sarah M.</p>
@@ -1948,14 +1963,14 @@ export function RealtorGrowthEngine() {
                   <span className="text-[8px] font-medium text-emerald-600">$4.2M</span>
                 </div>
               </div>
-              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Pipeline / Tasks</h3>
-              <p className="text-xs leading-relaxed text-gray-500">Leads move stages automatically.</p>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">{t("rgeApp.pipelineTasks")}</h3>
+              <p className="text-xs leading-relaxed text-gray-500">{t("rgeApp.pipelineTasksHelp")}</p>
             </div>
 
             <div className="group">
               <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
                 <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
-                  <span className="text-[10px] font-semibold text-white">Templates</span>
+                  <span className="text-[10px] font-semibold text-white">{t("nav.templates")}</span>
                   <Settings className="h-3 w-3 text-white/60" aria-hidden />
                 </div>
                 <div className="space-y-1.5 p-2">
@@ -1978,14 +1993,14 @@ export function RealtorGrowthEngine() {
                   <div className="rounded-lg border border-gray-100 bg-white p-2">
                     <div className="mb-0.5 flex items-center justify-between">
                       <span className="text-[9px] font-semibold text-gray-800">Re-engagement</span>
-                      <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">Pending</Badge>
+                      <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">{t("inboxUi.conversationPending")}</Badge>
                     </div>
                     <p className="text-[8px] text-gray-500">New listings that match...</p>
                   </div>
                 </div>
               </div>
-              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Template follow-up</h3>
-              <p className="text-xs leading-relaxed text-gray-500">Approved templates with rule-based timing.</p>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">{t("rgeApp.templateFollowup")}</h3>
+              <p className="text-xs leading-relaxed text-gray-500">{t("rgeApp.templateFollowupHelp")}</p>
             </div>
           </div>
         </section>
@@ -1996,15 +2011,15 @@ export function RealtorGrowthEngine() {
             className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm"
             id="rge-requirements"
           >
-            <h2 className="mb-1 text-lg font-bold text-gray-900">Requirements</h2>
-            <p className="mb-4 text-xs text-gray-500">Before this engine can run end-to-end in your account.</p>
+            <h2 className="mb-1 text-lg font-bold text-gray-900">{t("rgeApp.requirements")}</h2>
+            <p className="mb-4 text-xs text-gray-500">{t("rgeApp.requirementsHelp")}</p>
             <div className="space-y-2.5">
               {[
-                "Requires Pro plan",
-                "Requires AI Brain",
-                "WhatsApp Business connected for live automations",
-                "Approved templates may be needed for re-engagement outside the customer service window",
-                "Concierge onboarding included with Pro",
+                t("rgeApp.needsPro"),
+                t("rgeApp.needsBrain"),
+                t("rgeApp.needsWhatsApp"),
+                t("rgeApp.needsTemplate"),
+                t("rgeApp.conciergePro"),
               ].map((line) => (
                 <div key={line} className="flex items-start gap-2.5">
                   <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
@@ -2015,13 +2030,15 @@ export function RealtorGrowthEngine() {
               ))}
             </div>
             <p className="mt-4 text-[10px] leading-relaxed text-gray-400">
-              WhatsApp messaging fees are billed separately by Meta. The Growth Engine has no additional charge with Pro.
+              {t("rgeApp.metaFees")}
+            </p>
+            <p className="text-sm text-muted-foreground">{t("rgeApp.globalPages")}
             </p>
           </section>
 
           <section className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm">
-            <h2 className="mb-1 text-lg font-bold text-gray-900">Premium onboarding &amp; concierge</h2>
-            <p className="mb-4 text-xs text-gray-500">We stay with you until the system is live — not a generic help article.</p>
+            <h2 className="mb-1 text-lg font-bold text-gray-900">{t("rgeApp.concierge")}</h2>
+            <p className="mb-4 text-xs text-gray-500">{t("rgeApp.conciergeHelp")}</p>
             <div className="space-y-2.5">
               {[
                 "White-glove setup with a launch specialist",
@@ -2045,12 +2062,12 @@ export function RealtorGrowthEngine() {
         {status === "locked" ? (
           <section className="rounded-2xl border border-gray-200/80 bg-white px-6 py-10 text-center shadow-sm md:px-10 md:py-12">
             <h2 className="mb-2 text-2xl font-semibold tracking-tight text-gray-900 md:text-3xl">
-              Ready to run this in your workspace?
+              {t("rgeApp.readyTitle")}
             </h2>
             <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-600">
               {isPaused
-                ? "Your plan must be active for this engine to run. Reactivate Pro and AI above, then continue."
-                : "Install the Realtor Growth Engine with Pro and continue to guided concierge onboarding."}
+                ? t("rgeApp.activePlanNeeded")
+                : t("rgeApp.installWithPro")}
             </p>
             {templateData?.subscription?.accessOk === false ? (
               <InAppProUpgradeButton
@@ -2073,23 +2090,23 @@ export function RealtorGrowthEngine() {
               >
               {checkingSubscription ? (
                 <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Checking…
+                  <Loader2 className="me-2 h-5 w-5 animate-spin" />
+                  {t("rgeApp.checking")}
                 </>
               ) : installMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Installing…
+                  <Loader2 className="me-2 h-5 w-5 animate-spin" />
+                  {t("rgeApp.installing")}
                 </>
               ) : (
                 <>
                   {primaryMarketingCta.label}
-                  {!primaryMarketingCta.disabled && <ChevronRight className="ml-1.5 h-5 w-5" />}
+                  {!primaryMarketingCta.disabled && <ChevronRight className="ms-1.5 h-5 w-5 rtl:rotate-180" />}
                 </>
               )}
               </Button>
             )}
-            <p className="mt-4 text-xs text-gray-500">Included with Pro · No additional charge with Pro.</p>
+            <p className="mt-4 text-xs text-gray-500">{t("rgeApp.proIncluded")}</p>
           </section>
         ) : hasPurchased && !onboardingComplete ? (
           <section
@@ -2097,11 +2114,10 @@ export function RealtorGrowthEngine() {
             data-testid="section-bottom-onboarding-cta"
           >
             <h2 className="mb-2 text-2xl font-semibold tracking-tight text-gray-900 md:text-3xl">
-              Finish your <RealtorMark /> launch setup
+              {t("rgeApp.finishTitle")}
             </h2>
             <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-600">
-              Resume onboarding to book your concierge session and complete activation. Connect WhatsApp when you are ready
-              for live automations.
+              {t("rgeApp.resumeLaunch")}
             </p>
             <Button
               size="lg"
@@ -2109,8 +2125,8 @@ export function RealtorGrowthEngine() {
               onClick={() => setLocation(RGE_TEMPLATE_ONBOARDING_PATH)}
               data-testid="button-bottom-cta"
             >
-              {getRgeDetailCtaLabel(status, entitlement, onboardingStep)}
-              <ChevronRight className="ml-1.5 h-5 w-5" />
+              {detailCta}
+              <ChevronRight className="ms-1.5 h-5 w-5 rtl:rotate-180" />
             </Button>
           </section>
         ) : null}
@@ -2118,49 +2134,37 @@ export function RealtorGrowthEngine() {
       </div>
     );
   };
-  const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string; qualificationLogic?: string }> = {
-    W1: {
-      summary: "Instantly replies to every new inquiry with a personalized greeting. Creates a lead record, tags as 'New', sets pipeline to 'New Lead', and creates a review task.",
-      triggers: "New chat / first message from an unknown number",
-      timing: "Immediate (within seconds of first message)",
-    },
-    W2: {
-      summary: "Detects buyer, seller, and investor intent, scores each inbound message, learns budget / financing / timeline from the conversation, and asks lightweight follow-up questions when important details are missing.",
-      triggers: "Every inbound message",
-      timing: "Real-time analysis on each incoming message",
-      qualificationLogic: "Financing → Budget → Timeline",
-    },
-    W3: {
-      summary: "Detects when a lead mentions scheduling intent (tour, showing, call, visit) and automatically sends your customized Booking Link (e.g., Calendly/TidyCal). This allows the lead to book directly into your calendar. Also tags the lead as 'Appointment Requested' and creates a high-priority task in your CRM.",
-      triggers: "Keywords: call, book, available, tour, showing, visit, schedule",
-      timing: "Immediate on keyword detection",
-    },
-    W4: {
-      summary: "Sends a friendly re-engagement follow-up when a lead goes quiet after their last message. Timing is managed for channel-safe delivery (especially WhatsApp). Runs for active leads except Closed, Unqualified, Lost, or Do Not Contact. Tags as 'Follow-Up Needed'.",
-      triggers: "No reply after last customer message",
-      timing: "Next-day re-engagement (managed)",
-    },
-    W5: {
-      summary: "Second re-engagement for leads who are still quiet after the next-day follow-up. Suggests new listings matching their criteria. Meta channels skip free-form sends when the messaging window is closed unless an approved template is configured.",
-      triggers: "No reply after last customer message",
-      timing: "Multi-step nurture (about 3 days of silence)",
-    },
-    W6: {
-      summary: "Later nurture step after continued silence from the customer's last message. Moves the lead to 'Nurture / Follow-Up' for long-term re-engagement. Sends a low-pressure market update on eligible channels.",
-      triggers: "No reply after last customer message",
-      timing: "Multi-step nurture (about a week of silence)",
-    },
-    W7: {
-      summary: "Safety workflow that detects opt-out or disinterest. Tags as 'Do Not Contact', moves to 'Unqualified' stage, and sends a polite close message. Prevents further automated outreach.",
-      triggers: "Keywords: stop, unsubscribe, spam, not interested, remove",
-      timing: "Immediate on keyword detection",
-    },
-    W8: {
-      summary:
-        "On the first message of a new chat, detects English, Spanish, or Hebrew from the inbound text and stores it on the lead (custom field languageDetected).",
-      triggers: "New chat / first message",
-      timing: "Immediate on first inbound message",
-    },
+  const workflowTitle = (workflow: { key: string; name: string }) => {
+    switch (workflow.key) {
+      case "W1": return t("rgeApp.w1Name");
+      case "W2": return t("rgeApp.w2Name");
+      case "W3": return t("rgeApp.w3Name");
+      case "W4": return t("rgeApp.w4Name");
+      case "W5": return t("rgeApp.w5Name");
+      case "W6": return t("rgeApp.w6Name");
+      case "W7": return t("rgeApp.w7Name");
+      case "W8": return t("rgeApp.w8Name");
+      default: return workflow.name;
+    }
+  };
+  const workflowStatusLabel = (status: string) => {
+    switch (status) {
+      case "Running": return t("rgeApp.running");
+      case "Warning": return t("rgeApp.warning");
+      case "Disabled": return t("rgeApp.disabled");
+      default: return t("rgeApp.checkingStatus");
+    }
+  };
+
+  const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string }> = {
+    W1: { summary: t("rgeApp.w1Summary"), triggers: t("rgeApp.w1Trigger"), timing: t("rgeApp.w1Timing") },
+    W2: { summary: t("rgeApp.w2Summary"), triggers: t("rgeApp.w2Trigger"), timing: t("rgeApp.w2Timing") },
+    W3: { summary: t("rgeApp.w3Summary"), triggers: t("rgeApp.w3Trigger", { keywords: "call, book, available, tour, showing, visit, schedule" }), timing: t("rgeApp.keywordTiming") },
+    W4: { summary: t("rgeApp.w4Summary"), triggers: t("rgeApp.noReplyTrigger"), timing: t("rgeApp.w4Timing") },
+    W5: { summary: t("rgeApp.w5Summary"), triggers: t("rgeApp.noReplyTrigger"), timing: t("rgeApp.w5Timing") },
+    W6: { summary: t("rgeApp.w6Summary"), triggers: t("rgeApp.noReplyTrigger"), timing: t("rgeApp.w6Timing") },
+    W7: { summary: t("rgeApp.w7Summary"), triggers: t("rgeApp.w7Trigger", { keywords: "stop, unsubscribe, spam, not interested, remove" }), timing: t("rgeApp.keywordTiming") },
+    W8: { summary: t("rgeApp.w8Summary"), triggers: t("rgeApp.w8Trigger"), timing: t("rgeApp.w8Timing") },
   };
 
   const WORKFLOW_FIELDS: Record<string, string[]> = {
@@ -2296,10 +2300,10 @@ export function RealtorGrowthEngine() {
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/preferences"] });
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/routing-config"] });
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
-        toast({ title: "Settings saved", description: `Preferences for "${selectedWf?.name}" updated.` });
+        toast({ title: t("rgeApp.settingsSaved"), description: t("rgeApp.prefsUpdated", { workflow: selectedWf ? workflowTitle(selectedWf) : "" }) });
         setSelectedWf(null);
       } catch {
-        toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+        toast({ title: t("common.error"), description: t("rgeApp.settingsFailed"), variant: "destructive" });
       } finally {
         setSaving(false);
       }
@@ -2318,7 +2322,7 @@ export function RealtorGrowthEngine() {
         }
       }
       setLocalPrefs(restored);
-      toast({ title: "Defaults restored", description: "Fields reset to template defaults. Click Save to apply." });
+      toast({ title: t("rgeApp.defaultsRestored"), description: t("rgeApp.defaultsHint") });
     };
 
     const updatePref = (key: string, value: any) => {
@@ -2341,19 +2345,19 @@ export function RealtorGrowthEngine() {
     const renderGlobalFields = () => (
       <div className="space-y-4">
         <div>
-          <Label className="text-sm font-medium">Service Territory</Label>
+          <Label className="text-sm font-medium">{t("rgeApp.territory")}</Label>
           <Input
-            placeholder="e.g. Miami-Dade, Broward County"
+            placeholder={t("rgeApp.territoryExample")}
             value={localPrefs.serviceTerritory || ""}
             onChange={e => updatePref("serviceTerritory", e.target.value)}
             className="mt-1"
             data-testid="input-service-territory"
           />
-          <p className="text-[11px] text-muted-foreground mt-1">Areas you serve — used in message personalization</p>
+          <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.territoryHelp")}</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-sm font-medium">Min Price ($)</Label>
+            <Label className="text-sm font-medium">{t("rgeApp.minPrice")}</Label>
             <Input
               type="number"
               placeholder="0"
@@ -2364,7 +2368,7 @@ export function RealtorGrowthEngine() {
             />
           </div>
           <div>
-            <Label className="text-sm font-medium">Max Price ($)</Label>
+            <Label className="text-sm font-medium">{t("rgeApp.maxPrice")}</Label>
             <Input
               type="number"
               placeholder="0"
@@ -2376,30 +2380,30 @@ export function RealtorGrowthEngine() {
           </div>
         </div>
         <div>
-          <Label className="text-sm font-medium">Include Keywords</Label>
+          <Label className="text-sm font-medium">{t("rgeApp.includeKeywords")}</Label>
           <Input
-            placeholder="luxury, waterfront, penthouse"
+            placeholder={t("rgeApp.includeExample")}
             value={localPrefs.includeKeywords || ""}
             onChange={e => updatePref("includeKeywords", e.target.value)}
             className="mt-1"
             data-testid="input-include-keywords"
           />
-          <p className="text-[11px] text-muted-foreground mt-1">Comma-separated — boost scoring when detected</p>
+          <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.includeHelp")}</p>
         </div>
         <div>
-          <Label className="text-sm font-medium">Exclude Keywords</Label>
+          <Label className="text-sm font-medium">{t("rgeApp.excludeKeywords")}</Label>
           <Input
-            placeholder="spam, lottery, scam"
+            placeholder={t("rgeApp.excludeExample")}
             value={localPrefs.excludeKeywords || ""}
             onChange={e => updatePref("excludeKeywords", e.target.value)}
             className="mt-1"
             data-testid="input-exclude-keywords"
           />
-          <p className="text-[11px] text-muted-foreground mt-1">Comma-separated — penalize or filter when detected</p>
+          <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.excludeHelp")}</p>
         </div>
         <div>
-          <Label className="text-sm font-medium">Preferred Language</Label>
-          <Select
+          <Label className="text-sm font-medium">{t("rgeApp.preferredLanguage")}</Label>
+          <RgeSelect
             value={localPrefs.preferredLanguage || "en"}
             onValueChange={(v) => {
               const server = savedPrefs.preferredLanguage || "en";
@@ -2407,16 +2411,11 @@ export function RealtorGrowthEngine() {
               if (v === (localPrefs.preferredLanguage || "en")) return;
               updatePref("preferredLanguage", v);
             }}
-          >
-            <SelectTrigger className="mt-1" data-testid="select-preferred-language">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="en">English</SelectItem>
-              <SelectItem value="es">Spanish</SelectItem>
-              <SelectItem value="he">Hebrew</SelectItem>
-            </SelectContent>
-          </Select>
+           className="mt-1" data-testid="select-preferred-language">
+            <option value="en">{t("rgeApp.english")}</option>
+            <option value="es">{t("rgeApp.spanish")}</option>
+            <option value="he">{t("rgeApp.hebrew")}</option>
+          </RgeSelect>
         </div>
       </div>
     );
@@ -2428,7 +2427,7 @@ export function RealtorGrowthEngine() {
         <div key={field}>
           <Label className="text-sm font-medium">{label}</Label>
           <Input
-            placeholder="keyword1, keyword2, keyword3"
+            placeholder={t("rgeApp.keywordExample")}
             value={localPrefs[kw(field)] ?? def[field] ?? ""}
             onChange={e => updatePref(kw(field), e.target.value)}
             className="mt-1"
@@ -2474,37 +2473,37 @@ export function RealtorGrowthEngine() {
       return (
         <div className="space-y-5 mt-4">
           <Separator />
-          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Lead Type Detection</p>
-          {kwInput("buyerKeywords", "Buyer Detection Keywords", "Comma-separated keywords used to detect buyer intent")}
-          {kwInput("sellerKeywords", "Seller Detection Keywords", "Comma-separated keywords used to detect seller intent")}
-          {kwInput("investorKeywords", "Investor Detection Keywords", "Comma-separated keywords used to detect investor intent")}
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("rgeApp.leadType")}</p>
+          {kwInput("buyerKeywords", t("rgeApp.buyerKeywords"), t("rgeApp.buyerKeywordsHelp"))}
+          {kwInput("sellerKeywords", t("rgeApp.sellerKeywords"), t("rgeApp.sellerKeywordsHelp"))}
+          {kwInput("investorKeywords", t("rgeApp.investorKeywords"), t("rgeApp.investorKeywordsHelp"))}
 
           <Separator />
-          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Financial Readiness Detection</p>
-          {kwInput("financialKeywords", "Financial Readiness Keywords", "Comma-separated keywords used to detect financing readiness")}
-          {kwInput("budgetKeywords", "Budget Keywords", "Keywords used to detect budget or price range discussions")}
-          {kwInput("timelineKeywords", "Timeline Keywords", "Keywords used to detect how soon the lead plans to move or buy")}
-          {kwInput("bookingKeywords", "Booking / High Intent Keywords", "Keywords used to detect immediate appointment intent")}
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("rgeApp.financialReadiness")}</p>
+          {kwInput("financialKeywords", t("rgeApp.financeKeywords"), t("rgeApp.financeKeywordsHelp"))}
+          {kwInput("budgetKeywords", t("rgeApp.budgetKeywords"), t("rgeApp.budgetKeywordsHelp"))}
+          {kwInput("timelineKeywords", t("rgeApp.timelineKeywords"), t("rgeApp.timelineKeywordsHelp"))}
+          {kwInput("bookingKeywords", t("rgeApp.bookingKeywords"), t("rgeApp.bookingKeywordsHelp"))}
 
           <Separator />
-          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Qualification Follow-Up Behavior</p>
-          <p className="text-[11px] text-muted-foreground -mt-2">The engine will ask only the next most important question if information is missing.</p>
-          {toggle("askFinancingFollowUp", "Ask financing follow-up when missing")}
-          {toggle("askBudgetFollowUp", "Ask budget follow-up when missing")}
-          {toggle("askTimelineFollowUp", "Ask timeline follow-up when missing")}
-          {toggle("limitOneQuestion", "Limit qualification follow-ups to one unanswered question at a time")}
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("rgeApp.qualificationFollowup")}</p>
+          <p className="text-[11px] text-muted-foreground -mt-2">{t("rgeApp.nextQuestion")}</p>
+          {toggle("askFinancingFollowUp", t("rgeApp.askFinance"))}
+          {toggle("askBudgetFollowUp", t("rgeApp.askBudget"))}
+          {toggle("askTimelineFollowUp", t("rgeApp.askTimeline"))}
+          {toggle("limitOneQuestion", t("rgeApp.limitQuestions"))}
 
           <Separator />
-          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Follow-Up Question Templates</p>
-          {qaInput("financingQuestion", "Financing question")}
-          {qaInput("budgetQuestion", "Budget question")}
-          {qaInput("timelineQuestion", "Timeline question")}
-          {qaInput("lenderQuestion", "Lender assistance question")}
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("rgeApp.followupTemplates")}</p>
+          {qaInput("financingQuestion", t("rgeApp.financeQuestion"))}
+          {qaInput("budgetQuestion", t("rgeApp.budgetQuestion"))}
+          {qaInput("timelineQuestion", t("rgeApp.timelineQuestion"))}
+          {qaInput("lenderQuestion", t("rgeApp.lenderQuestion"))}
 
           <Separator />
           <div>
-            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Service Routing (Optional)</p>
-            <p className="text-[11px] text-muted-foreground mt-1">Automatically offer to connect leads with your trusted partners based on intent.</p>
+            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("rgeApp.serviceRouting")}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.routingHelp")}</p>
           </div>
 
           {routingServices.map((svc, idx) => {
@@ -2533,18 +2532,18 @@ export function RealtorGrowthEngine() {
                 {svc.enabled && (
                   <div className="px-4 py-4 space-y-3 border-t bg-white">
                     <div>
-                      <Label className="text-sm font-medium">Trigger Keywords</Label>
+                      <Label className="text-sm font-medium">{t("rgeApp.triggerKeywords")}</Label>
                       <Input
-                        placeholder="keyword1, keyword2"
+                        placeholder={t("rgeApp.triggerExample")}
                         value={svc.keywords}
                         onChange={e => update("keywords", e.target.value)}
                         className="mt-1"
                         data-testid={`input-routing-keywords-${svc.type}`}
                       />
-                      <p className="text-[11px] text-muted-foreground mt-1">Comma-separated — used to detect service intent</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.triggerHelp")}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium">Offer Message</Label>
+                      <Label className="text-sm font-medium">{t("rgeApp.offerMessage")}</Label>
                       <Textarea
                         rows={2}
                         value={svc.offerMessage}
@@ -2552,11 +2551,11 @@ export function RealtorGrowthEngine() {
                         className="mt-1 text-sm resize-none"
                         data-testid={`textarea-routing-offer-${svc.type}`}
                       />
-                      <p className="text-[11px] text-muted-foreground mt-1">Sent to ask permission before routing — not the routing itself</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.offerHelp")}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium">Routing Type</Label>
-                      <Select
+                      <Label className="text-sm font-medium">{t("rgeApp.routingType")}</Label>
+                      <RgeSelect
                         value={svc.routingType || "task"}
                         onValueChange={(v) => {
                           logRgeSelect(
@@ -2570,23 +2569,18 @@ export function RealtorGrowthEngine() {
                           if (v === (svc.routingType || "task")) return;
                           update("routingType", v);
                         }}
-                      >
-                        <SelectTrigger className="mt-1" data-testid={`select-routing-type-${svc.type}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="task">Create internal task</SelectItem>
-                          <SelectItem value="contact_info">Send contact info</SelectItem>
-                          <SelectItem value="link">Send scheduling link</SelectItem>
-                        </SelectContent>
-                      </Select>
+                       className="mt-1" data-testid={`select-routing-type-${svc.type}`}>
+                        <option value="task">{t("rgeApp.internalTask")}</option>
+                        <option value="contact_info">{t("rgeApp.sendContact")}</option>
+                        <option value="link">{t("rgeApp.sendScheduling")}</option>
+                      </RgeSelect>
                     </div>
                     <Separator />
-                    <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Partner Details</p>
+                    <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">{t("rgeApp.partnerDetails")}</p>
                     <div>
-                      <Label className="text-sm font-medium">Partner Name</Label>
+                      <Label className="text-sm font-medium">{t("rgeApp.partnerName")}</Label>
                       <Input
-                        placeholder="e.g. First National Lending"
+                        placeholder={t("rgeApp.partnerExample")}
                         value={svc.partnerName}
                         onChange={e => update("partnerName", e.target.value)}
                         className="mt-1"
@@ -2595,9 +2589,9 @@ export function RealtorGrowthEngine() {
                     </div>
                     {(svc.routingType === "contact_info" || svc.routingType === "task") && (
                       <div>
-                        <Label className="text-sm font-medium">Contact Info (phone / email)</Label>
+                        <Label className="text-sm font-medium">{t("rgeApp.contactInfo")}</Label>
                         <Input
-                          placeholder="e.g. +1 305 555 0100 or hello@partner.com"
+                          dir="ltr" placeholder="e.g. +1 305 555 0100 or hello@partner.com"
                           value={svc.contact}
                           onChange={e => update("contact", e.target.value)}
                           className="mt-1"
@@ -2607,9 +2601,9 @@ export function RealtorGrowthEngine() {
                     )}
                     {(svc.routingType === "link" || svc.routingType === "task") && (
                       <div>
-                        <Label className="text-sm font-medium">Scheduling Link</Label>
+                        <Label className="text-sm font-medium">{t("rgeApp.schedulingLink")}</Label>
                         <Input
-                          placeholder="https://calendly.com/..."
+                          dir="ltr" placeholder="https://calendly.com/..."
                           value={svc.link}
                           onChange={e => update("link", e.target.value)}
                           className="mt-1"
@@ -2618,14 +2612,14 @@ export function RealtorGrowthEngine() {
                       </div>
                     )}
                     <div>
-                      <Label className="text-sm font-medium">Auto-Applied Tag</Label>
+                      <Label className="text-sm font-medium">{t("rgeApp.autoTag")}</Label>
                       <Input
                         value={svc.tags.join(", ")}
                         onChange={e => update("tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
                         className="mt-1"
                         data-testid={`input-routing-tags-${svc.type}`}
                       />
-                      <p className="text-[11px] text-muted-foreground mt-1">Applied to the lead when routing is confirmed</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.autoTagHelp")}</p>
                     </div>
                   </div>
                 )}
@@ -2645,32 +2639,32 @@ export function RealtorGrowthEngine() {
       return (
         <div className="space-y-4 mt-4">
           <Separator />
-          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workflow-Specific Settings</p>
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t("rgeApp.workflowSettings")}</p>
           {fields.map(field => {
             const prefKey = `${wfKey}_${field}`;
             if (field === "bookingLink") {
               if (calendlyConnected) {
                 return (
                   <div key={field} className="rounded-md border border-sky-200 bg-sky-50/90 px-3 py-2.5 text-sm text-sky-950">
-                    <p className="font-medium text-sky-950">Calendly is connected. Booking links are managed automatically.</p>
+                    <p className="font-medium text-sky-950">{t("rgeApp.calendlyReady")}</p>
                     <p className="text-[11px] text-sky-900/85 mt-1.5 leading-snug">
-                      The manual booking link is disabled so scheduling only flows from your Calendly integration (no duplicate prompts).
+                      {t("rgeApp.calendlyOnly")}
                     </p>
                   </div>
                 );
               }
               return (
                 <div key={field}>
-                  <Label className="text-sm font-medium">Booking Link (Calendly / TidyCal)</Label>
+                  <Label className="text-sm font-medium">{t("rgeApp.bookingLink")}</Label>
                   <Input
-                    placeholder="https://calendly.com/your-name/showing"
+                    dir="ltr" placeholder="https://calendly.com/your-name/showing"
                     value={localPrefs[prefKey] || ""}
                     onChange={e => updatePref(prefKey, e.target.value)}
                     className="mt-1"
                     data-testid="input-booking-link"
                   />
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    This link will be sent automatically when a lead asks to book a tour or call.
+                    {t("rgeApp.bookingLinkHelp")}
                   </p>
                 </div>
               );
@@ -2678,8 +2672,8 @@ export function RealtorGrowthEngine() {
             if (field === "followUpDelayHours") {
               return (
                 <div key={field}>
-                  <Label className="text-sm font-medium">Follow-Up Delay</Label>
-                  <Select
+                  <Label className="text-sm font-medium">{t("rgeApp.followupDelay")}</Label>
+                  <RgeSelect
                     value={String(localPrefs[prefKey] ?? WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] ?? 24)}
                     onValueChange={(v) => {
                       const current = String(localPrefs[prefKey] ?? WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] ?? 24);
@@ -2694,39 +2688,34 @@ export function RealtorGrowthEngine() {
                       if (v === current) return;
                       updatePref(prefKey, Number(v));
                     }}
-                  >
-                    <SelectTrigger className="mt-1" data-testid={`select-${field}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2">2 hours</SelectItem>
-                      <SelectItem value="24">24 hours</SelectItem>
-                      <SelectItem value="48">48 hours</SelectItem>
-                      <SelectItem value="72">72 hours</SelectItem>
-                      <SelectItem value="168">7 days</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground mt-1">How long to wait before sending this follow-up</p>
+                   className="mt-1" data-testid={`select-${field}`}>
+                    <option value="2">{t("rgeApp.hours2")}</option>
+                    <option value="24">{t("rgeApp.hours24")}</option>
+                    <option value="48">{t("rgeApp.hours48")}</option>
+                    <option value="72">{t("rgeApp.hours72")}</option>
+                    <option value="168">{t("rgeApp.days7")}</option>
+                  </RgeSelect>
+                  <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.delayHelp")}</p>
                 </div>
               );
             }
             const labelMap: Record<string, string> = {
-              buyerKeywords: "Buyer Detection Keywords",
-              sellerKeywords: "Seller Detection Keywords",
-              investorKeywords: "Investor Detection Keywords",
+              buyerKeywords: t("rgeApp.buyerKeywords"),
+              sellerKeywords: t("rgeApp.sellerKeywords"),
+              investorKeywords: t("rgeApp.investorKeywords"),
               appointmentIntentKeywords: "Appointment Intent Keywords",
             };
             return (
               <div key={field}>
                 <Label className="text-sm font-medium">{labelMap[field] || field}</Label>
                 <Input
-                  placeholder="keyword1, keyword2, keyword3"
+                  placeholder={t("rgeApp.keywordExample")}
                   value={localPrefs[prefKey] || WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] || ""}
                   onChange={e => updatePref(prefKey, e.target.value)}
                   className="mt-1"
                   data-testid={`input-${field}`}
                 />
-                <p className="text-[11px] text-muted-foreground mt-1">Comma-separated keywords used for detection</p>
+                <p className="text-[11px] text-muted-foreground mt-1">{t("rgeApp.detectionKeywords")}</p>
               </div>
             );
           })}
@@ -2745,7 +2734,7 @@ export function RealtorGrowthEngine() {
         installed ? (installed.isActive ? "Running" : "Disabled") :
         installedWorkflows || workflowStatusError ? "Warning" : "Checking";
       return { workflow, status, detail: status === "Warning"
-        ? (isPaused ? "Growth Engine access is paused" : workflowStatusError ? "Workflow status unavailable" : "Workflow has no installed record")
+        ? (isPaused ? t("rgeApp.pausedAccess") : workflowStatusError ? t("rgeApp.workflowStatusUnavailable") : t("rgeApp.workflowMissing"))
         : undefined };
     });
     const runningCount = workflowRows.filter((row) => row.status === "Running").length;
@@ -2755,7 +2744,7 @@ export function RealtorGrowthEngine() {
     return (
       <div className="mx-auto w-full max-w-7xl px-3 py-5 sm:px-6">
         <header className="mb-5">
-          <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl"><RealtorMark /> Growth Engine</h1>
+          <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl"><RealtorMark /> {t("rgeApp.engine")}</h1>
         </header>
 
         <div
@@ -2767,29 +2756,29 @@ export function RealtorGrowthEngine() {
               <CardHeader className="p-4 pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  Active Automations
+                  {t("rgeApp.activeAutomations")}
                 </CardTitle>
-                <CardDescription>{assetsLoading ? "Loading workflows…" : assetsError
-                  ? "Workflow details unavailable" : `${runningCount} of ${workflowRows.length} running`}</CardDescription>
+                <CardDescription>{assetsLoading ? t("rgeApp.loadingWorkflows") : assetsError
+                  ? t("rgeApp.workflowUnavailable") : t("rgeApp.workflowsRunning", { running: runningCount, total: workflowRows.length })}</CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-3">
                 <ul className="divide-y divide-slate-200">
                   {workflowRows.map(({ workflow, status, detail }) => (
                     <li key={workflow.key}>
                       <button type="button"
-                        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-1 py-2 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
+                        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-1 py-2 text-start hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
                         onClick={() => openModal(workflow)}
                         data-testid={`workflow-row-${workflow.key}`}
-                        aria-label={`Customize ${workflow.name}`}>
+                        aria-label={t("rgeApp.customizeWorkflow", { workflow: workflowTitle(workflow) })}>
                         <span className="min-w-0 text-sm font-medium text-slate-900">
-                          {workflow.name}
+                          {workflowTitle(workflow)}
                           {detail && <span className="block text-xs font-normal text-slate-600">{detail}</span>}
                         </span>
                         <span className="flex shrink-0 items-center gap-1.5">
                           <Badge variant="outline" className={cn("text-xs",
                             status === "Running" ? "border-emerald-200 text-emerald-800" :
                               status === "Warning" ? "border-amber-200 text-amber-900" : "border-slate-200 text-slate-600")}>
-                            {status}
+                            {workflowStatusLabel(status)}
                           </Badge>
                           <Settings className="h-4 w-4 text-slate-600" aria-hidden="true" />
                         </span>
@@ -2813,13 +2802,13 @@ export function RealtorGrowthEngine() {
             <Card>
               <CardHeader className="p-4 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Target className="h-4 w-4 text-brand-green" /> AI Qualification
+                  <Target className="h-4 w-4 text-brand-green" /> {t("rgeApp.aiQualification")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm">
-                <span className="text-slate-700">Real estate rules</span>
+                <span className="text-slate-700">{t("rgeApp.realEstateRules")}</span>
                 <Badge variant="outline" className={isPaused ? "border-amber-200 text-amber-900" : "border-emerald-200 text-emerald-800"}>
-                  {isPaused ? "Paused" : "Active"}
+                  {isPaused ? t("rgeApp.paused") : t("inboxUi.active")}
                 </Badge>
               </CardContent>
             </Card>
@@ -2827,18 +2816,18 @@ export function RealtorGrowthEngine() {
             <Card>
               <CardHeader className="p-4 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <LayoutGrid className="h-4 w-4 text-brand-green" /> CRM Pipeline
+                  <LayoutGrid className="h-4 w-4 text-brand-green" /> {t("rgeApp.crmPipeline")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4 text-sm text-slate-700">
                 {pipelineStages.length ? (
                   <details>
-                    <summary className="cursor-pointer">{pipelineStages.length} stages</summary>
-                    <ol className="mt-2 list-decimal space-y-1 pl-5">
-                      {pipelineStages.map((stage, index) => <li key={index}>{stage}</li>)}
+                    <summary className="cursor-pointer">{t("rgeApp.stagesCount", { count: pipelineStages.length })}</summary>
+                    <ol className="mt-2 list-decimal space-y-1 ps-5">
+                      {pipelineStages.map((stage, index) => <li key={index}>{crmStageLabel(t, stage)}</li>)}
                     </ol>
                   </details>
-                ) : "Pipeline stages unavailable"}
+                ) : t("rgeApp.pipelineUnavailable")}
               </CardContent>
             </Card>
 
@@ -2848,6 +2837,7 @@ export function RealtorGrowthEngine() {
         </div>
 
         <section className="mt-4 w-full scroll-mt-24" data-testid="rge-inventory-section">
+          <p className="mb-3 text-sm text-muted-foreground">{t("rgeApp.setupExplanation")}</p>
           <InventorySourcesSection variant="compact" className="w-full" />
         </section>
 
@@ -2855,8 +2845,8 @@ export function RealtorGrowthEngine() {
           <DialogContent className="max-w-2xl p-0 flex flex-col" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b shrink-0">
               <div>
-                <DialogTitle className="text-lg font-bold">{selectedWf?.name}</DialogTitle>
-                <DialogDescription className="text-xs mt-0.5">Customize preferences safely — core logic is locked.</DialogDescription>
+                <DialogTitle className="text-lg font-bold">{selectedWf && workflowTitle(selectedWf)}</DialogTitle>
+                <DialogDescription className="text-xs mt-0.5">{t("rgeApp.customizeHint")}</DialogDescription>
               </div>
             </div>
 
@@ -2864,10 +2854,10 @@ export function RealtorGrowthEngine() {
               <div className="px-6 pt-2 shrink-0">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="preview" className="text-sm" data-testid="tab-preview">
-                    <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
+                    <Eye className="w-3.5 h-3.5 me-1.5" /> {t("inboxUi.preview")}
                   </TabsTrigger>
                   <TabsTrigger value="customize" className="text-sm" data-testid="tab-customize">
-                    <Settings className="w-3.5 h-3.5 mr-1.5" /> Customize
+                    <Settings className="w-3.5 h-3.5 me-1.5" /> {t("rgeApp.customize")}
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -2875,21 +2865,21 @@ export function RealtorGrowthEngine() {
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <TabsContent value="preview" className="px-6 pb-4 mt-0 space-y-5">
                   <div className="pt-3">
-                    <h4 className="text-sm font-semibold text-gray-800 mb-1">What this workflow does</h4>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">{t("rgeApp.workflowPurpose")}</h4>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.summary}
                     </p>
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Trigger</h4>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">{t("rgeApp.trigger")}</h4>
                     <p className="text-sm text-muted-foreground">
                       {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.triggers}
                     </p>
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Timing</h4>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">{t("rgeApp.timing")}</h4>
                     <p className="text-sm text-muted-foreground">
                       {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.timing}
                     </p>
@@ -2898,33 +2888,33 @@ export function RealtorGrowthEngine() {
                   {selectedWf?.key === "W2" && (
                     <div className="space-y-4">
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-800 mb-1">Qualification logic</h4>
+                        <h4 className="text-sm font-semibold text-gray-800 mb-1">{t("rgeApp.qualificationLogic")}</h4>
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                          This workflow detects buyer, seller, and investor intent, scores each inbound message, learns budget / financing / timeline from the conversation, and asks lightweight follow-up questions when important details are missing.
+                          {t("rgeApp.qualificationHelp")}
                         </p>
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-800 mb-2">Follow-up question priority order</h4>
+                        <h4 className="text-sm font-semibold text-gray-800 mb-2">{t("rgeApp.questionOrder")}</h4>
                         <div className="space-y-1.5">
                           {[
-                            { n: 1, label: "Financing / pre-approval", q: localPrefs["W2_financingQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.financingQuestion },
-                            { n: 2, label: "Budget / price range", q: localPrefs["W2_budgetQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.budgetQuestion },
-                            { n: 3, label: "Timeline / move date", q: localPrefs["W2_timelineQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.timelineQuestion },
+                            { n: 1, label: t("rgeApp.financePriority"), q: localPrefs["W2_financingQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.financingQuestion },
+                            { n: 2, label: t("rgeApp.budgetPriority"), q: localPrefs["W2_budgetQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.budgetQuestion },
+                            { n: 3, label: t("rgeApp.timelinePriority"), q: localPrefs["W2_timelineQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.timelineQuestion },
                           ].map(item => (
                             <div key={item.n} className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Step {item.n} — {item.label}</p>
+                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">{t("rge.workflow.step")} {item.n} — {item.label}</p>
                               <p className="text-xs text-gray-700 italic">"{item.q}"</p>
                             </div>
                           ))}
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-2">Only the next missing question is asked — one at a time.</p>
+                        <p className="text-[11px] text-muted-foreground mt-2">{t("rgeApp.oneQuestion")}</p>
                       </div>
                     </div>
                   )}
 
                   {getWorkflowTemplates(selectedWf).length > 0 && (
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-800 mb-2">Message Templates Used</h4>
+                      <h4 className="text-sm font-semibold text-gray-800 mb-2">{t("rgeApp.messageTemplates")}</h4>
                       <div className="space-y-2">
                         {getWorkflowTemplates(selectedWf).map((template: any, idx: number) => (
                           <div key={idx} className="p-2 bg-gray-50 rounded border border-gray-200">
@@ -2948,16 +2938,16 @@ export function RealtorGrowthEngine() {
 
             <div className="border-t px-6 py-3 flex gap-2 justify-end shrink-0">
               <Button variant="outline" onClick={() => setSelectedWf(null)} data-testid="button-modal-cancel">
-                Close
+                {t("inboxUi.close")}
               </Button>
               {modalTab === "customize" && (
                 <>
                   <Button variant="outline" onClick={handleRestore} data-testid="button-restore-defaults">
-                    <RotateCcw className="w-4 h-4 mr-1.5" /> Restore Defaults
+                    <RotateCcw className="w-4 h-4 me-1.5" /> {t("rgeApp.restoreDefaults")}
                   </Button>
                   <Button className="bg-brand-green hover:bg-brand-green/90" onClick={handleSave} disabled={saving} data-testid="button-save-preferences">
-                    {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1.5" />}
-                    Save Changes
+                    {saving ? <Loader2 className="w-4 h-4 me-1.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4 me-1.5" />}
+                    {t("rgeApp.saveChanges")}
                   </Button>
                 </>
               )}
@@ -2971,7 +2961,7 @@ export function RealtorGrowthEngine() {
   // --- Main Render ---
 
   return (
-    <RealtorEngineErrorBoundary>
+    <RealtorEngineErrorBoundary t={t}>
       <>
         {onboardingComplete && status === "installed" && !isOnboardingPath ? (
           <DashboardView />
