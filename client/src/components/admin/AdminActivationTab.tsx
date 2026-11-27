@@ -80,6 +80,8 @@ type ActivationAccount = {
   facebookConnected: boolean;
   instagramConnected: boolean;
   emailConnected: boolean;
+  webchatConfigured: boolean;
+  chatbotConfigured: boolean;
   shopifyConnected: boolean;
   ghlConnected: boolean;
   ghlDetails?: ActivationGhlDetails | null;
@@ -239,11 +241,13 @@ function ChannelBadges({ row }: { row: ActivationAccount }) {
     { key: "FB", on: row.facebookConnected, label: "Facebook Messenger" },
     { key: "IG", on: row.instagramConnected, label: "Instagram" },
     { key: "EM", on: row.emailConnected, label: "Email / Gmail" },
+    { key: "WC", on: row.webchatConfigured, label: "Website Chat widget configured (installation not verified)" },
+    { key: "BOT", on: row.chatbotConfigured, label: "Chatbot flow or AI full-auto mode enabled" },
     { key: "Shop", on: row.shopifyConnected, label: "Shopify" },
     { key: CRM_CHANNEL_LABEL, on: row.ghlConnected, label: row.ghlConnected ? "CRM linked (usable GHL integration)" : "CRM not connected" },
   ];
   return (
-    <div className="flex flex-nowrap items-center gap-0.5">
+    <div className="flex flex-wrap items-center gap-0.5">
       {channels.map((c) => (
         <span
           key={c.key}
@@ -382,7 +386,7 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
       <div>
         <h2 className="font-semibold text-gray-900">Activation overview</h2>
         <p className="text-sm text-gray-500">
-          Real customer-channel activation only — excludes webchat, SMS, test/demo accounts, and orphan messages.
+          Customer-channel activation excludes webchat, SMS, test/demo accounts, and orphan messages. WC and BOT indicate separate widget/automation setup.
         </p>
       </div>
 

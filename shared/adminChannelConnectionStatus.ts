@@ -1,4 +1,5 @@
 import { isEmailMailboxUiConnected } from "./emailMailboxAvailability";
+import { publicWidgetEmbedDecision } from "./webchatOriginPolicy";
 
 /** Admin users table — compact WA / FB / IG / Email connection indicators from canonical fields. */
 
@@ -14,6 +15,8 @@ export type AdminUserChannelConnections = {
   facebook: AdminChannelIndicator;
   instagram: AdminChannelIndicator;
   email: AdminChannelIndicator;
+  webchat: AdminChannelIndicator;
+  chatbot: AdminChannelIndicator;
   hasAnyChannel: boolean;
   noChannelsConnected: boolean;
   whatsappConnected: boolean;
@@ -222,6 +225,56 @@ export function deriveAdminEmailIndicator(
   return { state: "disconnected", tooltip: "Email not connected" };
 }
 
+/**
+ * WC reflects website widget readiness, not proof that script is installed
+ * or that a visitor has chatted. Reuse the live public-embed gate.
+ */
+export function deriveAdminWebchatIndicator(
+  widgetSettings: unknown,
+  widgetPublicId: string | null | undefined,
+): AdminChannelIndicator {
+  const settings =
+    widgetSettings && typeof widgetSettings === "object" && !Array.isArray(widgetSettings)
+      ? (widgetSettings as Record<string, unknown>)
+      : {};
+  const decision = publicWidgetEmbedDecision(settings);
+  if (!decision.ok && decision.reason === "disabled") {
+    return { state: "disconnected", tooltip: "Website Chat widget disabled" };
+  }
+  if (!widgetPublicId) {
+    return { state: "attention", tooltip: "Website Chat enabled, public widget ID missing" };
+  }
+  if (!decision.ok) {
+    return { state: "attention", tooltip: "Website Chat enabled, approved website origin not configured" };
+  }
+  return {
+    state: "connected",
+    tooltip: "Website Chat configured and ready to embed (installation not verified)",
+  };
+}
+
+/** BOT is a configured response automation, not a separate messaging channel. */
+export function deriveAdminChatbotIndicator(input: {
+  activeFlowCount?: number;
+  aiMode?: string | null;
+}): AdminChannelIndicator {
+  const flows = Math.max(0, input.activeFlowCount || 0);
+  const aiAuto = (input.aiMode || "").toLowerCase() === "full_auto";
+  if (flows > 0 || aiAuto) {
+    const labels = [
+      ...(flows > 0 ? [`${flows} active chatbot flow${flows === 1 ? "" : "s"}`] : []),
+      ...(aiAuto ? ["AI Brain full-auto mode"] : []),
+    ];
+    return { state: "connected", tooltip: `Chatbot enabled: ${labels.join("; ")}` };
+  }
+  return {
+    state: "disconnected",
+    tooltip: input.aiMode === "suggest_only"
+      ? "AI suggestions enabled, but automatic chatbot replies not configured"
+      : "No active chatbot flow or AI auto-reply mode",
+  };
+}
+
 /** Prefer a UI-connected mailbox, then primary, then newest. Never uses users.email. */
 export function pickAdminEmailMailbox<
   T extends AdminEmailMailboxFields & { isPrimary?: boolean | null; createdAt?: Date | string | null },
@@ -238,9 +291,14 @@ export function pickAdminEmailMailbox<
 }
 
 export function deriveAdminUserChannelConnections(input: {
-  user: AdminWhatsAppUserFields;
+  user: AdminWhatsAppUserFields & {
+    widgetSettings?: unknown;
+    widgetPublicId?: string | null;
+  };
   channelSettings: AdminChannelSettingRow[];
   emailMailbox?: AdminEmailMailboxFields | null;
+  activeChatbotFlowCount?: number;
+  aiMode?: string | null;
 }): AdminUserChannelConnections {
   const facebookRow = input.channelSettings.find((s) => s.channel === "facebook");
   const instagramRow = input.channelSettings.find((s) => s.channel === "instagram");
@@ -249,18 +307,25 @@ export function deriveAdminUserChannelConnections(input: {
   const facebook = deriveAdminFacebookIndicator(facebookRow);
   const instagram = deriveAdminInstagramIndicator(instagramRow);
   const email = deriveAdminEmailIndicator(input.emailMailbox);
+  const webchat = deriveAdminWebchatIndicator(input.user.widgetSettings, input.user.widgetPublicId);
+  const chatbot = deriveAdminChatbotIndicator({
+    activeFlowCount: input.activeChatbotFlowCount,
+    aiMode: input.aiMode,
+  });
 
   const hasAnyChannel =
     whatsapp.state === "connected" ||
     facebook.state === "connected" ||
     instagram.state === "connected" ||
-    email.state === "connected";
+    email.state === "connected" ||
+    webchat.state === "connected";
 
   const noChannelsConnected =
     whatsapp.state === "disconnected" &&
     facebook.state === "disconnected" &&
     instagram.state === "disconnected" &&
-    email.state === "disconnected";
+    email.state === "disconnected" &&
+    webchat.state === "disconnected";
 
   const needsAttention =
     whatsapp.state === "attention" ||
@@ -270,13 +335,17 @@ export function deriveAdminUserChannelConnections(input: {
     instagram.state === "attention" ||
     instagram.state === "error" ||
     email.state === "attention" ||
-    email.state === "error";
+    email.state === "error" ||
+    webchat.state === "attention" ||
+    webchat.state === "error";
 
   return {
     whatsapp,
     facebook,
     instagram,
     email,
+    webchat,
+    chatbot,
     hasAnyChannel,
     noChannelsConnected,
     whatsappConnected: whatsapp.state === "connected",

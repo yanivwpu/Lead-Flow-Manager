@@ -43,6 +43,8 @@ import {
   channelSettings,
   conversations,
   emailMailboxes,
+  chatbotFlows,
+  aiSettings,
 } from "@shared/schema";
 import { eq, and, or, isNotNull, ilike, desc, sql } from "drizzle-orm";
 import { registerContactRoutes } from "./routes/contacts";
@@ -9239,6 +9241,16 @@ export async function registerRoutes(
         mailboxesByUserId.set(row.workspaceUserId, list);
       }
 
+      const [activeFlowRows, aiModeRows] = await Promise.all([
+        db.select({ userId: chatbotFlows.userId }).from(chatbotFlows).where(eq(chatbotFlows.isActive, true)),
+        db.select({ userId: aiSettings.userId, aiMode: aiSettings.aiMode }).from(aiSettings),
+      ]);
+      const activeChatbotFlowCounts = new Map<string, number>();
+      for (const row of activeFlowRows) {
+        activeChatbotFlowCounts.set(row.userId, (activeChatbotFlowCounts.get(row.userId) ?? 0) + 1);
+      }
+      const aiModeByUserId = new Map(aiModeRows.map((row) => [row.userId, row.aiMode]));
+
       const geTasks = await storage.listGrowthEngineSetupTasksForTemplate(RGE_TEMPLATE_ID);
       const geByUserId = new Map(geTasks.map((t) => [t.userId, t]));
       const salespersonCalendarById = new Map(allSalespeople.map((s) => [s.id, s.calendarLink]));
@@ -9345,6 +9357,8 @@ export async function registerRoutes(
             metaDisplayPhoneNumber: user.metaDisplayPhoneNumber,
             twilioConnected: user.twilioConnected,
             twilioWhatsappNumber: user.twilioWhatsappNumber,
+            widgetSettings: user.widgetSettings,
+            widgetPublicId: user.widgetPublicId,
           },
           channelSettings: (channelSettingsByUserId.get(user.id) ?? []).map((row) => ({
             channel: row.channel,
@@ -9353,6 +9367,8 @@ export async function registerRoutes(
             config: row.config,
           })),
           emailMailbox: pickAdminEmailMailbox(mailboxesByUserId.get(user.id) ?? []),
+          activeChatbotFlowCount: activeChatbotFlowCounts.get(user.id) ?? 0,
+          aiMode: aiModeByUserId.get(user.id) ?? null,
         });
 
         return {
