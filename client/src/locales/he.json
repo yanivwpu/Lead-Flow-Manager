@@ -3357,6 +3357,7 @@
     "chooseYear": "בחירת שנה"
   },
   "inboxUi": {
+    "addToPipeline": "הוספה לצינור המכירות",
     "whatsappSetupIncomplete": "ההגדרה של WhatsApp לא הושלמה. כדי לשלוח הודעות, יש להשלים אותה במסך ההגדרות.",
     "conversationOpen": "פתוחה",
     "conversationPending": "בהמתנה",

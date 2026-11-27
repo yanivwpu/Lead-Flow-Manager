@@ -3332,6 +3332,7 @@
     "chooseYear": "Choose year"
   },
   "inboxUi": {
+    "addToPipeline": "Add to pipeline",
     "whatsappSetupIncomplete": "WhatsApp setup incomplete — finish WhatsApp setup in Settings to send messages.",
     "conversationOpen": "Open",
     "conversationPending": "Pending",

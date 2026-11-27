@@ -248,6 +248,7 @@ interface Contact {
   primaryChannelOverride?: Channel;
   tag: string;
   pipelineStage: string;
+  pipelineCustomStageId?: string | null;
   notes?: string;
   followUp?: string | null;
   followUpDate?: string | null;
@@ -577,7 +578,7 @@ export function UnifiedInbox() {
           if (msg.type === "auth_success") {
             /* no-op */
           } else if (msg.type === "contact_updated") {
-            // Facebook (and other) profile enrichment finished — refresh Inbox promptly.
+            // Refresh the Inbox after shared contact changes, including stage moves.
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
             if (typeof msg.contactId === "string" && msg.contactId) {
               queryClient.invalidateQueries({
@@ -2447,6 +2448,7 @@ export function UnifiedInbox() {
     },
     onMutate: async (data) => {
       const { contactId, ...body } = data;
+      if (body.pipelineLayoutMove) return;
       const contactKey = ["/api/contacts", contactId] as const;
       await queryClient.cancelQueries({ queryKey: contactKey });
       const cachedRecent = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
@@ -2479,7 +2481,14 @@ export function UnifiedInbox() {
 
       return { previousContact, previousInbox, contactId };
     },
-    onError: (_err, _data, context) => {
+    onError: (_err, data, context) => {
+      if (data.pipelineLayoutMove) {
+        void queryClient.invalidateQueries({ queryKey: withUserQueryScope(["/api/inbox/pipeline-layout"], user?.id) });
+        void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+        void queryClient.invalidateQueries({ queryKey: ["/api/contacts", data.contactId] });
+        toast({ title: inboxText("followups.stageSaveFailed"), variant: "destructive" });
+        return;
+      }
       toast({ title: inboxText("inboxTeam.assignmentFailed"), variant: "destructive" });
       if (context?.previousContact) {
         queryClient.setQueryData(["/api/contacts", context.contactId], context.previousContact);
@@ -4939,6 +4948,7 @@ export function UnifiedInbox() {
               connectedChannels={connectedChannelsMap}
               workspaceIntelligence={workspaceIntelligence}
               onUpdateContact={updateContact}
+              contactUpdatePending={updateContactMutation.isPending}
               onUpdateConversationStatus={status => {
                 if (primaryConversation && hasConversation) {
                   updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
@@ -4991,6 +5001,7 @@ export function UnifiedInbox() {
                   connectedChannels={connectedChannelsMap}
                   workspaceIntelligence={workspaceIntelligence}
                   onUpdateContact={updateContact}
+                  contactUpdatePending={updateContactMutation.isPending}
                   onUpdateConversationStatus={status => {
                     if (primaryConversation && hasConversation) {
                       updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });

@@ -1,3 +1,4 @@
+import { customPipelineColumn, orderedPipelineStages, type PipelineStageLayout } from "@shared/pipelineLayout";
 import { Zap, CheckCircle2, Clock, AlertCircle, DollarSign, XCircle, Search, MessageSquare, ListTodo, MoreVertical, Send, Phone, Video, Paperclip, Mic, Smile } from "lucide-react";
 
 export type Tag = 'New' | 'Hot' | 'Quoted' | 'Paid' | 'Waiting' | 'Lost';
@@ -175,4 +176,17 @@ export function pipelineStageOptions(currentStage?: string | null): string[] {
   for (const stage of RGE_OPTIONAL_PIPELINE_STAGES) add(stage);
   add(currentStage || '');
   return out;
+}
+
+/** Keep existing legacy selections visible and offer Realtor stages where relevant. */
+export function inboxPipelineChoices(
+  layout: readonly PipelineStageLayout[],
+  canonicalStage: string,
+  customStageId: string | null | undefined,
+  realtorWorkspace: boolean,
+) {
+  const realtorStages = [...RGE_PIPELINE_STAGES, ...RGE_OPTIONAL_PIPELINE_STAGES];
+  const value = customPipelineColumn(layout, canonicalStage, customStageId) ?? canonicalStage;
+  const observed = realtorWorkspace ? [...realtorStages, canonicalStage] : [canonicalStage];
+  return { value, stageIds: orderedPipelineStages(layout, observed.filter(Boolean)) };
 }

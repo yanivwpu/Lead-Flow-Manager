@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -9,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export function InboxDetailChoice({
-  value, label, options, onChange, dir, testId, className,
+  value, label, options, onChange, dir, testId, className, disabled, action,
 }: {
   value: string;
   label: string;
@@ -18,6 +19,8 @@ export function InboxDetailChoice({
   dir: "ltr" | "rtl";
   testId: string;
   className?: string;
+  disabled?: boolean;
+  action?: { label: string; onSelect: () => void };
 }) {
   const selected = options.find(option => option.value === value);
 
@@ -26,6 +29,7 @@ export function InboxDetailChoice({
     <DropdownMenu dir={dir} modal={false}>
       <DropdownMenuTrigger
         type="button"
+        disabled={disabled}
         data-testid={testId}
         className={cn("flex h-7 min-w-0 flex-1 items-center justify-between gap-1 rounded-md border border-gray-200 bg-white px-2 text-start text-[11px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring", className)}
       >
@@ -38,7 +42,7 @@ export function InboxDetailChoice({
       <DropdownMenuContent
         align="start"
         collisionPadding={8}
-        className="z-[60] min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)]"
+        className="z-[60] min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
       >
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {options.map(option => (
@@ -47,6 +51,11 @@ export function InboxDetailChoice({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        {action && (
+          <DropdownMenuItem onSelect={action.onSelect} className="text-[11px]">
+            {action.label}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

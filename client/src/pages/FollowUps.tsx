@@ -14,8 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
 import { PipelineLayoutEditor } from "@/components/followups/PipelineLayoutEditor";
-import { withUserQueryScope } from "@/lib/accountQueryScope";
-import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, customPipelineColumn, type PipelineLayoutMove, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
+import { usePipelineLayout } from "@/lib/usePipelineLayout";
+import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, customPipelineColumn, type PipelineLayoutMove, type PipelineStageLayout } from "@shared/pipelineLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasNeedsReply, hasTask,
@@ -309,14 +309,7 @@ function PipelineView({
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [filters, setFilters] = useState<PipelineFilters>(EMPTY_PIPELINE_FILTERS);
   const queryClient = useQueryClient();
-  const layoutKey = withUserQueryScope(["/api/inbox/pipeline-layout"], actorId);
-  const layoutQuery = useQuery<PipelineLayoutResponse>({
-    queryKey: layoutKey,
-    enabled: !!actorId && sessionAligned,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    retry: false,
-  });
+  const { query: layoutQuery, queryKey: layoutKey } = usePipelineLayout(actorId, sessionAligned);
   const layoutConfig = sessionAligned ? layoutQuery.data : undefined;
   const layout = layoutConfig?.stages ?? DEFAULT_PIPELINE_LAYOUT;
   const [editingLayout, setEditingLayout] = useState(false);

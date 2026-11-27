@@ -3357,6 +3357,7 @@
     "chooseYear": "Elegir año"
   },
   "inboxUi": {
+    "addToPipeline": "Añadir al pipeline",
     "whatsappSetupIncomplete": "La configuración de WhatsApp está incompleta. Complétala en Configuración para poder enviar mensajes.",
     "conversationOpen": "Abierta",
     "conversationPending": "Pendiente",

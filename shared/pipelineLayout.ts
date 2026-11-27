@@ -56,8 +56,9 @@ export function pipelineStageDisplayLabel(layout: readonly PipelineStageLayout[]
 
 export const pipelineLayoutMoveSchema = z.object({
   workspaceId: z.string().min(1).max(128),
-  revision: z.number().int().min(1).max(2147483646),
-  columnId: customIdSchema,
+  revision: z.number().int().min(0).max(2147483646),
+  columnId: stageLayoutSchema.shape.id,
+  admit: z.literal(true).optional(),
 }).strict();
 export type PipelineLayoutMove = z.infer<typeof pipelineLayoutMoveSchema>;
 
