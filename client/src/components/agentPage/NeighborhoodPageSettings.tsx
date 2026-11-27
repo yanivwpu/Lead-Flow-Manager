@@ -401,8 +401,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
               photo.url === url ? { ...photo, alt } : photo))}
             onUploadPhoto={(file, placement) => uploadPhoto(file, { placement })} />
-          <p className="text-xs text-slate-600">Write 240+ characters of useful local information across two distinct paragraphs, or one detailed paragraph with a section heading.
-            Changing the neighborhood name may change its URL.</p>
+          <p className="text-xs text-slate-600">{t("rgeNeighborhoodPublishing.requirement")} {t("rgeNeighborhoodPublishing.slugNote")}</p>
 
 
           <details className="rounded-lg border border-slate-200 bg-white p-3">
@@ -481,11 +480,14 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             </div>
           </details>
           {data && !data.canPublish && <p className="text-xs text-muted-foreground">Enable your public Agent Page before publishing.</p>}
-          {dirty && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
+          {page && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
             <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Add more guide text before updating: use two informative paragraphs (240+ characters total),
-              or one detailed paragraph (240+ characters) followed by a section heading.
-              Your browser keeps these edits until you publish or discard them.
+              {t("rgeNeighborhoodPublishing.moreText")} {t("rgeNeighborhoodPublishing.unsaved")}
+            </p>
+          )}
+          {page && neighborhoodContentComplete(values.content) && (
+            <p className="text-xs text-slate-500">
+              {t("rgeNeighborhoodPublishing.seoTip")}
             </p>
           )}
           <div className="flex flex-wrap gap-2">

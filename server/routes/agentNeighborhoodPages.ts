@@ -162,7 +162,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     if (parsed.data.published) {
       const agent = await getAgentPageSettingsRow(userId);
       if (!agent || !canResolvePublicAgentPage(agent)) return res.status(403).json({ error: "Enable your public Agent Page before publishing." });
-      if (!neighborhoodContentComplete(parsed.data.content)) return res.status(400).json({ error: "Add at least 240 characters of useful local information across two paragraphs, or one detailed paragraph with a section heading." });
+      if (!neighborhoodContentComplete(parsed.data.content)) return res.status(400).json({ error: "Add at least 240 characters of useful local neighborhood information. Headings and multiple paragraphs are optional." });
       liveSlug = agent.agentPageSlug;
     }
     const id = String(req.params.id);

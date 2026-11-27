@@ -3846,6 +3846,13 @@
     "suggestionCount_other": "{{count}} suggestions",
     "previewAttachment": "Preview {{filename}}"
   },
+  "rgeNeighborhoodPublishing": {
+    "requirement": "Write at least 240 characters of useful local information. One paragraph is fine; headings, extra paragraphs and photos are optional.",
+    "slugNote": "Changing the neighborhood name may change its URL.",
+    "moreText": "Add at least 240 characters of useful neighborhood guide text to publish. One paragraph is enough; headings and photos are optional.",
+    "unsaved": "Your browser keeps unsaved edits until you publish or discard them.",
+    "seoTip": "SEO tip (optional): Add local amenities, useful details, headings or photos to help visitors explore the neighborhood."
+  },
   "rgeNeighborhoodUpload": {
     "keepPhoto": "Save or update the page to keep the image.",
     "offer": "Choose a photo to create an unpublished draft with your current edits and upload it to the library.",
