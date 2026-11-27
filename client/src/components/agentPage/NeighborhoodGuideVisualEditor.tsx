@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { Bold, Heading2, ImagePlus, Italic, Pilcrow, Trash2, Upload, X } from "lucide-react";
 import { neighborhoodGuidePhotoId, normalizeNeighborhoodPhotoWidth, parseNeighborhoodGuideBlocks } from "@shared/agent/neighborhoodGuideBlocks";
@@ -8,15 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 
+export type ArticlePhotoPlacement = { content: string; sectionIndex: number };
+
 type EditorProps = {
   content: string;
   photos: NeighborhoodPhoto[];
   disabled: boolean;
   canUpload: boolean;
   uploading: boolean;
+  uploadDraftRequired?: boolean;
+  uploadedInlinePhotoId?: string;
   onChange: (content: string) => void;
   onPhotoAltChange: (url: string, alt: string) => void;
-  onUploadPhoto: (file: File) => Promise<NeighborhoodPhoto | null>;
+  onUploadPhoto: (file: File, placement: ArticlePhotoPlacement) => Promise<void>;
 };
 
 const PHOTO_ID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -51,9 +56,10 @@ function inlineMarkdown(node: Node): string {
   return text;
 }
 
-function articleToText(editor: HTMLElement): string {
+function articleToText(editor: HTMLElement, before?: HTMLElement): string {
   const sections: string[] = [];
   for (const child of Array.from(editor.children)) {
+    if (child === before) break;
     if (!(child instanceof HTMLElement)) continue;
     const id = child.dataset.photoId;
     if (child.dataset.inlinePhotoPicker === "true") continue;
@@ -120,8 +126,10 @@ function restoreEditor(editor: HTMLElement, text: string, photos: NeighborhoodPh
 }
 
 export function NeighborhoodGuideVisualEditor({
-  content, photos, disabled, canUpload, uploading, onChange, onPhotoAltChange, onUploadPhoto,
+  content, photos, disabled, canUpload, uploading, uploadDraftRequired, uploadedInlinePhotoId,
+  onChange, onPhotoAltChange, onUploadPhoto,
 }: EditorProps) {
+  const { t } = useTranslation();
   const editorRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pickerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -160,7 +168,46 @@ export function NeighborhoodGuideVisualEditor({
     }
   }, [photos]);
 
+  // Inline uploads commit the placement in the parent draft, so the picker
+  // and editable DOM can be replaced without losing the image or selection.
+  useEffect(() => {
+    if (!uploadedInlinePhotoId) return;
+    const figure = Array.from(editorRef.current?.querySelectorAll<HTMLElement>("figure[data-photo-id]") ?? [])
+      .find((node) => node.dataset.photoId === uploadedInlinePhotoId);
+    if (!figure) return;
+    setSelectedId(uploadedInlinePhotoId);
+    setSelectedWidth(normalizeNeighborhoodPhotoWidth(Number(figure.dataset.photoWidth || "100")));
+    figure.scrollIntoView({ block: "nearest" });
+  }, [uploadedInlinePhotoId]);
+
   const selectedPhoto = photos.find((photo) => neighborhoodGuidePhotoId(photo.url) === selectedId);
+
+  // Some browsers discard an inactive contentEditable DOM when a dashboard tab
+  // is hidden or its parent subtree is temporarily detached. The React content
+  // prop remains the source of truth; restore it only if the DOM is actually
+  // empty, never while the agent is actively typing or inserting a photo.
+  function recoverEmptyEditor() {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (!editor.children.length ||
+        (content && !articleToText(editor).trim() &&
+          !editor.querySelector('[data-inline-photo-picker="true"]'))) {
+      restoreEditor(editor, content, photosRef.current);
+      lastAuthored.current = content;
+    }
+  }
+
+  useEffect(() => {
+    const onRestore = () => {
+      if (document.visibilityState !== "hidden") recoverEmptyEditor();
+    };
+    document.addEventListener("visibilitychange", onRestore);
+    window.addEventListener("pageshow", onRestore);
+    return () => {
+      document.removeEventListener("visibilitychange", onRestore);
+      window.removeEventListener("pageshow", onRestore);
+    };
+  }, [content]);
 
   function syncEditor() {
     const editor = editorRef.current;
@@ -227,6 +274,21 @@ export function NeighborhoodGuideVisualEditor({
     pickerAnchorRef.current = anchor;
     setPickerHost(anchor);
     anchor.scrollIntoView({ block: "nearest" });
+  }
+
+  function uploadAtPicker(file: File) {
+    const editor = editorRef.current;
+    const anchor = pickerAnchorRef.current;
+    if (disabled || !canUpload || uploading || !editor || !anchor || !editor.contains(anchor)) return;
+    const before = articleToText(editor, anchor);
+    const sectionIndex = before ? before.split(/\n\s*\n/).length : 0;
+    const source = lastAuthored.current ?? content;
+    const sections = source.trim() ? source.trim().split(/\n\s*\n/) : [];
+    if (sections.slice(0, sectionIndex).map(section => section.trim()).join("\n\n") !== before) {
+      toast({ title: t("rgeNeighborhoodUpload.reopenPicker"), variant: "destructive" });
+      return;
+    }
+    void onUploadPhoto(file, { content: source, sectionIndex });
   }
 
   function insertPhoto(photo: NeighborhoodPhoto) {
@@ -346,7 +408,7 @@ export function NeighborhoodGuideVisualEditor({
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-slate-900">Choose a photo for this spot</p>
             <Button type="button" size="icon" variant="ghost" aria-label="Close photo picker" className="h-8 w-8"
-              onClick={closePicker}><X className="h-4 w-4" /></Button>
+              disabled={uploading} onClick={closePicker}><X className="h-4 w-4" /></Button>
           </div>
           {available.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -365,15 +427,15 @@ export function NeighborhoodGuideVisualEditor({
           </Button>
           {!canUpload && <p className="mt-1 text-xs text-slate-500">{photos.length >= 6
             ? "Six photos maximum; remove an unused photo to upload another."
-            : "Save the neighborhood draft before uploading photos."}</p>}
+            : t("rgeNeighborhoodUpload.requiredLocation")}</p>}
+          {uploadDraftRequired && canUpload &&
+            <p className="mt-1 text-xs text-slate-500">{t("rgeNeighborhoodUpload.inlineDraft")}</p>}
           <p className="mt-1 text-xs text-slate-500">JPG, PNG or WebP, up to 5 MB. Only use photos you own or are licensed to share.</p>
           <input ref={fileRef} type="file" className="sr-only" accept="image/jpeg,image/png,image/webp" aria-label="Upload article image"
-            onChange={async (event) => {
+            onChange={(event) => {
               const file = event.target.files?.[0];
-              if (!file) return;
-              const uploaded = await onUploadPhoto(file);
-              if (uploaded) insertPhoto(uploaded);
-              if (fileRef.current) fileRef.current.value = "";
+              event.target.value = "";
+              if (file) uploadAtPicker(file);
             }} />
         </div>, pickerHost)}
       <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning
@@ -385,7 +447,7 @@ export function NeighborhoodGuideVisualEditor({
           [&>figure]:my-6 [&>p:empty]:min-h-7"
         onInput={syncEditor} onKeyUp={rememberCursor} onMouseUp={rememberCursor}
         onPointerDown={startResizeFromHandle}
-        onFocus={rememberCursor}
+        onFocus={() => { recoverEmptyEditor(); rememberCursor(); }}
         onPaste={(event) => {
           event.preventDefault();
           // Plain-text paste prevents imported HTML, external images and unsafe tags.

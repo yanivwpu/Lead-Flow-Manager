@@ -3,6 +3,7 @@ import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean,
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { uuid } from "drizzle-orm/pg-core";
+import type { PipelineStageLayout } from "./pipelineLayout";
 
 // Subscription plan types
 export type SubscriptionPlan = 'free' | 'starter' | 'pro';
@@ -229,6 +230,14 @@ export const users = pgTable("users", {
     .on(t.shopifyShop)
     .where(sql`${t.shopifyShop} IS NOT NULL`),
 }));
+
+/** Workspace-scoped Follow-ups presentation settings. Not CRM stage values. */
+export const workspacePipelineLayouts = pgTable("workspace_pipeline_layouts", {
+  workspaceId: varchar("workspace_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  stages: jsonb("stages").$type<PipelineStageLayout[]>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [check("workspace_pipeline_layouts_revision_check", sql`${table.revision} > 0`)]);
 
 /** Hashed, single-use email verification tokens for public signup. */
 /** Server-only encrypted Shopify pairs; users.shopifyAccessToken holds an opaque installation reference.
@@ -1272,6 +1281,8 @@ export const contacts = pgTable("contacts", {
   // CRM fields
   tag: text("tag").notNull().default("New"),
   pipelineStage: text("pipeline_stage").notNull().default("Lead"),
+  /** Workspace-specific board column; never used as the canonical CRM stage. */
+  pipelineCustomStageId: text("pipeline_custom_stage_id"),
   /** 0–100 cumulative score (W2, automations); null = never scored */
   leadScore: integer("lead_score"),
   /** RGE buyer preference memory (Inventory Intelligence Phase 1) */
@@ -1329,6 +1340,8 @@ export const conversations = pgTable("conversations", {
   lastMessageAt: timestamp("last_message_at"),
   lastMessagePreview: text("last_message_preview"),
   lastMessageDirection: text("last_message_direction"), // inbound, outbound
+  /** ISO timestamp of the inbound message whose reply recommendation was dismissed. */
+  dismissedReplyMessageAt: text("dismissed_reply_message_at"),
 
   /** Email thread subject (nullable for non-email channels). */
   subject: text("subject"),
@@ -1513,12 +1526,14 @@ export const channelSettings = pgTable("channel_settings", {
 
 // Insert schemas
 export const insertContactSchema = createInsertSchema(contacts).omit({
+  pipelineCustomStageId: true,
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
 export const insertConversationSchema = createInsertSchema(conversations).omit({
+  dismissedReplyMessageAt: true,
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -1542,9 +1557,10 @@ export const insertChannelSettingSchema = createInsertSchema(channelSettings).om
 
 // Types
 export type InsertContact = z.infer<typeof insertContactSchema>;
-export type Contact = typeof contacts.$inferSelect;
+// Older internal contact projections and fixtures may omit the additive board metadata.
+export type Contact = Omit<typeof contacts.$inferSelect, "pipelineCustomStageId"> & { pipelineCustomStageId?: string | null };
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
-export type Conversation = typeof conversations.$inferSelect;
+export type Conversation = Omit<typeof conversations.$inferSelect, "dismissedReplyMessageAt"> & { dismissedReplyMessageAt?: string | null };
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertActivityEvent = z.infer<typeof insertActivityEventSchema>;

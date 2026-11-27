@@ -193,6 +193,7 @@ export type UpdateContactOptions = {
   expectedActorUserId?: string;
   /** Optimistic identity edit: never overwrite a newer synchronized customer snapshot. */
   expectedUpdatedAt?: Date;
+  expectedPipelineLayoutRevision?: number;
   requireUnsyncedIdentity?: boolean;
 };
 
@@ -2650,6 +2651,10 @@ export class DbStorage implements IStorage {
       ) OR ((${contacts.assignedTo} IS NULL OR ${contacts.assignedTo} = ${actor})
         AND (${assignee}::varchar IS NULL OR ${assignee} = ${actor})))` : undefined,
       options?.expectedUpdatedAt ? sql`date_trunc('milliseconds', ${contacts.updatedAt}) = ${options.expectedUpdatedAt.toISOString()}::timestamp` : undefined,
+      options?.expectedPipelineLayoutRevision !== undefined ? sql`EXISTS (
+        SELECT 1 FROM workspace_pipeline_layouts layout WHERE layout.workspace_id = ${contacts.userId}
+          AND layout.revision = ${options.expectedPipelineLayoutRevision}
+      )` : undefined,
       options?.requireUnsyncedIdentity ? sql`coalesce(${contacts.source}, '') <> 'shopify' AND coalesce(${contacts.customFields}->>'lastCommerceSource', '') <> 'shopify' AND ${contacts.customFields}->>'shopifyCustomerId' IS NULL AND ${contacts.sourceDetails}->>'shopifyCustomerId' IS NULL` : undefined);
     const hasBuyerPref = Object.prototype.hasOwnProperty.call(updates, "buyerPreferenceProfile");
 

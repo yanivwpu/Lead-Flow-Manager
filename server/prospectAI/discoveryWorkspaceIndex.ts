@@ -65,21 +65,28 @@ export async function loadDiscoveryWorkspaceIndex(
       string,
       unknown
     >;
+    // These optional legacy projection fields are not columns of the CRM Contact schema.
+    // Preserve the existing fallback behavior without assuming they exist.
+    const firstName = "firstName" in c ? c.firstName : undefined;
+    const lastName = "lastName" in c ? c.lastName : undefined;
+    const company = "company" in c ? c.company : undefined;
+    const legacyWebsite = "website" in c ? c.website : undefined;
+    const legacyAddress = "address" in c ? c.address : undefined;
     const placeId = String(pai.placeId || "").trim();
     const label =
-      [c.firstName, c.lastName].filter(Boolean).join(" ").trim() ||
-      String(c.company || "").trim() ||
+      [firstName, lastName].filter(Boolean).join(" ").trim() ||
+      String(company || "").trim() ||
       String(c.email || "").trim() ||
       c.id;
-    const website = String(pai.website || c.website || "").trim() || null;
-    const companyName = String(c.company || pai.name || label).trim();
+    const website = String(pai.website || legacyWebsite || "").trim() || null;
+    const companyName = String(company || pai.name || label).trim();
     const keys = buildIdentityKeys({
       name: companyName,
       providerPlaceId: placeId || null,
       website,
       phone: c.phone,
       email: c.email,
-      address: String(pai.address || c.address || "").trim() || null,
+      address: String(pai.address || legacyAddress || "").trim() || null,
     });
     const kind: WorkspaceIdentityHit["recordKind"] =
       String(c.source || "").includes("prospect") || placeId

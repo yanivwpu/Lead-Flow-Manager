@@ -2,7 +2,8 @@ import { Router, type Express, type NextFunction, type Request, type RequestHand
 import multer from "multer";
 import { z } from "zod";
 import { readCustomNeighborhoodBoundary } from "@shared/agent/neighborhoodCustomBoundary";
-import { geocodeLocation } from "../prospectAI/providers/googlePlacesProvider";
+import { findNeighborhoodMapLocation } from "../agentPage/neighborhoodMapLocation";
+import type { NeighborhoodMapLocation } from "../agentPage/neighborhoodMapLocation";
 import type { PolygonBoundary } from "@shared/agent/neighborhoodListingGeo";
 import { buildPublicAgentPageHtml } from "@shared/agent/publicAgentPageHtml";
 import {
@@ -31,7 +32,7 @@ const mapCenterQuery = z.object({
   state: z.string().trim().min(1).max(60),
   country: z.string().trim().regex(/^[a-zA-Z]{2}$/),
 });
-const mapCenterCache = new Map<string, { latitude: number; longitude: number; expires: number }>();
+const mapCenterCache = new Map<string, NeighborhoodMapLocation & { expires: number }>();
 const mapCenterDailyQuota = new Map<string, { day: string; count: number }>();
 let lastMapCenterLookup = 0;
 
@@ -111,7 +112,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const queryKey = [name, city, state, country].map((s) => s.toLowerCase()).join("|");
     const now = Date.now();
     const cached = mapCenterCache.get(queryKey);
-    if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude });
+    if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude, precision: cached.precision });
     if (now - lastMapCenterLookup < 1000) return res.status(429).json({ error: "Try locating again in a moment." });
     const day = new Date(now).toISOString().slice(0, 10);
     const usage = mapCenterDailyQuota.get(userId);
@@ -119,17 +120,25 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     if (mapCenterDailyQuota.size > 10000) mapCenterDailyQuota.clear();
     mapCenterDailyQuota.set(userId, { day, count: (usage?.day === day ? usage.count : 0) + 1 });
     lastMapCenterLookup = now;
-    // Neighborhood match preferred; city-level center is only a map starting point,
-    // never treated as a validated property boundary.
-    const context = [name, city, state, country].join(", ");
-    let coordinates = await geocodeLocation(context, key);
-    if (!coordinates) coordinates = await geocodeLocation([city, state, country].join(", "), key);
-    if (!coordinates || Math.abs(coordinates.latitude) > 85) {
-      return res.status(404).json({ error: "No map center found. You can enter coordinates manually." });
+    // Google Places and Geocoding APIs can have different enabled permissions.
+    // Find an exact named geographic feature where available; otherwise return
+    // the city only as an explicitly approximate starting point for map drawing.
+    // Neither result is an official neighborhood boundary or MLS match.
+    const resolved = await findNeighborhoodMapLocation({ name, city, state, country }, key);
+    if (!resolved.location) {
+      if (resolved.unavailable) {
+        console.warn("[agent-neighborhoods] map-center provider unavailable (check Google Maps API permissions)");
+        return res.status(503).json({
+          error: "Map search is temporarily unavailable. Check that Geocoding API or Places API (New) is enabled for the configured Google key, or center the map manually.",
+        });
+      }
+      return res.status(404).json({
+        error: "No matching neighborhood or city found. Verify the spelling and location, or center the map manually.",
+      });
     }
     if (mapCenterCache.size > 2000) mapCenterCache.clear();
-    mapCenterCache.set(queryKey, { ...coordinates, expires: now + 7 * 24 * 3600000 });
-    return res.json(coordinates);
+    mapCenterCache.set(queryKey, { ...resolved.location, expires: now + 7 * 24 * 3600000 });
+    return res.json(resolved.location);
   }));
 
   router.post("/", run(async (req, res, userId) => {

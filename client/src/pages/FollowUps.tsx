@@ -1,10 +1,10 @@
 import type { TFunction } from "i18next";
-import { crmAppointmentType, crmStageLabel } from "@/lib/crmPresentation";
+import { crmAppointmentType, crmChannelLabel, crmStageLabel, crmTagLabel } from "@/lib/crmPresentation";
 import { useTranslation } from "react-i18next";
 import { formatRegionalDate } from "@/lib/regionalFormatting";
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,10 +13,13 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
+import { PipelineLayoutEditor } from "@/components/followups/PipelineLayoutEditor";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, customPipelineColumn, type PipelineLayoutMove, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasNeedsReply, hasTask,
-  hasScheduledFollowUp, isClosedStage, prioritizeTasks, validTaskDate,
+  hasScheduledFollowUp, isClosedStage, isSalesOpportunity, prioritizeTasks, validTaskDate, filterPipelineItems, type PipelineFilters,
   type FollowUpItem as Chat, type FollowUpInboxItem as InboxItem, type KPIFilter,
 } from "@shared/followUpTasks";
 
@@ -32,7 +35,9 @@ interface AppointmentRecord {
 
 type ViewMode = 'list' | 'calendar' | 'pipeline';
 
-const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
+const DEFAULT_PIPELINE_LAYOUT = defaultPipelineLayout();
+const boardStage = (stage: string) => isClosedStage(stage) ? 'Closed' : stage.trim() ? stage : 'Lead';
+const EMPTY_PIPELINE_FILTERS: PipelineFilters = { search: '', channel: '', tag: '', assignment: 'all' };
 
 function kpiLabel(t: TFunction, filter: Exclude<KPIFilter, null>) {
   switch (filter) {
@@ -45,8 +50,13 @@ function kpiLabel(t: TFunction, filter: Exclude<KPIFilter, null>) {
   }
 }
 
-function KPIHeader({ chats, activeFilter, onFilterChange }: { 
-  chats: Chat[]; 
+function localizedPipelineStage(t: Parameters<typeof crmStageLabel>[0], layout: Parameters<typeof pipelineStageDisplayLabel>[0], stage: string) {
+  const label = pipelineStageDisplayLabel(layout, stage);
+  return label === stage ? crmStageLabel(t, stage) : label;
+}
+
+function KPIHeader({ chats, activeFilter, onFilterChange }: {
+  chats: Chat[];
   activeFilter: KPIFilter;
   onFilterChange: (filter: KPIFilter) => void;
 }) {
@@ -59,13 +69,13 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   const needsReplyCount = applyKPIFilter(chats, 'needs-reply').length;
   const activeDealsCount = applyKPIFilter(chats, 'active-deals').length;
 
-  const kpis: { id: string; filterKey: Exclude<KPIFilter, null>; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
-    { id: 'active-deals', filterKey: 'active-deals', value: activeDealsCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', activeBorder: 'border-indigo-500 ring-2 ring-indigo-200' },
-    { id: 'overdue', filterKey: 'overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-eed-100', activeBorder: 'border-eed-500 ring-2 ring-red-200' },
-    { id: 'due-today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', activeBorder: 'border-amber-500 ring-2 ring-amber-200' },
-    { id: 'needs-reply', filterKey: 'needs-reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', activeBorder: 'border-blue-500 ring-2 ring-blue-200' },
-    { id: 'high-intent', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', activeBorder: 'border-purple-500 ring-2 ring-purple-200' },
-    { id: 'closed', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', activeBorder: 'border-green-500 ring-2 ring-green-200' },
+  const kpis: { id: string; filterKey: Exclude<KPIFilter, null>; value: number; icon: any; color: string; bg: string }[] = [
+    { id: 'active-deals', filterKey: 'active-deals', value: activeDealsCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'overdue', filterKey: 'overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
+    { id: 'due-today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { id: 'needs-reply', filterKey: 'needs-reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { id: 'high-intent', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { id: 'closed', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50' },
   ];
 
   const handleClick = (filterKey: KPIFilter) => {
@@ -73,24 +83,23 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3 mb-6" data-testid="kpi-header">
+    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 mb-5" data-testid="kpi-header">
       {kpis.map(kpi => (
-        <button 
+        <button
           key={kpi.filterKey}
           onClick={() => handleClick(kpi.filterKey)}
-          aria-pressed={activeFilter === kpi.filterKey}
           className={cn(
-            "rounded-xl border p-3 md:p-4 text-start transition-all cursor-pointer hover:shadow-md",
-            kpi.bg,
-            activeFilter === kpi.filterKey ? kpi.activeBorder : kpi.border
+            "min-w-0 rounded-xl border bg-white p-3 text-start shadow-sm transition-colors hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+            activeFilter === kpi.filterKey ? "border-emerald-500 ring-1 ring-emerald-500" : "border-slate-200"
           )}
+          aria-pressed={activeFilter === kpi.filterKey}
           data-testid={`kpi-${kpi.id}`}
         >
           <div className="flex items-center gap-2 mb-1">
-            <kpi.icon className={cn("h-4 w-4", kpi.color)} />
-            <span className="text-xs md:text-sm font-medium text-gray-600">{kpiLabel(t, kpi.filterKey)}</span>
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", kpi.bg, kpi.color)}><kpi.icon className="h-4 w-4" /></span>
+            <span className="text-xs font-medium text-slate-600">{kpiLabel(t, kpi.filterKey)}</span>
           </div>
-          <p className={cn("text-xl md:text-2xl font-bold", kpi.color)}>{kpi.value}</p>
+          <p className={cn("text-2xl font-semibold tabular-nums", kpi.color)}>{kpi.value}</p>
         </button>
       ))}
     </div>
@@ -100,19 +109,19 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
 function StatusTag({ status }: { status: 'overdue' | 'today' | 'upcoming' | null }) {
   const { t } = useTranslation();
   if (!status) return null;
-  
+
   const styles = {
     overdue: 'bg-red-100 text-red-700 border-eed-200',
     today: 'bg-amber-100 text-amber-700 border-amber-200',
     upcoming: 'bg-blue-100 text-blue-700 border-blue-200',
   };
-  
+
   const labels = {
     overdue: t("followups.overdue"),
     today: t("common.today"),
     upcoming: t("crmDetails.upcoming"),
   };
-  
+
   return (
     <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium border", styles[status])} data-testid={`status-tag-${status}`}>
       {labels[status]}
@@ -120,33 +129,36 @@ function StatusTag({ status }: { status: 'overdue' | 'today' | 'upcoming' | null
   );
 }
 
-function TaskListItem({ 
-  chat, 
-  onMarkDone, 
-  isPending, 
+function TaskListItem({
+  chat,
+  onMarkDone,
+  isPending,
   pendingId,
   onClick,
   onSetReminder,
-}: { 
-  chat: Chat; 
+  onReplyAction, replyActionPending,
+}: {
+  chat: Chat;
   onMarkDone: (e: React.MouseEvent, chatId: string) => void;
   isPending: boolean;
   pendingId: string | undefined;
   onClick: (chatId: string) => void;
   onSetReminder?: (chat: Chat) => void;
+  onReplyAction?: (chat: Chat, action: "dismiss" | "resolve") => void;
+  replyActionPending?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const status = chat.followUpDate ? getTaskStatus(chat.followUpDate) : null;
   const needsReply = hasNeedsReply(chat);
-  
+
   return (
-    <div 
-      className="group bg-white border border-gray-200 rounded-xl p-4 flex items-center hover:shadow-md transition-all hover:border-brand-green/30 cursor-pointer"
+    <div
+      className="group bg-white border border-slate-200 rounded-xl p-3.5 md:p-4 flex items-center shadow-sm hover:shadow-md transition-shadow hover:border-brand-green/40 cursor-pointer"
       onClick={() => onClick(chat.id)}
       data-testid={`task-item-${chat.id}`}
     >
       {hasTask(chat) && !chat.isAppointment && !chat.reviewRecommended && <button
-        className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white me-4 shrink-0 transition-colors flex items-center justify-center"
+        className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white me-3 shrink-0 transition-colors flex items-center justify-center"
         onClick={(e) => onMarkDone(e, chat.id)}
         disabled={isPending}
         data-testid={`button-mark-done-${chat.id}`}
@@ -158,7 +170,7 @@ function TaskListItem({
           <CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" />
         )}
       </button>}
-      
+
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="font-semibold text-gray-900" data-testid={`text-contact-${chat.id}`}>
@@ -166,7 +178,7 @@ function TaskListItem({
           </span>
           {status && <StatusTag status={status} />}
           {needsReply && (
-            <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-medium" data-testid={`tag-unreplied-${chat.id}`}>
+            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium" data-testid={`tag-unreplied-${chat.id}`}>
               {t("crmDetails.needsReply")}
             </span>
           )}
@@ -174,7 +186,7 @@ function TaskListItem({
         <p className="text-sm text-gray-600 mb-1">
           {chat.reviewRecommended || (hasTask(chat) ? t("crmDetails.followUpText", { task: chat.followUp }) : needsReply ? t("crmDetails.replyInquiry") : t("crmDetails.salesOpportunity", { stage: crmStageLabel(t, chat.pipelineStage) }))}
           {chat.followUpDate && (
-            <span className="text-gray-400 ms-2">
+            <span className="text-slate-500 ms-2">
               ({formatRegionalDate(new Date(chat.followUpDate), i18n.language, { dateStyle: "medium" })})
             </span>
           )}
@@ -187,27 +199,38 @@ function TaskListItem({
             {t("crmDetails.note")}: <bdi>{chat.notes}</bdi>
           </p>
         )}
+        {needsReply && !chat.reviewRecommended && !hasTask(chat) && chat.conversationId && chat.replyMessageAt && onReplyAction && (
+          <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2" onClick={event => event.stopPropagation()}>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={replyActionPending} onClick={() => onReplyAction(chat, "dismiss")} data-testid={`dismiss-reply-${chat.id}`}><X className="h-3.5 w-3.5" />{t("followups.dismissRecommendation")}</Button>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs text-emerald-700 border-emerald-200" disabled={replyActionPending} onClick={() => onReplyAction(chat, "resolve")} data-testid={`resolve-reply-${chat.id}`}><CheckCircle2 className="h-3.5 w-3.5" />{t("followups.markResolved")}</Button>
+          </div>
+        )}
       </div>
 
       {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ms-3 shrink-0"
         onClick={(event) => { event.stopPropagation(); onSetReminder(chat); }}>{t("inboxUi.setReminder")}</Button>
-        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ms-4 rtl:rotate-180" data-testid={`icon-arrow-${chat.id}`} />}
+        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ms-3 shrink-0 rtl:rotate-180" data-testid={`icon-arrow-${chat.id}`} />}
     </div>
   );
 }
 
-function PipelineCard({ 
-  chat, 
+function PipelineCard({
+  chat,
   onClick,
   onDragStart,
   onDragEnd,
-  isDragging
-}: { 
-  chat: Chat; 
+  isDragging,
+  stage, stages, layout, onStageChange, onSetReminder, isMobile, stagePending
+}: {
+  chat: Chat;
   onClick: (chatId: string) => void;
   onDragStart: (e: React.DragEvent, chat: Chat) => void;
   onDragEnd: () => void;
   isDragging: boolean;
+  stage: string; stages: string[]; layout: readonly PipelineStageLayout[];
+  onStageChange: (chatId: string, stage: string) => void;
+  onSetReminder: (chat: Chat) => void;
+  isMobile: boolean; stagePending: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const status = getTaskStatus(chat.followUpDate);
@@ -215,106 +238,141 @@ function PipelineCard({
 
   return (
     <div
-      draggable
+      draggable={!isMobile && !stagePending}
       onDragStart={(e) => onDragStart(e, chat)}
       onDragEnd={onDragEnd}
       onClick={() => onClick(chat.id)}
       className={cn(
-        "bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/30",
+        "bg-white border border-slate-200 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-shadow hover:border-brand-green/40",
         isDragging && "opacity-50"
       )}
       data-testid={`pipeline-card-${chat.id}`}
     >
-      <div className="font-semibold text-gray-900 text-sm mb-1 truncate" data-testid={`pipeline-contact-${chat.id}`}>
-        <bdi>{chat.name}</bdi>
+      <div className="flex min-w-0 items-center gap-2 mb-2">
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">{chat.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "?"}</span>
+        <div className="min-w-0 flex-1 font-semibold text-slate-900 text-sm truncate" data-testid={`pipeline-contact-${chat.id}`}><bdi>{chat.name}</bdi></div>
+        {!isMobile && <span aria-hidden="true" className="hidden md:block text-slate-400 cursor-grab text-base leading-none">⠿</span>}
       </div>
-      <p className="text-xs text-gray-500 truncate mb-2" data-testid={`pipeline-lastmessage-${chat.id}`}>
+      <p className="text-xs text-slate-600 line-clamp-2 break-words mb-3" data-testid={`pipeline-lastmessage-${chat.id}`}>
         <bdi>{chat.lastMessage}</bdi>
       </p>
       <div className="flex flex-wrap gap-1">
         {needsReply && (
-          <span className="text-[10px] bg-green-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
             {t("crmDetails.needsReply")}
           </span>
         )}
         {status === 'overdue' && (
-          <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
+          <span className="text-xs bg-red-50 text-red-700 px-2 py-0.5 rounded-full font-medium">
             {t("followups.overdue")}
           </span>
         )}
         {status === 'today' && (
-          <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-medium">
+          <span className="text-xs bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full font-medium">
             {t("inboxUi.today")}
           </span>
         )}
         {chat.followUpDate && status === 'upcoming' && (
-          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
             {formatRegionalDate(new Date(chat.followUpDate), i18n.language, { month: "short", day: "numeric" })}
           </span>
         )}
+      </div>
+      {(chat.channel || chat.tag) && <div className="mt-2 flex flex-wrap gap-1 text-xs text-slate-600">{[chat.channel, chat.tag].filter(Boolean).map((value, index) => <span key={index} className="rounded bg-slate-100 px-1.5 py-0.5">{value}</span>)}</div>}
+      <div className="mt-3 space-y-2 border-t border-slate-100 pt-2" onClick={event => event.stopPropagation()}>
+        <select className="w-full min-w-0 rounded-md border border-slate-200 bg-white p-1.5 text-xs text-slate-700" aria-label={t("followups.moveDeal")} data-testid={`pipeline-move-${chat.id}`} value={stage} disabled={stagePending} onChange={event => onStageChange(chat.id, event.target.value)}>
+          {stages.map(value => <option key={value} value={value}>{localizedPipelineStage(t, layout, value)}</option>)}
+        </select>
+        <div className="flex flex-wrap gap-1">
+          <Button type="button" size="sm" variant="ghost" className="h-auto flex-1 px-1.5 py-1 text-xs" onClick={() => onClick(chat.id)} data-testid={`pipeline-open-${chat.id}`}><MessageSquare className="h-3.5 w-3.5 shrink-0" />{t("followups.openConversation")}</Button>
+          <Button type="button" size="sm" variant="ghost" className="h-auto flex-1 px-1.5 py-1 text-xs" onClick={() => onSetReminder(chat)} data-testid={`pipeline-reminder-${chat.id}`}><CalendarIcon className="h-3.5 w-3.5 shrink-0" />{t("followups.reminder")}</Button>
+        </div>
       </div>
     </div>
   );
 }
 
-function PipelineView({ 
-  chats, 
+function PipelineView({
+  chats,
   onCardClick,
   onStageChange,
-  isMobile
-}: { 
-  chats: Chat[]; 
+  isMobile, actorId, stagePending, onSetReminder, sessionAligned
+}: {
+  chats: Chat[];
   onCardClick: (chatId: string) => void;
-  onStageChange: (chatId: string, newStage: string) => void;
-  isMobile: boolean;
+  onStageChange: (chatId: string, newStage: string, move?: PipelineLayoutMove) => void;
+  isMobile: boolean; actorId?: string; stagePending: boolean; sessionAligned: boolean;
+  onSetReminder: (chat: Chat) => void;
 }) {
   const { t } = useTranslation();
   const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
-
+  const [dropStage, setDropStage] = useState<string | null>(null);
+  const [filters, setFilters] = useState<PipelineFilters>(EMPTY_PIPELINE_FILTERS);
+  const queryClient = useQueryClient();
+  const layoutKey = withUserQueryScope(["/api/inbox/pipeline-layout"], actorId);
+  const layoutQuery = useQuery<PipelineLayoutResponse>({
+    queryKey: layoutKey,
+    enabled: !!actorId && sessionAligned,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    retry: false,
+  });
+  const layoutConfig = sessionAligned ? layoutQuery.data : undefined;
+  const layout = layoutConfig?.stages ?? DEFAULT_PIPELINE_LAYOUT;
+  const [editingLayout, setEditingLayout] = useState(false);
+  const visibleChats = useMemo(() => filterPipelineItems(chats, filters, actorId), [chats, filters, actorId]);
+  const channels = useMemo(() => [...new Set(chats.map(chat => chat.channel).filter((value): value is string => Boolean(value)))].sort(), [chats]);
+  const tags = useMemo(() => [...new Set(chats.map(chat => chat.tag).filter(Boolean))].sort(), [chats]);
+  const stages = useMemo(() => orderedPipelineStages(layout, chats.map(chat => boardStage(chat.pipelineStage))), [layout, chats]);
+  const columnFor = (chat: Chat) => customPipelineColumn(layout, chat.pipelineStage, chat.pipelineCustomStageId) ?? boardStage(chat.pipelineStage);
+  const moveToColumn = (chatId: string, columnId: string) => {
+    const chat = chats.find(item => item.id === chatId);
+    if (!chat || columnFor(chat) === columnId) return;
+    const target = layout.find(column => column.id === columnId);
+    if (target?.canonicalStage) {
+      if (!layoutConfig || layoutQuery.isError) return;
+      onStageChange(chatId, target.canonicalStage, { workspaceId: layoutConfig.workspaceId, revision: layoutConfig.revision, columnId });
+    } else onStageChange(chatId, columnId);
+  };
   const chatsByStage = useMemo(() => {
-    const map = new Map<string, Chat[]>();
-    PIPELINE_STAGES.forEach(stage => map.set(stage, []));
-    chats.forEach(chat => {
-      let stage: string = chat.pipelineStage;
-      if (isClosedStage(stage)) stage = 'Closed';
-      if (!stage.trim()) stage = 'Lead';
-      if (!map.has(stage)) map.set(stage, []);
-      map.get(stage)?.push(chat);
-    });
+    const map = new Map<string, Chat[]>(stages.map(stage => [stage, []]));
+    visibleChats.forEach(chat => map.get(customPipelineColumn(layout, chat.pipelineStage, chat.pipelineCustomStageId) ?? boardStage(chat.pipelineStage))?.push(chat));
     return map;
-  }, [chats]);
+  }, [visibleChats, stages, layout]);
 
   const handleDragStart = (e: React.DragEvent, chat: Chat) => {
-    if (isMobile) return;
+    if (isMobile || stagePending) { e.preventDefault(); return; }
     setDraggedChat(chat);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-whachat-pipeline', 'move');
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    if (isMobile) return;
+  const handleDragOver = (e: React.DragEvent, stage: string) => {
+    if (isMobile || stagePending || !draggedChat) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    setDropStage(stage);
   };
 
   const handleDrop = (e: React.DragEvent, stage: string) => {
-    if (isMobile) return;
+    if (isMobile || stagePending || !draggedChat) return;
     e.preventDefault();
-    if (draggedChat && draggedChat.pipelineStage !== stage) {
-      onStageChange(draggedChat.id, stage);
-    }
+    moveToColumn(draggedChat.id, stage);
     setDraggedChat(null);
+    setDropStage(null);
   };
 
   const handleDragEnd = () => {
     setDraggedChat(null);
+    setDropStage(null);
   };
 
-  const stageColors: Record<string, { bg: string; border: string; header: string }> = {
-    'Lead': { bg: 'bg-gray-50', border: 'border-gray-300', header: 'bg-gray-100' },
-    'Contacted': { bg: 'bg-blue-50', border: 'border-blue-300', header: 'bg-blue-100' },
-    'Proposal': { bg: 'bg-purple-50', border: 'border-purple-300', header: 'bg-purple-100' },
-    'Negotiation': { bg: 'bg-amber-50', border: 'border-amber-300', header: 'bg-amber-100' },
-    'Closed': { bg: 'bg-green-50', border: 'border-green-300', header: 'bg-green-100' },
+  const stageColors: Record<string, string> = {
+    'Lead': 'bg-slate-400',
+    'Contacted': 'bg-blue-500',
+    'Proposal': 'bg-violet-500',
+    'Negotiation': 'bg-amber-500',
+    'Closed': 'bg-emerald-600',
   };
 
   const emptyStateMessages: Record<string, string> = {
@@ -326,33 +384,61 @@ function PipelineView({
   };
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4" data-testid="pipeline-view">
+    <div className="min-w-0 space-y-3">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm" data-testid="pipeline-filters">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2">
+          <input className="xl:col-span-2 min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm" aria-label={t("followups.searchPipeline")} placeholder={t("followups.searchPipeline")} value={filters.search} onChange={event => setFilters(prev => ({...prev, search: event.target.value}))} data-testid="pipeline-search" />
+          <select className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm" aria-label={t("followups.allChannels")} value={filters.channel} onChange={event => setFilters(prev => ({...prev, channel: event.target.value}))} data-testid="pipeline-filter-channel">
+            <option value="">{t("followups.allChannels")}</option>{channels.map(value => <option key={value} value={value}>{crmChannelLabel(t, value)}</option>)}
+          </select>
+          <select className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm" aria-label={t("followups.allTags")} value={filters.tag} onChange={event => setFilters(prev => ({...prev, tag: event.target.value}))} data-testid="pipeline-filter-tag">
+            <option value="">{t("followups.allTags")}</option>{tags.map(value => <option key={value} value={value}>{crmTagLabel(t, value)}</option>)}
+          </select>
+          <select className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm" aria-label={t("followups.allAssignees")} value={filters.assignment} onChange={event => setFilters(prev => ({...prev, assignment: event.target.value as PipelineFilters["assignment"]}))} data-testid="pipeline-filter-assignment">
+            <option value="all">{t("followups.allAssignees")}</option><option value="mine">{t("followups.assignedToMe")}</option><option value="unassigned">{t("followups.unassigned")}</option><option value="others">{t("followups.assignedToOthers")}</option>
+          </select>
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-600"><span aria-live="polite">{t("followups.pipelineResults", { shown: visibleChats.length, total: chats.length })}</span><Button type="button" variant="ghost" size="sm" className="h-auto px-2 py-1 text-xs" onClick={() => setFilters(EMPTY_PIPELINE_FILTERS)}>{t("followups.resetPipelineFilters")}</Button></div>
+      </div>
+      {layoutConfig?.canEdit && !layoutQuery.isError && (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditingLayout(true)} data-testid="customize-pipeline">{t("followups.customizePipeline")}</Button>
+        </div>
+      )}
+      {layoutQuery.isError && sessionAligned && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-slate-600"><span>{t("followups.layoutLoadFailed")}</span><Button type="button" variant="ghost" size="sm" onClick={() => void layoutQuery.refetch()}>{t("common.tryAgain")}</Button></div>}
+      {editingLayout && layoutConfig?.canEdit && (
+        <PipelineLayoutEditor key={`${actorId}:${layoutConfig.workspaceId}`} layout={layoutConfig}
+          onClose={() => setEditingLayout(false)}
+          onSaved={value => { queryClient.setQueryData(layoutKey, value); void queryClient.invalidateQueries({ queryKey: layoutKey }); }}
+          onConflict={() => { void queryClient.invalidateQueries({ queryKey: layoutKey }); }} />
+      )}
+      {visibleChats.length === 0 && chats.length > 0 && <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">{t("followups.noMatchingDeals")}</p>}
+      <div className="grid grid-flow-col items-stretch gap-3 w-full min-w-0 overflow-x-auto pb-3" style={{ gridAutoColumns: isMobile ? "minmax(240px, 1fr)" : "minmax(170px, 1fr)" }} data-testid="pipeline-view">
       {[...chatsByStage.keys()].map(stage => {
         const stageChats = chatsByStage.get(stage) || [];
-        const colors = stageColors[stage] || stageColors['Lead'];
-        
+        const canonical = layout.find(column => column.id === stage)?.canonicalStage ?? stage;
+        const colors = stageColors[canonical] || stageColors['Lead'];
+
         return (
           <div
             key={stage}
             className={cn(
-              "flex-shrink-0 w-[280px] md:w-[300px] rounded-xl border",
-              colors.bg,
-              colors.border,
-              draggedChat && draggedChat.pipelineStage !== stage && "ring-2 ring-brand-green/30"
+              "min-w-0 min-h-[360px] rounded-xl border border-slate-200 bg-slate-100/80 flex flex-col",
+              draggedChat && dropStage === stage && columnFor(draggedChat) !== stage && "ring-2 ring-inset ring-emerald-500 bg-emerald-50"
             )}
-            onDragOver={handleDragOver}
+            onDragOver={(e) => handleDragOver(e, stage)}
+            onDragLeave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDropStage(prev => prev === stage ? null : prev); }}
             onDrop={(e) => handleDrop(e, stage)}
             data-testid={`pipeline-column-${stage.toLowerCase()}`}
           >
-            <div className={cn("p-3 rounded-t-xl border-b", colors.header, colors.border)}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">{crmStageLabel(t, stage)}</h3>
-                  <p className="text-xs text-gray-500">{t("crmDetails.dealCount", { count: stageChats.length })}</p>
-                </div>
+            <div className="p-3 border-b border-slate-200">
+              <div className={cn("h-1 rounded-full mb-3", colors)} />
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0"><h3 className="break-words font-semibold text-slate-900 text-sm">{localizedPipelineStage(t, layout, stage)}</h3>{pipelineStageDisplayLabel(layout, stage) !== stage && <p className="text-[11px] text-slate-500">{crmStageLabel(t, canonical)}</p>}</div>
+                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={t("followups.opportunitiesCount", { total: stageChats.length })}>{stageChats.length}</span>
               </div>
             </div>
-            <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
+            <div className="flex-1 p-2 space-y-2 max-h-[500px] overflow-y-auto">
               {stageChats.map(chat => (
                 <PipelineCard
                   key={chat.id}
@@ -361,28 +447,31 @@ function PipelineView({
                   onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
                   isDragging={draggedChat?.id === chat.id}
+                  stage={stage} stages={stages} layout={layout} isMobile={isMobile} stagePending={stagePending}
+                  onStageChange={moveToColumn} onSetReminder={onSetReminder}
                 />
               ))}
               {stageChats.length === 0 && (
-                <div className="text-center py-8 text-gray-400 text-sm italic">
-                  {emptyStateMessages[stage] ?? t("crmDetails.emptyStage")}
+                <div className="text-center p-4 mt-1 rounded-lg border border-dashed border-slate-300 text-slate-500 text-xs leading-relaxed">
+                  {(pipelineStageDisplayLabel(layout, stage) === stage && emptyStateMessages[stage]) || t("followups.emptyPipelineStage")}
                 </div>
               )}
             </div>
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
 
-function TaskCalendarView({ 
-  tasks, 
+function TaskCalendarView({
+  tasks,
   onTaskClick,
   onReschedule,
   isMobile
-}: { 
-  tasks: Chat[]; 
+}: {
+  tasks: Chat[];
   onTaskClick: (chatId: string) => void;
   onReschedule: (chatId: string, newDate: Date) => void;
   isMobile: boolean;
@@ -390,14 +479,14 @@ function TaskCalendarView({
   const { t, i18n } = useTranslation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [draggedTask, setDraggedTask] = useState<Chat | null>(null);
-  
+
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const calendarStart = startOfWeek(monthStart);
   const calendarEnd = endOfWeek(monthEnd);
-  
+
   const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-  
+
   const tasksByDate = useMemo(() => {
     const map = new Map<string, Chat[]>();
     tasks.forEach(task => {
@@ -411,19 +500,19 @@ function TaskCalendarView({
     });
     return map;
   }, [tasks]);
-  
+
   const handleDragStart = (e: React.DragEvent, task: Chat) => {
     if (isMobile || task.isAppointment) return;
     setDraggedTask(task);
     e.dataTransfer.effectAllowed = 'move';
   };
-  
+
   const handleDragOver = (e: React.DragEvent) => {
     if (isMobile) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
-  
+
   const handleDrop = (e: React.DragEvent, date: Date) => {
     if (isMobile) return;
     e.preventDefault();
@@ -432,7 +521,7 @@ function TaskCalendarView({
       setDraggedTask(null);
     }
   };
-  
+
   const handleDragEnd = () => {
     setDraggedTask(null);
   };
@@ -442,13 +531,13 @@ function TaskCalendarView({
   );
 
   const maxTasksToShow = isMobile ? 2 : 3;
-  
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-testid="calendar-view">
-      <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" data-testid="calendar-view">
+      <div className="flex items-center justify-between p-3 md:p-4 border-b border-slate-200">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors"
           aria-label={t("calendar.previousMonth")}
           data-testid="button-prev-month"
         >
@@ -459,22 +548,22 @@ function TaskCalendarView({
         </h3>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors"
           aria-label={t("calendar.nextMonth")}
           data-testid="button-next-month"
         >
           <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-600 rtl:rotate-180" />
         </button>
       </div>
-      
+
       <div className="grid grid-cols-7">
         {dayNames.map((day, idx) => (
-          <div key={idx} className="p-1 md:p-2 text-center text-[10px] md:text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50">
+          <div key={idx} className="p-2 text-center text-xs font-medium text-slate-600 border-b border-slate-200 bg-slate-50">
             {day}
           </div>
         ))}
       </div>
-      
+
       <div className="grid grid-cols-7">
         {days.map((day, idx) => {
           const dateKey = format(day, 'yyyy-MM-dd');
@@ -482,14 +571,14 @@ function TaskCalendarView({
           const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
           const isDayToday = isToday(day);
           const isPastDay = isBefore(day, new Date()) && !isDayToday;
-          
+
           return (
             <div
               key={idx}
               className={cn(
-                "min-h-[60px] md:min-h-[100px] p-0.5 md:p-1 border-b border-e border-gray-100 transition-colors",
-                !isCurrentMonth && "bg-gray-50",
-                isDayToday && "bg-amber-50",
+                "min-w-0 min-h-[72px] md:min-h-[116px] p-1 md:p-2 border-b border-e border-slate-100 transition-colors",
+                !isCurrentMonth && "bg-slate-50",
+                isDayToday && "bg-emerald-50/60",
                 !isMobile && draggedTask && "hover:bg-green-50"
               )}
               onDragOver={handleDragOver}
@@ -497,9 +586,9 @@ function TaskCalendarView({
               data-testid={`calendar-day-${dateKey}`}
             >
               <div className={cn(
-                "text-[10px] md:text-xs font-medium mb-0.5 md:mb-1 text-end pe-0.5 md:pe-1",
+                "text-xs font-medium mb-1 text-end text-slate-700",
                 !isCurrentMonth && "text-gray-400",
-                isDayToday && "text-amber-600",
+                isDayToday && "text-emerald-800 font-bold",
                 isPastDay && isCurrentMonth && "text-gray-500"
               )}>
                 {format(day, 'd')}
@@ -518,10 +607,10 @@ function TaskCalendarView({
                         onTaskClick(task.id);
                       }}
                       className={cn(
-                        "text-[9px] md:text-xs p-0.5 md:p-1 rounded cursor-pointer truncate transition-all hover:shadow-sm",
+                        "text-[10px] md:text-xs px-1 py-1 md:px-2 rounded-md cursor-pointer truncate transition-colors",
                         status === 'overdue' && "bg-red-100 text-red-700 hover:bg-red-200",
                         status === 'today' && "bg-amber-100 text-amber-700 hover:bg-amber-200",
-                        status === 'upcoming' && "bg-blue-100 text-blue-700 hover:bg-blue-200",
+                        status === 'upcoming' && "bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
                         !status && "bg-gray-100 text-gray-700 hover:bg-gray-200",
                         draggedTask?.id === task.id && "opacity-50"
                       )}
@@ -551,11 +640,22 @@ function TaskCalendarView({
 
 export function FollowUps() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, sessionAligned } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const saved = window.localStorage.getItem(`whachat.followups.view.${user.id}`);
+      setViewMode(saved === 'pipeline' || saved === 'calendar' ? saved : 'list');
+    } catch { setViewMode('list'); }
+  }, [user?.id]);
+  const selectView = (view: ViewMode) => {
+    setViewMode(view);
+    if (user?.id) { try { window.localStorage.setItem(`whachat.followups.view.${user.id}`, view); } catch { /* preference is optional */ } }
+  };
   const [kpiFilter, setKpiFilter] = useState<KPIFilter>(null);
   const isMobile = useIsMobile();
   const [leadReviewsOnly, setLeadReviewsOnly] = useState(false);
@@ -625,10 +725,32 @@ export function FollowUps() {
   };
 
   const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/inbox'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['/api/inbox'] }),
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] }),
+      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] }),
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] }),
+    ]);
+  };
+
+  const replyActionMutation = useMutation({
+    mutationFn: async ({ chat, action }: { chat: Chat; action: "dismiss" | "resolve" }) => {
+      if (!chat.conversationId || !chat.replyMessageAt || !sessionAligned) throw new Error("Missing conversation");
+      const response = await fetch(`/api/conversations/${encodeURIComponent(chat.conversationId)}/reply-recommendation`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, messageAt: chat.replyMessageAt }),
+      });
+      if (!response.ok) throw new Error("Recommendation changed");
+      return response.json();
+    },
+    onSuccess: async (_result, variables) => {
+      await invalidateAll();
+      toast({ title: variables.action === "dismiss" ? t("followups.recommendationDismissed") : t("followups.conversationResolved") });
+    },
+    onError: () => { void invalidateAll(); toast({ title: t("followups.replyActionFailed"), variant: "destructive" }); },
+  });
+  const handleReplyAction = (chat: Chat, action: "dismiss" | "resolve") => {
+    if (!replyActionMutation.isPending && sessionAligned) replyActionMutation.mutate({ chat, action });
   };
 
   const clearFollowUpMutation = useMutation({
@@ -643,16 +765,16 @@ export function FollowUps() {
     mutationFn: async ({ chatId, newDate, title }: { chatId: string; newDate: Date; title?: string }) => {
       return patchContact(chatId, { followUpDate: newDate.toISOString(), ...(title ? { followUp: title } : {}) });
     },
-    onSuccess: () => { invalidateAll(); setReminder(undefined); },
+    onSuccess: () => { invalidateAll(); setReminder(undefined); toast({ title: t('followups.reminderSaved') }); },
     onError: () => toast({ title: t("crmDetails.reminderFailed"), variant: 'destructive' }),
   });
 
   const updatePipelineStageMutation = useMutation({
-    mutationFn: async ({ chatId, newStage }: { chatId: string; newStage: string }) => {
-      return patchContact(chatId, { pipelineStage: newStage });
+    mutationFn: async ({ chatId, newStage, move }: { chatId: string; newStage: string; move?: PipelineLayoutMove }) => {
+      return patchContact(chatId, move ? { pipelineLayoutMove: move } : { pipelineStage: newStage });
     },
-    onSuccess: invalidateAll,
-    onError: () => toast({ title: t("crmDetails.stageFailed"), variant: "destructive" }),
+    onSuccess: async () => { await invalidateAll(); toast({ title: t('followups.stageSaved') }); },
+    onError: () => { void invalidateAll(); void queryClient.invalidateQueries({ queryKey: ['/api/inbox/pipeline-layout'] }); toast({ title: t('followups.stageSaveFailed'), variant: 'destructive' }); },
   });
 
   const filteredChats = useMemo(() => {
@@ -724,8 +846,11 @@ export function FollowUps() {
     updateFollowUpDateMutation.mutate({ chatId, newDate });
   };
 
-  const handleStageChange = (chatId: string, newStage: string) => {
-    updatePipelineStageMutation.mutate({ chatId, newStage });
+  const handleStageChange = (chatId: string, newStage: string, move?: PipelineLayoutMove) => {
+    const chat = chats.find(item => item.id === chatId && item.isOpportunity);
+    if (!chat || updatePipelineStageMutation.isPending || (!move && !chat.pipelineCustomStageId && boardStage(chat.pipelineStage) === newStage)) return;
+    if (!isSalesOpportunity({ id: chat.id, name: chat.name, tag: chat.tag, pipelineStage: newStage, sourceDetails: { pipelineManuallyAdded: chat.pipelineManuallyAdded === true } }) && !window.confirm(t('followups.moveOutOfPipeline'))) return;
+    updatePipelineStageMutation.mutate({ chatId, newStage, move });
   };
 
   if (isLoading) {
@@ -737,53 +862,53 @@ export function FollowUps() {
   }
 
   return (
-    <div className="flex-1 h-full bg-white flex flex-col" dir={i18n.dir()}>
-      <div className="p-4 md:p-8 pb-4 border-b border-gray-100">
+    <div className="flex-1 min-w-0 h-full bg-slate-50 flex flex-col" dir={i18n.dir()}>
+      <div className="shrink-0 bg-white px-4 py-4 md:px-6 md:py-5 border-b border-slate-200">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">{t("crmUi.tasks")}</h1>
             <p className="text-sm md:text-base text-gray-500 mt-1">{t("crmDetails.scheduledCount", { count: scheduledFollowUps.length })} · {t("crmDetails.appointmentCount", { count: appointmentTasks.length })}</p>
             <p className="text-xs text-gray-400 mt-1">{t("crmDetails.taskScope")}</p>
           </div>
-          
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg self-start md:self-auto" data-testid="view-toggle">
+
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 border border-slate-200 p-1 rounded-xl self-start md:self-auto" data-testid="view-toggle">
             <button
-              onClick={() => setViewMode('list')}
-              aria-pressed={viewMode === 'list'}
+              onClick={() => selectView('list')}
               className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
-                viewMode === 'list' 
-                  ? "bg-white text-gray-900 shadow-sm" 
+                "flex items-center gap-1.5 md:gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+                viewMode === 'list'
+                  ? "bg-brand-green text-white shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
               )}
+              aria-pressed={viewMode === 'list'}
               data-testid="toggle-list-view"
             >
               <List className="h-3.5 w-3.5 md:h-4 md:w-4" />
               {isMobile ? t("crmUi.list") : t("crmUi.listView")}
             </button>
             <button
-              onClick={() => setViewMode('calendar')}
-              aria-pressed={viewMode === 'calendar'}
+              onClick={() => selectView('calendar')}
               className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
-                viewMode === 'calendar' 
-                  ? "bg-white text-gray-900 shadow-sm" 
+                "flex items-center gap-1.5 md:gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+                viewMode === 'calendar'
+                  ? "bg-brand-green text-white shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
               )}
+              aria-pressed={viewMode === 'calendar'}
               data-testid="toggle-calendar-view"
             >
               <CalendarIcon className="h-3.5 w-3.5 md:h-4 md:w-4" />
               {isMobile ? t("crmUi.calendar") : t("crmUi.calendarView")}
             </button>
             <button
-              onClick={() => setViewMode('pipeline')}
-              aria-pressed={viewMode === 'pipeline'}
+              onClick={() => selectView('pipeline')}
               className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
-                viewMode === 'pipeline' 
-                  ? "bg-white text-gray-900 shadow-sm" 
+                "flex items-center gap-1.5 md:gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+                viewMode === 'pipeline'
+                  ? "bg-brand-green text-white shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
               )}
+              aria-pressed={viewMode === 'pipeline'}
               data-testid="toggle-pipeline-view"
             >
               <Kanban className="h-3.5 w-3.5 md:h-4 md:w-4" />
@@ -793,7 +918,7 @@ export function FollowUps() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-4 md:p-6">
         {tasksError && <p role="alert" className="flex items-center gap-2 text-sm text-red-700">{t("crmDetails.tasksFailed")}<Button type="button" variant="outline" size="sm" onClick={() => void retryTasks()}>{t("common.tryAgain")}</Button></p>}
         {appointmentsError && <p role="alert" className="flex items-center gap-2 text-sm text-red-700">{t("crmDetails.appointmentsFailed")}<Button type="button" variant="outline" size="sm" onClick={() => void retryAppointments()}>{t("common.tryAgain")}</Button></p>}
         <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
@@ -807,23 +932,27 @@ export function FollowUps() {
                 toast({ title: t("crmDetails.invalidReminder"), variant: "destructive" });
                 return;
               }
-              if (reminder) updateFollowUpDateMutation.mutate({ chatId: reminder.id, newDate: date, title: reminder.reviewRecommended });
+              const title = String(new FormData(event.currentTarget).get('reminderTitle') || '').trim();
+              if (reminder && title) updateFollowUpDateMutation.mutate({ chatId: reminder.id, newDate: date, title });
             }}>
+              <label className="grid gap-1 text-sm">{t("followups.reminderTitle")}
+                <input key={reminder?.id} name="reminderTitle" required defaultValue={reminder?.followUp || reminder?.reviewRecommended || ""} className="rounded-md border border-gray-300 p-2" />
+              </label>
               <label className="grid gap-1 text-sm">{t("crmUi.dateTime")}
-                <input name="reminderAt" type="datetime-local" required className="rounded-md border border-gray-300 p-2" />
+                <input key={reminder?.id} name="reminderAt" type="datetime-local" required defaultValue={reminder?.followUpDate ? format(new Date(reminder.followUpDate), "yyyy-MM-dd'T'HH:mm") : ""} className="rounded-md border border-gray-300 p-2" />
               </label>
               <Button type="submit" disabled={updateFollowUpDateMutation.isPending}>{t("crmUi.saveReminder")}</Button>
             </form>
           </DialogContent>
         </Dialog>
         {viewMode === "list" && !kpiFilter && <ShopifyOrderSupportTasks />}
-        
+
         {kpiFilter && (
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
             <span className="text-sm text-gray-600">
               {t("crmDetails.filteringBy", { filter: kpiLabel(t, kpiFilter) })}
             </span>
-            <button 
+            <button
               onClick={() => setKpiFilter(null)}
               className="text-sm text-brand-green hover:underline"
               data-testid="button-clear-filter"
@@ -832,7 +961,7 @@ export function FollowUps() {
             </button>
           </div>
         )}
-        
+
         {viewMode === 'list' && leadReviews.length > 0 && !kpiFilter && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <a href="#recommended-tasks-heading" onClick={() => setLeadReviewsOnly(true)} className="text-sm font-medium text-purple-700 underline underline-offset-2">
@@ -842,11 +971,11 @@ export function FollowUps() {
         )}
 
         {viewMode === 'list' ? (
-          <div className={cn("grid items-start gap-6", savedTasks.length > 0 && recommendedTasks.length > 0
+          <div className={cn("grid items-start gap-4 md:gap-5", savedTasks.length > 0 && recommendedTasks.length > 0
             ? "lg:grid-cols-2" : "max-w-3xl")} data-testid="follow-up-list-columns">
             {savedTasks.length > 0 && (
-              <section className="min-w-0 space-y-3" aria-labelledby="follow-up-tasks-heading">
-                <h2 id="follow-up-tasks-heading" className="text-sm font-semibold text-gray-700 uppercase tracking-wider" data-testid="section-all-tasks">
+              <section className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-slate-100/60 p-3 md:p-4" aria-labelledby="follow-up-tasks-heading">
+                <h2 id="follow-up-tasks-heading" className="text-base font-semibold text-slate-900" data-testid="section-all-tasks">
                   {kpiFilter ? t("crmUi.matchingTasks") : t("crmUi.followUpTasks")}
                 </h2>
                 {savedTasks.map(chat => (
@@ -858,10 +987,10 @@ export function FollowUps() {
             )}
 
             {recommendedTasks.length > 0 && (
-              <section className="min-w-0" aria-labelledby="recommended-tasks-heading">
-                <div className="flex items-center gap-2 mb-4">
+              <section className="min-w-0 rounded-xl border border-slate-200 bg-slate-100/60 p-3 md:p-4" aria-labelledby="recommended-tasks-heading">
+                <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="h-4 w-4 text-purple-500" />
-                  <h2 id="recommended-tasks-heading" tabIndex={-1} className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
+                  <h2 id="recommended-tasks-heading" tabIndex={-1} className="text-base font-semibold text-slate-900" data-testid="section-recommended">
                     {t("crmUi.recommendedTasks")}
                   </h2>
                 </div>
@@ -877,7 +1006,7 @@ export function FollowUps() {
                 <div className="space-y-3">
                   {recommendedTasks.map(chat => (
                     <div key={chat.id} className="relative">
-                      <div className="absolute -start-2 top-4 w-1 h-8 bg-gradient-to-b from-purple-500 to-purple-300 rounded-full" />
+                      <div className="absolute start-0 top-4 w-1 h-8 bg-violet-400 rounded-e-full" />
                       <TaskListItem
                         chat={chat}
                         onMarkDone={handleMarkDone}
@@ -885,6 +1014,7 @@ export function FollowUps() {
                         pendingId={clearFollowUpMutation.variables}
                         onClick={handleRowClick}
                         onSetReminder={setReminder}
+                        onReplyAction={handleReplyAction} replyActionPending={replyActionMutation.isPending || !sessionAligned}
                       />
                     </div>
                   ))}
@@ -897,7 +1027,8 @@ export function FollowUps() {
                     {remainingReplies.map(chat => (
                       <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
                         isPending={clearFollowUpMutation.isPending} pendingId={clearFollowUpMutation.variables}
-                        onClick={handleRowClick} onSetReminder={setReminder} />
+                        onClick={handleRowClick} onSetReminder={setReminder}
+                        onReplyAction={handleReplyAction} replyActionPending={replyActionMutation.isPending || !sessionAligned} />
                     ))}
                   </details>
                 )}
@@ -905,10 +1036,10 @@ export function FollowUps() {
             )}
 
             {followUps.length === 0 && (
-              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              <div className="text-center py-12 px-4 bg-white rounded-xl border border-dashed border-slate-300">
                 <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">{t("crmUi.noMatchingTasks")}</p>
-                <p className="text-sm text-gray-400 mt-1">{t("crmDetails.noTasks")}</p>
+                <p className="text-slate-900 font-semibold">{t("crmUi.noMatchingTasks")}</p>
+                <p className="text-sm text-slate-600 mt-1">{t("followups.emptyTasksHint")}</p>
                 <Button className="mt-4 bg-brand-green hover:bg-emerald-700" data-testid="button-view-chats"
                   onClick={() => setLocation('/app/inbox')}>
                   {t("crmDetails.goInbox")}
@@ -928,7 +1059,7 @@ export function FollowUps() {
             chats={filteredChats.filter(chat => chat.isOpportunity)}
             onCardClick={handleRowClick}
             onStageChange={handleStageChange}
-            isMobile={isMobile}
+            isMobile={isMobile} actorId={user?.id} sessionAligned={sessionAligned} stagePending={updatePipelineStageMutation.isPending} onSetReminder={setReminder}
           />
         )}
       </div>

@@ -57,6 +57,8 @@ jobs:
       - name: Agent Page publication, property SEO and existing lead workflows
         env:
           AGENT_PAGE_BROWSER_TEST: "1"
+          RGE_PUBLIC_UX_SCREENSHOTS: "${{ runner.temp }}/rge-public-ux"
+          RGE_MAP_SCREENSHOTS: "${{ runner.temp }}/rge-map-screenshots"
         run: >-
           node --import tsx --test
           tests/public-agent-page.test.ts
@@ -65,11 +67,13 @@ jobs:
           tests/rge-neighborhood-visual-editor.test.ts
           tests/rge-neighborhood-inline-photo-size.test.ts
           tests/rge-neighborhood-photo-editor-browser.test.ts
+          tests/rge-public-branding-neighborhood-upload.test.ts
           tests/rge-neighborhood-blog-editor.test.ts
           tests/rge-neighborhood-verified-listings.test.ts
           tests/rge-neighborhood-municipal-providers.test.ts
           tests/rge-neighborhood-browse.test.ts
           tests/rge-neighborhood-custom-boundary.test.ts
+          tests/rge-neighborhood-map-location.test.ts
           tests/public-agent-page-publication.test.ts
           tests/public-listings-sitemap.test.ts
           tests/public-listing-publication.test.ts
@@ -84,6 +88,18 @@ jobs:
           tests/rge-w4-no-reply-enrollment.test.ts
           tests/calendly-booking-message.test.ts
           tests/seller-consultation-booking.test.ts
+      - name: Upload Neighborhood Map Editor screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neighborhood-map-editor-screenshots
+          path: ${{ runner.temp }}/rge-map-screenshots/*.png
+      - name: Upload public branding and neighborhood upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rge-public-branding-neighborhood-upload
+          path: ${{ runner.temp }}/rge-public-ux/*.png
       - name: Compare TypeScript diagnostics against main
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

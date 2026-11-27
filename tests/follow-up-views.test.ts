@@ -13,6 +13,7 @@ import { I18nextProvider } from 'react-i18next';
 import en from '../client/src/locales/en.json';
 import he from '../client/src/locales/he.json';
 import es from '../client/src/locales/es.json';
+import { defaultPipelineLayout, type PipelineLayoutResponse } from '../shared/pipelineLayout';
 
 const i18n = createInstance();
 await i18n.init({ lng: 'en', resources: { en: { translation: en }, he: { translation: he }, es: { translation: es } } });
@@ -23,7 +24,7 @@ const date = new Date();
 date.setHours(12, 0, 0, 0);
 const future = new Date(date); future.setDate(date.getDate() + 1);
 const overdue = new Date(date); overdue.setDate(date.getDate() - 1);
-const state = { view: 'list', filter: null as string | null, nullState: 0, writes: 0, rows: [] as any[], appointments: [] as any[] };
+const state = { layout: undefined as PipelineLayoutResponse | undefined, view: 'list', mobile: false, filter: null as string | null, nullState: 0, writes: 0, rows: [] as any[], appointments: [] as any[] };
 (globalThis as any).__followUpRender = state;
 after(() => { rmSync(scratch, { recursive: true, force: true }); delete (globalThis as any).__followUpRender; });
 const stubs: Record<string, string> = {
@@ -31,14 +32,14 @@ const stubs: Record<string, string> = {
     export * from 'fixture-real-react';
     export const useState=(initial)=>React.useState(initial==='list' ? globalThis.__followUpRender.view :
       initial===null && ++globalThis.__followUpRender.nullState===1 ? globalThis.__followUpRender.filter : initial);`,
-  'auth-context': `export const useAuth=()=>({user:{id:'fixture',name:'Fixture'}});`,
-  'use-mobile': `export const useIsMobile=()=>false;`,
+  'auth-context': `export const useAuth=()=>({user:{id:'fixture',name:'Fixture'},sessionAligned:true});`,
+  'use-mobile': `export const useIsMobile=()=>globalThis.__followUpRender.mobile;`,
   'use-toast': `export const useToast=()=>({toast:()=>{}});`,
   'ecommercePilot': `export const useEcommercePilot=()=>({available:false});`,
   '@tanstack/react-query': `export const useQueryClient=()=>({invalidateQueries:async()=>{}});
     export const useMutation=()=>({isPending:false,mutate:()=>{globalThis.__followUpRender.writes++},mutateAsync:async()=>{globalThis.__followUpRender.writes++}});
     export const useQuery=(options)=>({data:options.queryKey.includes('/api/inbox') ? globalThis.__followUpRender.rows :
-      options.queryKey.includes('/api/appointments') ? globalThis.__followUpRender.appointments : [],refetch:()=>{}});`,
+      options.queryKey.includes('/api/appointments') ? globalThis.__followUpRender.appointments : options.queryKey.includes('/api/inbox/pipeline-layout') ? globalThis.__followUpRender.layout : [],refetch:()=>{}});`,
 };
 await build({ entryPoints: ['client/src/pages/FollowUps.tsx'], outfile: join(scratch, 'page.mjs'),
   bundle: true, platform: 'node', format: 'esm', packages: 'external', jsx: 'automatic',
@@ -63,6 +64,7 @@ function render(view: string, filter: string | null = null) {
   return parseHTML(renderToStaticMarkup(React.createElement(I18nextProvider, { i18n }, page))).document;
 }
 function reset() {
+  state.layout = undefined;
   state.rows = [
     fixture('ordinary'), fixture('railway', 'Your deployment failed. Please check logs.'),
     fixture('promo', 'Interested in buying? Save 30% off today!'),
@@ -71,6 +73,7 @@ function reset() {
     fixture('realtor', 'Thanks!', { source: 'whatsapp', tag: 'Warm', pipelineStage: 'Qualified (Warm)', followUp: 'Realtor follow-up', followUpDate: future.toISOString() }),
     fixture('deal', 'Thanks!', { source: 'email', pipelineStage: 'Proposal' }),
     fixture('undated', 'Thanks!', { followUp: 'Prepare quote', followUpDate: 'invalid' }),
+    fixture('vendor-pitch', 'Hello, Just checking if you are interested in improving your website', { tag: 'Warm', pipelineStage: 'Proposal' }),
   ];
   state.rows.push({ ...state.rows[4], conversation: { ...state.rows[4].conversation, id: 'second-email-thread' } });
   state.appointments = [{ id: 'appt', contactId: 'manual', contactName: 'manual', appointmentType: 'Consultation', appointmentDate: date.toISOString(), status: 'scheduled', title: 'Consultation' }];
@@ -85,7 +88,7 @@ test('List renders genuine work with accurate counts and rule-based copy, withou
   assert.match(text, /Recommended Tasks/);
   assert.doesNotMatch(text, /AI Recommended|unread messages|Follow up: null/);
   for (const id of ['manual', 'realtor', 'inquiry', 'undated']) assert.ok(document.querySelector(`[data-testid="task-item-${id}"]`), id);
-  for (const id of ['ordinary', 'railway', 'promo', 'deal']) assert.equal(document.querySelector(`[data-testid="task-item-${id}"]`), null, id);
+  for (const id of ['ordinary', 'railway', 'promo', 'deal', 'vendor-pitch']) assert.equal(document.querySelector(`[data-testid="task-item-${id}"]`), null, id);
   assert.equal(document.querySelectorAll('[data-testid="task-item-manual"]').length, 1);
   const columns = document.querySelector('[data-testid="follow-up-list-columns"]')!;
   assert.ok(columns.classList.contains('lg:grid-cols-2'));
@@ -159,12 +162,38 @@ test('fresh form reviews surface with a reminder action after urgent work, with 
   assert.equal(state.writes, 0);
 });
 
+test('Follow-up view and KPI controls expose selected states, and pipeline uses flexible columns', () => {
+  reset();
+  for (const view of ['list', 'calendar', 'pipeline']) {
+    const document = render(view);
+    for (const option of ['list', 'calendar', 'pipeline']) {
+      assert.equal(document.querySelector(`[data-testid="toggle-${option}-view"]`)?.getAttribute('aria-pressed'), String(option === view));
+    }
+    assert.equal(document.querySelector('[data-testid="kpi-active-deals"]')?.getAttribute('aria-pressed'), 'false');
+  }
+  const document = render('pipeline', 'active-deals');
+  assert.equal(document.querySelector('[data-testid="kpi-active-deals"]')?.getAttribute('aria-pressed'), 'true');
+  const board = document.querySelector('[data-testid="pipeline-view"]')!;
+  assert.ok(board.classList.contains('overflow-x-auto'));
+  assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"] [aria-label]')?.getAttribute('aria-label'), 'Opportunities: 1');
+  assert.match(board.getAttribute('style') ?? '', /minmax\(170px,\s*1fr\)/);
+  assert.equal(document.querySelector('[data-testid="pipeline-card-deal"]')?.getAttribute('draggable'), 'true');
+  assert.equal(state.writes, 0);
+});
+
 test('Pipeline uses the same deal definition as KPI/List and preserves Realtor qualification stages', () => {
   reset();
   const document = render('pipeline');
   for (const id of ['realtor', 'deal']) assert.ok(document.querySelector(`[data-testid="pipeline-card-${id}"]`), id);
   for (const id of ['ordinary', 'railway', 'promo', 'inquiry', 'manual', 'undated']) assert.equal(document.querySelector(`[data-testid="pipeline-card-${id}"]`), null, id);
   assert.ok(document.querySelector('[data-testid="pipeline-column-qualified (warm)"] [data-testid="pipeline-card-realtor"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-search"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-filter-channel"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-filter-tag"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-filter-assignment"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Negotiation"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-open-deal"]'));
+  assert.ok(document.querySelector('[data-testid="pipeline-reminder-deal"]'));
   assert.equal(document.querySelectorAll('[data-testid^="pipeline-card-"]').length, Number(document.querySelector('[data-testid="kpi-active-deals"] p')?.textContent));
   assert.equal(render('pipeline', 'needs-reply').querySelectorAll('[data-testid^="pipeline-card-"]').length, 0);
   assert.equal(state.writes, 0);
@@ -184,9 +213,91 @@ test('CRM directions and deal labels localize while filter and pipeline selector
       assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"]')?.closest('[dir]')?.getAttribute('dir'),
         language === 'he' ? 'rtl' : 'ltr');
       assert.ok(document.querySelector('[data-testid="pipeline-card-deal"]'));
+      assert.equal(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Negotiation"]')?.textContent,
+        messages.crmDetails.negotiation);
     }
     assert.equal(state.writes, 0);
   } finally {
     await i18n.changeLanguage('en');
   }
+});
+
+test('mobile pipeline exposes stage and quick actions without native dragging', () => {
+  reset();
+  state.mobile = true;
+  try {
+    const document = render('pipeline');
+    assert.equal(document.querySelector('[data-testid="pipeline-card-deal"]')?.getAttribute('draggable'), 'false');
+    assert.ok(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Negotiation"]'));
+    assert.ok(document.querySelector('[data-testid="pipeline-open-deal"]'));
+    assert.ok(document.querySelector('[data-testid="pipeline-reminder-deal"]'));
+    assert.equal(state.writes, 0);
+  } finally { state.mobile = false; }
+});
+
+test('workspace layout changes visible labels and order without changing stage values or Realtor cards', () => {
+  reset();
+  const stages = defaultPipelineLayout();
+  stages[2].label = 'Estimate sent';
+  state.layout = { workspaceId: 'fixture', canEdit: true, revision: 1, stages: [stages[2], stages[0], stages[1], stages[3], stages[4]] };
+  const document = render('pipeline');
+  const board = document.querySelector('[data-testid="pipeline-view"]')!;
+  assert.equal(board.children[0].getAttribute('data-testid'), 'pipeline-column-proposal');
+  assert.equal(board.children[0].querySelector('h3')?.textContent, 'Estimate sent');
+  assert.equal(document.querySelector('[data-testid="pipeline-move-deal"] option[value="Proposal"]')?.textContent, 'Estimate sent');
+  assert.ok(document.querySelector('[data-testid="pipeline-column-qualified (warm)"] [data-testid="pipeline-card-realtor"]'));
+  assert.ok(document.querySelector('[data-testid="customize-pipeline"]'));
+  assert.equal(state.writes, 0);
+  state.layout = { ...state.layout, canEdit: false };
+  assert.equal(render('pipeline').querySelector('[data-testid="customize-pipeline"]'), null);
+  state.layout = undefined;
+});
+
+test('custom column renders eligible deals exactly once and falls back to their canonical stage on removal', () => {
+  reset();
+  const id = 'custom:22222222-2222-4222-8222-222222222222';
+  const defaults = defaultPipelineLayout();
+  state.layout = { workspaceId: 'fixture', canEdit: true, revision: 2, stages: [...defaults, { id, label: 'Measurements', canonicalStage: 'Proposal' }] };
+  const deal = state.rows.find(row => row.contact.id === 'deal');
+  deal.contact.pipelineCustomStageId = id;
+  const document = render('pipeline');
+  const custom = document.querySelector(`[data-testid="pipeline-column-${id}"]`)!;
+  assert.equal(custom.querySelector('h3')?.textContent, 'Measurements');
+  assert.ok(custom.querySelector('[data-testid="pipeline-card-deal"]'));
+  assert.equal(document.querySelectorAll('[data-testid="pipeline-card-deal"]').length, 1);
+  assert.equal(document.querySelector(`[data-testid="pipeline-move-deal"] option[value="${id}"]`)?.textContent, 'Measurements');
+  assert.equal(document.querySelector('[data-testid="pipeline-column-proposal"] [data-testid="pipeline-card-deal"]'), null);
+  assert.ok(document.querySelector('[data-testid="pipeline-column-qualified (warm)"] [data-testid="pipeline-card-realtor"]'));
+  assert.equal(render('pipeline', 'active-deals').querySelectorAll('[data-testid^="pipeline-card-"]').length, 2);
+  state.layout = { ...state.layout, stages: defaults, revision: 3 };
+  const removed = render('pipeline');
+  assert.ok(removed.querySelector('[data-testid="pipeline-column-proposal"] [data-testid="pipeline-card-deal"]'));
+  assert.equal(removed.querySelector(`[data-testid="pipeline-column-${id}"]`), null);
+  assert.equal(state.writes, 0);
+  reset();
+});
+
+test('passive vendor email with legacy qualified stage is excluded from the board and reply KPI', () => {
+  reset();
+  const board = render('pipeline');
+  assert.equal(board.querySelector('[data-testid="pipeline-card-vendor-pitch"]'), null);
+  assert.equal(board.querySelector('[data-testid="kpi-active-deals"] p')?.textContent, '2');
+  assert.equal(board.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '1');
+  assert.equal(state.writes, 0);
+});
+
+test('reply recommendations expose both actions without adding them to manual reminders', () => {
+  reset();
+  const page = render('list');
+  assert.ok(page.querySelector('[data-testid="dismiss-reply-inquiry"]'));
+  assert.ok(page.querySelector('[data-testid="resolve-reply-inquiry"]'));
+  assert.equal(page.querySelector('[data-testid="dismiss-reply-manual"]'), null);
+  const inquiry = state.rows.find(row => row.contact.id === 'inquiry');
+  inquiry.conversation.dismissedReplyMessageAt = inquiry.lastMessageAt;
+  const dismissed = render('list');
+  assert.equal(dismissed.querySelector('[data-testid="task-item-inquiry"]'), null);
+  assert.equal(dismissed.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '0');
+  assert.ok(dismissed.querySelector('[data-testid="task-item-manual"]'));
+  assert.equal(state.writes, 0);
+  reset();
 });
