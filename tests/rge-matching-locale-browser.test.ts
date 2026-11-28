@@ -5,7 +5,7 @@ import en from "../client/src/locales/en.json";
 import he from "../client/src/locales/he.json";
 import es from "../client/src/locales/es.json";
 
-test("buyer setup uses identical request data in all dashboard languages", { timeout: 120_000 }, async (t) => {
+test("buyer setup, shortlist and MLS status retain canonical behavior across dashboard languages", { timeout: 120_000 }, async (t) => {
   if (process.env.AGENT_PAGE_BROWSER_TEST !== "1") return t.skip("Chromium runs in RGE CI");
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE_PATH, headless: true });
@@ -15,6 +15,8 @@ test("buyer setup uses identical request data in all dashboard languages", { tim
       import React from "react";
       import { createRoot } from "react-dom/client";
       import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+      import { InventorySourcesSection } from "./client/src/components/inventory/InventorySourcesSection.tsx";
+      import { CopilotInventoryEmptyState } from "./client/src/components/inventory/CopilotInventoryEmptyState.tsx";
       import { BuyerPreferencesPanel } from "./client/src/components/BuyerPreferencesPanel.tsx";
       import { InventoryMatchRecommendationCard } from "./client/src/components/inventory/InventoryMatchRecommendationCard.tsx";
       import { SavedInventoryMatches } from "./client/src/components/inventory/SavedInventoryMatches.tsx";
@@ -39,28 +41,66 @@ test("buyer setup uses identical request data in all dashboard languages", { tim
         createRoot(document.getElementById("root")).render(
           <QueryClientProvider client={client}>
             <BuyerPreferencesPanel contactId="fixture" manualSetupOnly />
-            <InventoryMatchRecommendationCard contactId="fixture" match={match} saved={false} onSavedChange={() => {}} />
+            {window.fixtureConnected
+              ? <InventoryMatchRecommendationCard contactId="fixture" match={match} saved={false} onSavedChange={() => {}} />
+              : <CopilotInventoryEmptyState />}
+            <InventorySourcesSection variant="compact" />
             <SavedInventoryMatches contactId="fixture" onSavedChange={() => {}} />
           </QueryClientProvider>
         );
       });
     `, resolveDir: process.cwd(), loader: "tsx" },
+    plugins: [{
+      name: "isolated-matching-fixture",
+      setup(builder) {
+        builder.onResolve({ filter: /^@\/lib\/(?:auth-context|shopifyMerchantExperience)$/ }, args =>
+          ({ path: args.path, namespace: "matching-fixtures" }));
+        builder.onLoad({ filter: /.*/, namespace: "matching-fixtures" }, () => ({
+          contents: 'export const useAuth = () => ({ user: { id: "fixture" } }); export const useHideGrowthEngineForShopify = () => false;',
+        }));
+      },
+    }],
     bundle: true, write: false, platform: "browser", jsx: "automatic", alias: { "@": "./client/src", "@shared": "./shared" },
-    define: { "process.env.NODE_ENV": '"production"' }, loader: { ".css": "empty" },
+    define: { "process.env.NODE_ENV": '"production"', "import.meta.env": '{"PROD":false}' }, loader: { ".css": "empty" }, logOverride: { "empty-import-meta": "silent" },
   });
 
   for (const [language, dictionary] of Object.entries({ en, he, es })) {
     const page = await browser.newPage({ viewport: { width: language === "en" ? 1280 : 390, height: 780 } });
     t.after(() => page.close());
+    page.setDefaultTimeout(5000);
     const payloads: unknown[] = [];
+    let connected = false;
+    const source = {
+      id: "source-1", provider: "mls_grid", displayName: "Fixture MLS",
+      connectionStatus: "error", lastSyncStatus: "failed",
+      lastSyncError: "MLS Grid HTTP 401: synthetic-sensitive-provider-detail", config: {},
+      lastSyncStats: {}, isActive: true, listingSyncSupported: true, hasCredentials: true, listingCount: 5,
+    };
     await page.route("https://matching.fixture.test/**", (route) => {
       if (route.request().isNavigationRequest()) return route.fulfill({ contentType: "text/html", body: '<div id="root"></div>' });
       if (["PATCH", "POST"].includes(route.request().method())) payloads.push(route.request().postDataJSON());
+      const { pathname } = new URL(route.request().url());
+      if (pathname === "/api/inventory/status") {
+        return route.fulfill({ json: { canUse: true, featureEnabled: true, rgeInstalled: true, reason: "ok" } });
+      }
+      if (pathname === "/api/inventory/sources") {
+        return route.fulfill({ json: { sources: connected ? [source] : [] } });
+      }
       return route.fulfill({ json: { matches: [], totalSaved: 0, unavailable: 0 } });
     });
-    await page.goto("https://matching.fixture.test/");
-    await page.evaluate((lang) => { Object.assign(window, { fixtureLocale: lang }); }, language);
-    await page.addScriptTag({ content: result.outputFiles[0].text });
+    async function loadFixture() {
+      await page.goto("https://matching.fixture.test/");
+      await page.evaluate((settings) => { Object.assign(window, settings); }, { fixtureLocale: language, fixtureConnected: connected });
+      await page.addScriptTag({ content: result.outputFiles[0].text });
+    }
+    await loadFixture();
+    await page.getByTestId("copilot-inventory-empty-state").getByText(dictionary.inboxUi.connectInventoryToEnableMatchingListingsAndPrice).waitFor();
+    assert.equal(await page.getByTestId("inventory-connected-sources").count(), 0);
+    connected = true;
+    await loadFixture();
+    await page.getByTestId("inventory-source-connection-state").getByText(dictionary.rgeMatching.needsAttention).waitFor();
+    await page.getByTestId("inventory-sync-error").getByText(dictionary.rgeMatching.providerAuth).waitFor();
+    assert.equal(await page.getByText("synthetic-sensitive-provider-detail", { exact: false }).count(), 0);
     await page.getByText(dictionary.rgeMatching.savedEmpty).waitFor();
     assert.equal(await page.locator("html").getAttribute("dir"), language === "he" ? "rtl" : "ltr");
     const matchingCard = page.getByTestId("inventory-match-sample-property");
