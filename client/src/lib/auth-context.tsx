@@ -9,6 +9,8 @@ import {
   applyDatabaseLanguagePreference,
   bindLoginLanguage,
   clearLoginLanguage,
+  clearSignInLanguageSelection,
+  getSignInLanguageSelection,
   restoreLoginLanguage,
   saveLoginLanguage,
   clearExplicitLanguageSelection,
@@ -44,6 +46,7 @@ interface User {
   deletionRequestedAt?: string | null;
   /** Saved account language preference from /api/auth/me (en | es | he). */
   language?: string | null;
+  loginLanguage?: string | null;
 }
 
 export type SignupOptions = {
@@ -101,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (prevId !== nextId) {
       if (prevId) setSessionAligned(false);
       clearExplicitLanguageSelection();
-      if (nextId) restoreLoginLanguage(nextId);
+      if (nextId) restoreLoginLanguage(nextId, next?.loginLanguage);
       else clearLoginLanguage();
       resetAccountQueryCache(queryClient);
       clearAccountLocalHints();
@@ -207,10 +210,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string, rememberMe: boolean = false): Promise<LoginAttemptResult> => {
     try {
+      const loginLanguage = getSignInLanguageSelection();
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, rememberMe }),
+        body: JSON.stringify({ email, password, rememberMe, ...(loginLanguage ? { loginLanguage } : {}) }),
         credentials: "include",
         cache: "no-store",
       });
@@ -235,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await replaceSessionUser(null, false);
         return { ok: false, status: 500, errorKind: "server" };
       }
-      bindLoginLanguage(session.id, session.language);
+      bindLoginLanguage(session.id, session.language, loginLanguage);
       await replaceSessionUser(asAppUser(session), true, true);
       const pending = session.emailVerifiedAt === null;
       if (pending && typeof session.email === "string") {
@@ -353,6 +357,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionUpdate.current++;
       clearExplicitLanguageSelection();
       clearLoginLanguage();
+      clearSignInLanguageSelection();
       userRef.current = null;
       setUser(null);
       setSessionAligned(false);

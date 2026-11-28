@@ -1060,6 +1060,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid language" });
       }
       const updated = await storage.updateUser(req.user.id, { language });
+      if (updated?.language === language && req.session.loginLanguage?.accountId === req.user.id) {
+        delete req.session.loginLanguage;
+      }
       res.json({ success: true, language: updated?.language });
     } catch (error) {
       console.error("Error updating language:", error);
