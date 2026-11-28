@@ -3,6 +3,7 @@
  * Pricing and capability claims must stay aligned with live product packaging.
  */
 import { S } from "@shared/marketingScreenshots";
+import { RGE_GROWTH_COPY } from "@shared/realtorGrowthEngineLandingLocales";
 import {
   formatUsdDisplay,
   getPaidPlanMonthlyPriceUsd,
@@ -13,28 +14,21 @@ const PRO_MONTHLY_PRICE = `${formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))
 export const RGE_LANDING_SEO = {
   title: "Realtor Growth Engine | AI CRM for Real Estate Agents | WhachatCRM",
   description:
-    "From new lead to booked showing — automatically. AI buyer qualification, live inventory matching where supported, personalized property presentations, channel-aware follow-up, Agent Page, and Unified Inbox + Copilot.",
+    RGE_GROWTH_COPY.en.seoDescription,
   keywords:
-    "AI CRM for real estate agents, real estate AI CRM, AI for real estate agents, real estate lead follow up automation, real estate lead qualification, real estate CRM with MLS integration, AI property matching, real estate agent CRM, automated real estate follow up, real estate lead management software",
-  ogTitle: "Realtor Growth Engine — From New Lead to Booked Showing",
+    "AI CRM for real estate agents, real estate AI CRM, AI for real estate agents, real estate lead follow up automation, real estate lead qualification, real estate CRM with MLS integration, AI property matching, real estate agent CRM, automated real estate follow up, real estate lead management software, real estate lead generation, neighborhood pages for real estate agents, local SEO for Realtors, agent websites, real estate CRM, MLS property matching, showing booking links",
+  ogTitle: `Realtor Growth Engine — ${RGE_GROWTH_COPY.en.headline}`,
   ogDescription:
-    "Qualify buyers, match connected live inventory, present properties, follow up automatically, and move conversations toward a showing — in one AI-powered real estate workspace.",
+    RGE_GROWTH_COPY.en.seoOg,
 } as const;
 
 export const RGE_LANDING = {
   hero: {
     eyebrow: "Realtor Growth Engine",
-    h1: "From New Lead to Booked Showing — Automatically.",
+    h1: RGE_GROWTH_COPY.en.headline,
     support:
-      "Qualify buyers, understand exactly what they want, match them with live inventory, create personalized property presentations, follow up automatically, and move conversations toward a showing — from one AI-powered real estate workspace.",
-    capabilities: [
-      "AI Buyer Qualification",
-      "Live Inventory Matching",
-      "Personalized Property Flyers",
-      "Automated Follow-Up",
-      "Agent Page",
-      "Unified Inbox + Copilot",
-    ],
+      RGE_GROWTH_COPY.en.support,
+    capabilities: [...RGE_GROWTH_COPY.en.capabilities],
     cta: "Install Realtor Growth Engine",
     secondaryCta: "See how it works",
   },

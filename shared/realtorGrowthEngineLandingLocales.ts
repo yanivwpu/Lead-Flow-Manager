@@ -271,12 +271,12 @@ export const RGE_LANDING_LOCALES: Record<
     seo: {
       title: "Realtor Growth Engine | CRM con IA para agentes inmobiliarios | WhachatCRM",
       description:
-        "De nuevo lead a visita programada — automáticamente. Calificación de compradores con IA, coincidencia de inventario en vivo donde esté soportado, presentaciones de propiedades personalizadas, seguimiento consciente del canal, Agent Page y Unified Inbox + Copilot.",
+        "CRM inmobiliario con IA, páginas de agentes y barrios para SEO, ocho flujos preconfigurados, calificación, coincidencias MLS compatibles y enlaces para reservar visitas.",
       keywords:
-        "CRM con IA para agentes inmobiliarios, CRM inmobiliario con IA, IA para agentes inmobiliarios, automatización de seguimiento de leads inmobiliarios, calificación de leads inmobiliarios, CRM inmobiliario con integración MLS, coincidencia de propiedades con IA, CRM para agentes inmobiliarios, seguimiento inmobiliario automatizado, software de gestión de leads inmobiliarios",
-      ogTitle: "Realtor Growth Engine — De nuevo lead a visita programada",
+        "CRM con IA para agentes inmobiliarios, CRM inmobiliario con IA, IA para agentes inmobiliarios, automatización de seguimiento de leads inmobiliarios, calificación de leads inmobiliarios, CRM inmobiliario con integración MLS, coincidencia de propiedades con IA, CRM para agentes inmobiliarios, seguimiento inmobiliario automatizado, software de gestión de leads inmobiliarios, captación inmobiliaria, páginas de barrios, SEO local para agentes inmobiliarios, sitios web de agentes, CRM inmobiliario, coincidencias MLS, reservas de visitas",
+      ogTitle: "Realtor Growth Engine — De la búsqueda local al cierre de operaciones.",
       ogDescription:
-        "Califica compradores, coincide inventario en vivo conectado, presenta propiedades, haz seguimiento automáticamente y avanza las conversaciones hacia una visita — en un espacio inmobiliario con IA.",
+        "Capta leads, automatiza el seguimiento y ayuda a los compradores a reservar visitas con una plataforma inmobiliaria conectada.",
     },
     ui: {
       faqTitle: "Preguntas frecuentes",
@@ -299,9 +299,9 @@ export const RGE_LANDING_LOCALES: Record<
     },
     hero: {
       eyebrow: "Realtor Growth Engine",
-      h1: "De nuevo lead a visita programada — automáticamente.",
+      h1: "De la búsqueda local al cierre de operaciones.",
       support:
-        "Califica compradores, entiende exactamente lo que buscan, haz coincidencias con inventario en vivo, crea presentaciones de propiedades personalizadas, haz seguimiento automáticamente y avanza las conversaciones hacia una visita — desde un espacio inmobiliario con IA.",
+        "Una plataforma inmobiliaria con IA, páginas de agentes y barrios optimizadas para SEO, ocho flujos preconfigurados, búsqueda de propiedades con MLS cuando esté disponible y enlaces para reservar visitas. Conecta tus herramientas y enfócate en tus clientes.",
       capabilities: [
         "Calificación de compradores con IA",
         "Coincidencia de inventario en vivo",
@@ -721,12 +721,12 @@ export const RGE_LANDING_LOCALES: Record<
     seo: {
       title: "Realtor Growth Engine | CRM AI לסוכני נדל\"ן | WhachatCRM",
       description:
-        "מליד חדש לסיור שנקבע — אוטומטית. סינון קונים AI, התאמת מלאי חי כשנתמך, מצגות נכסים מותאמות, מעקב מודע לערוץ, Agent Page ו-Unified Inbox + Copilot.",
+        "CRM נדל״ן עם AI, דפי סוכן ושכונה לקידום אורגני, שמונה תהליכי אוטומציה מוכנים, סינון קונים, התאמת נכסים ממאגר MLS נתמך וקישורים לתיאום סיורים.",
       keywords:
-        "CRM AI לסוכני נדל\"ן, CRM נדל\"ן AI, AI לסוכני נדל\"ן, אוטומציית מעקב לידים נדל\"ן, סינון לידים נדל\"ן, CRM נדל\"ן עם אינטגרציית MLS, התאמת נכסים AI, CRM לסוכני נדל\"ן, מעקב נדל\"ן אוטומטי, תוכנת ניהול לידים נדל\"ן",
-      ogTitle: "Realtor Growth Engine — מליד חדש לסיור שנקבע",
+        "CRM AI לסוכני נדל\"ן, CRM נדל\"ן AI, AI לסוכני נדל\"ן, אוטומציית מעקב לידים נדל\"ן, סינון לידים נדל\"ן, CRM נדל\"ן עם אינטגרציית MLS, התאמת נכסים AI, CRM לסוכני נדל\"ן, מעקב נדל\"ן אוטומטי, תוכנת ניהול לידים נדל\"ן, יצירת לידים בנדל״ן, דפי שכונה, קידום אורגני למתווכים, אתר למתווך, CRM נדל״ן, התאמת נכסים MLS, תיאום סיורים",
+      ogTitle: "Realtor Growth Engine — מחיפוש מקומי ועד לסגירת עסקה.",
       ogDescription:
-        "סננו קונים, התאימו מלאי חי מחובר, הציגו נכסים, המשיכו מעקב אוטומטית והעבירו שיחות לכיוון סיור — במרחב נדל\"ן אחד מונע AI.",
+        "יצירת לידים, אוטומציית מעקב ותיאום סיורים במערכת נדל״ן אחת.",
     },
     ui: {
       faqTitle: "שאלות נפוצות",
@@ -749,9 +749,9 @@ export const RGE_LANDING_LOCALES: Record<
     },
     hero: {
       eyebrow: "Realtor Growth Engine",
-      h1: "מליד חדש לסיור שנקבע — אוטומטית.",
+      h1: "מחיפוש מקומי ועד לסגירת עסקה.",
       support:
-        "סננו קונים, הבינו בדיוק מה הם רוצים, התאימו למלאי חי, צרו מצגות נכסים מותאמות, המשיכו מעקב אוטומטית והעבירו שיחות לכיוון סיור — ממרחב נדל\"ן אחד מונע AI.",
+        "מערכת צמיחה למתווכי נדל״ן עם AI, דפי סוכן ושכונה מותאמים ל-SEO, שמונה תהליכי אוטומציה מוכנים, התאמת נכסים ממאגר MLS כאשר נתמך וקישורים לתיאום סיורים. חברו את הכלים שלכם והתמקדו בלקוחות.",
       capabilities: [
         "סינון קונים AI",
         "התאמת מלאי חי",
@@ -1211,3 +1211,319 @@ export function getLocalizedRgeLanding<T extends Record<string, unknown>>(
   const merged = mergeMarketingContent(base, contentOverlay) as T;
   return { ...merged, seo, ui } as LocalizedRgeLandingBundle<T>;
 }
+
+/** Shared copy for the growth-first RGE landing layout. */
+export const RGE_GROWTH_COPY = {
+  "en": {
+    "headline": "From Local Search to Closed Deals.",
+    "support": "An AI-powered real estate growth system with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, MLS property matching where supported, and showing booking links. Connect your tools, activate your engine and focus on clients.",
+    "pillars": [
+      "Generate",
+      "Automate",
+      "Convert"
+    ],
+    "pillarDetails": [
+      "Local SEO & branded pages",
+      "8 ready-made workflows",
+      "AI matching & showing bookings"
+    ],
+    "automationTitle": "Built for real estate. Ready out of the box.",
+    "automationBody": "Activate eight preconfigured real estate workflows (W1–W8), with guided setup, CRM fields, tags, pipeline stages and templates. No need to design every workflow from scratch.",
+    "automationItems": [
+      "New lead capture & response",
+      "Buyer qualification & routing",
+      "Booking-intent prompts",
+      "Re-engagement follow-up",
+      "Quiet-lead nurture",
+      "Week follow-up",
+      "Opt-out & lead safety",
+      "Language detection"
+    ],
+    "automationNote": "Connect your messaging channels and configure your preferences before activating. Automated sends respect channel eligibility.",
+    "neighborhoodTitle": "Become the local real estate expert.",
+    "neighborhoodBody": "Publish your own SEO-ready Neighborhood Pages with original local content, images and custom map boundaries. Give buyers a useful destination to explore your market and contact you.",
+    "neighborhoodItems": [
+      "Custom geographic boundaries",
+      "Your content, images and branding",
+      "Lead capture connected to your CRM",
+      "Public page language in English, Hebrew or Spanish"
+    ],
+    "neighborhoodNote": "Neighborhood Pages work without MLS. Search indexing depends on page eligibility and search engines; rankings and leads are not guaranteed.",
+    "neighborhoodVisual": [
+      "Your neighborhood",
+      "Local guide",
+      "Homes for sale / rent where available",
+      "Contact the agent"
+    ],
+    "illustration": "Illustrative layout",
+    "showingTitle": "Less back-and-forth. More showings.",
+    "showingBody": "Give buyers a direct path to request or schedule a property showing through your configured booking link. Connect Calendly or use your own scheduling link, then share it when a buyer is ready.",
+    "showingItems": [
+      "Booking link on supported property flyers",
+      "Booking-intent prompts in your automation pack",
+      "Keep the conversation and follow-up in one workspace"
+    ],
+    "showingVisual": [
+      "Property interest",
+      "Book a showing",
+      "Your scheduling link"
+    ],
+    "networkTitle": "Your next referral could be one connection away.",
+    "networkBody": "We are planning an opt-in directory of real estate agents using WhachatCRM. Find an agent in another market and send a referral opportunity request directly.",
+    "comingSoon": "Coming soon",
+    "networkSteps": [
+      "Find an agent by location",
+      "Send a referral request",
+      "Connect directly if accepted"
+    ],
+    "networkNote": "Planned feature, not yet available. Agents and their brokers handle referral agreements and commissions independently.",
+    "globalTitle": "Grow in your market, with or without MLS.",
+    "globalBody": "Agent Pages, Neighborhood Pages, lead capture, CRM and messaging tools are available without a US MLS feed. Connected inventory and AI property matching require a supported provider.",
+    "pricingTitle": "One platform. One subscription.",
+    "pricingNote": "Realtor Growth Engine and AI Brain are included with an active Pro plan. No separate activation fee.",
+    "pricingItems": [
+      "8 preconfigured real estate workflows",
+      "Agent & Neighborhood Pages",
+      "AI buyer qualification and matching where supported",
+      "Showing booking links",
+      "Unified Inbox, CRM & follow-ups"
+    ],
+    "seoDescription": "AI real estate CRM with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, buyer qualification, supported MLS property matching and showing booking links.",
+    "seoKeywords": "real estate lead generation, neighborhood pages for real estate agents, local SEO for Realtors, agent websites, real estate CRM, MLS property matching, showing booking links",
+    "seoOg": "Generate leads, automate follow-ups and move buyers toward showings with a connected real estate growth system.",
+    "networkEyebrow": "WhachatCRM Agent Network",
+    "enlarge": "Enlarge image",
+    "closeEnlarged": "Close enlarged image",
+    "capabilities": [
+      "SEO-ready Neighborhood Pages",
+      "Branded Agent Pages",
+      "8 preconfigured workflows",
+      "AI buyer qualification",
+      "MLS matching where supported",
+      "Showing booking links",
+      "Unified Inbox & CRM"
+    ],
+    "faqQuestions": [
+      [
+        "Do I need MLS to use the Realtor Growth Engine?",
+        "No. Agent Pages, Neighborhood Pages, CRM and lead capture can work without an MLS feed. Live inventory and AI property matching require a supported connection."
+      ],
+      [
+        "Can I use my own showing booking link?",
+        "Yes. Configure your booking link or connect Calendly to help buyers move from an inquiry toward scheduling a showing."
+      ],
+      [
+        "Is the Agent Network available now?",
+        "Not yet. We are planning an opt-in directory and direct referral requests. Agents and their brokers will handle referral arrangements independently."
+      ]
+    ]
+  },
+  "es": {
+    "headline": "De la búsqueda local al cierre de operaciones.",
+    "support": "Una plataforma inmobiliaria con IA, páginas de agentes y barrios optimizadas para SEO, ocho flujos preconfigurados, búsqueda de propiedades con MLS cuando esté disponible y enlaces para reservar visitas. Conecta tus herramientas y enfócate en tus clientes.",
+    "pillars": [
+      "Genera",
+      "Automatiza",
+      "Convierte"
+    ],
+    "pillarDetails": [
+      "SEO local y páginas de marca",
+      "8 flujos listos para configurar",
+      "Coincidencias y reservas de visitas"
+    ],
+    "automationTitle": "Diseñado para agentes. Listo para empezar.",
+    "automationBody": "Activa ocho flujos inmobiliarios preconfigurados (W1–W8), con configuración guiada, campos del CRM, etiquetas, etapas y plantillas. No necesitas diseñar cada flujo desde cero.",
+    "automationItems": [
+      "Captación y respuesta a nuevos leads",
+      "Calificación y derivación",
+      "Invitación a reservar una cita",
+      "Seguimiento para retomar el contacto",
+      "Seguimiento de leads inactivos",
+      "Seguimiento semanal",
+      "Bajas y protección de leads",
+      "Detección de idioma"
+    ],
+    "automationNote": "Conecta tus canales y configura tus preferencias antes de activar. Los envíos automáticos respetan las reglas de cada canal.",
+    "neighborhoodTitle": "Conviértete en el referente inmobiliario local.",
+    "neighborhoodBody": "Publica páginas de barrios optimizadas para SEO con contenido propio, imágenes y límites personalizados en el mapa. Ayuda a los compradores a conocer tu mercado y contactarte.",
+    "neighborhoodItems": [
+      "Límites geográficos personalizados",
+      "Tu contenido, imágenes y marca",
+      "Captación conectada al CRM",
+      "Idioma público en inglés, hebreo o español"
+    ],
+    "neighborhoodNote": "Las páginas de barrios funcionan sin MLS. La indexación depende de la elegibilidad y los buscadores; no se garantizan posiciones ni leads.",
+    "neighborhoodVisual": [
+      "Tu barrio",
+      "Guía local",
+      "Venta / alquiler cuando esté disponible",
+      "Contactar al agente"
+    ],
+    "illustration": "Diseño ilustrativo",
+    "showingTitle": "Menos coordinación. Más visitas.",
+    "showingBody": "Ofrece a los compradores una forma directa de solicitar o reservar una visita mediante tu enlace de citas configurado. Conecta Calendly o utiliza tu propio enlace y compártelo cuando el comprador esté listo.",
+    "showingItems": [
+      "Enlace de reserva en folletos compatibles",
+      "Invitaciones a reservar dentro del paquete de automatización",
+      "Conversación y seguimiento en un solo espacio"
+    ],
+    "showingVisual": [
+      "Interés en la propiedad",
+      "Reservar una visita",
+      "Tu enlace de citas"
+    ],
+    "networkTitle": "Tu próxima referencia puede estar a una conexión.",
+    "networkBody": "Estamos planeando un directorio voluntario de agentes que usan WhachatCRM. Encuentra un agente en otro mercado y envíale directamente una solicitud de referencia.",
+    "comingSoon": "Próximamente",
+    "networkSteps": [
+      "Encuentra un agente por ubicación",
+      "Envía una solicitud de referencia",
+      "Conecta directamente si la acepta"
+    ],
+    "networkNote": "Función prevista, aún no disponible. Los agentes y sus corredores gestionan los acuerdos y comisiones por separado.",
+    "globalTitle": "Crece en tu mercado, con o sin MLS.",
+    "globalBody": "Las páginas de agentes y barrios, la captación, el CRM y las herramientas de mensajería funcionan sin un MLS de EE. UU. El inventario conectado y las coincidencias con IA requieren un proveedor compatible.",
+    "pricingTitle": "Una plataforma. Una suscripción.",
+    "pricingNote": "Realtor Growth Engine y AI Brain están incluidos en un plan Pro activo. Sin cargo de activación independiente.",
+    "pricingItems": [
+      "8 flujos inmobiliarios preconfigurados",
+      "Páginas de agentes y barrios",
+      "Calificación con IA y coincidencias donde estén disponibles",
+      "Enlaces para reservar visitas",
+      "Bandeja unificada, CRM y seguimiento"
+    ],
+    "seoDescription": "CRM inmobiliario con IA, páginas de agentes y barrios para SEO, ocho flujos preconfigurados, calificación, coincidencias MLS compatibles y enlaces para reservar visitas.",
+    "seoKeywords": "captación inmobiliaria, páginas de barrios, SEO local para agentes inmobiliarios, sitios web de agentes, CRM inmobiliario, coincidencias MLS, reservas de visitas",
+    "seoOg": "Capta leads, automatiza el seguimiento y ayuda a los compradores a reservar visitas con una plataforma inmobiliaria conectada.",
+    "networkEyebrow": "Red de agentes de WhachatCRM",
+    "enlarge": "Ampliar imagen",
+    "closeEnlarged": "Cerrar imagen ampliada",
+    "capabilities": [
+      "Páginas de barrios para SEO",
+      "Páginas de agentes con tu marca",
+      "8 flujos preconfigurados",
+      "Calificación de compradores con IA",
+      "Coincidencias MLS cuando estén disponibles",
+      "Enlaces para reservar visitas",
+      "Bandeja unificada y CRM"
+    ],
+    "faqQuestions": [
+      [
+        "¿Necesito MLS para usar Realtor Growth Engine?",
+        "No. Las páginas de agentes y barrios, el CRM y la captación pueden funcionar sin MLS. El inventario en vivo y las coincidencias con IA requieren una conexión compatible."
+      ],
+      [
+        "¿Puedo usar mi propio enlace para reservar visitas?",
+        "Sí. Configura tu enlace de citas o conecta Calendly para ayudar a los compradores a programar una visita."
+      ],
+      [
+        "¿Ya está disponible la red de agentes?",
+        "Todavía no. Estamos planeando un directorio voluntario y solicitudes directas de referencias. Los agentes y sus corredores gestionarán los acuerdos de forma independiente."
+      ]
+    ]
+  },
+  "he": {
+    "headline": "מחיפוש מקומי ועד לסגירת עסקה.",
+    "support": "מערכת צמיחה למתווכי נדל״ן עם AI, דפי סוכן ושכונה מותאמים ל-SEO, שמונה תהליכי אוטומציה מוכנים, התאמת נכסים ממאגר MLS כאשר נתמך וקישורים לתיאום סיורים. חברו את הכלים שלכם והתמקדו בלקוחות.",
+    "pillars": [
+      "יצירת לידים",
+      "אוטומציה",
+      "המרה"
+    ],
+    "pillarDetails": [
+      "SEO מקומי ודפים ממותגים",
+      "8 תהליכים מוכנים",
+      "התאמת נכסים ותיאום סיורים"
+    ],
+    "automationTitle": "נבנה למתווכי נדל״ן. מוכן להפעלה.",
+    "automationBody": "הפעילו שמונה תהליכי אוטומציה מוכנים מראש (W1–W8), עם הדרכה בהגדרה, שדות CRM, תגיות, שלבי מכירה ותבניות. אין צורך לבנות כל תהליך מאפס.",
+    "automationItems": [
+      "קליטת לידים חדשים ומענה",
+      "סינון קונים והפניית פניות",
+      "הצעה לתיאום פגישה",
+      "מעקב לחידוש הקשר",
+      "מעקב אחר לידים שלא הגיבו",
+      "מעקב לאחר שבוע",
+      "הסרה מרשימות והגנה על לידים",
+      "זיהוי שפה"
+    ],
+    "automationNote": "חברו ערוצי תקשורת והגדירו העדפות לפני ההפעלה. שליחה אוטומטית כפופה לכללי הערוץ.",
+    "neighborhoodTitle": "הפכו למומחי הנדל״ן המקומיים.",
+    "neighborhoodBody": "פרסמו דפי שכונה מותאמים ל-SEO עם תוכן מקורי, תמונות וגבולות מותאמים במפה. תנו לקונים מקום להכיר את האזור וליצור איתכם קשר.",
+    "neighborhoodItems": [
+      "גבולות גאוגרפיים מותאמים",
+      "התוכן, התמונות והמיתוג שלכם",
+      "קליטת לידים המחוברת ל-CRM",
+      "שפת הדף הציבורי: עברית, אנגלית או ספרדית"
+    ],
+    "neighborhoodNote": "דפי שכונה זמינים ללא MLS. האינדוקס תלוי בזכאות הדף ובמנועי החיפוש; אין הבטחה לדירוגים או ללידים.",
+    "neighborhoodVisual": [
+      "השכונה שלכם",
+      "מדריך מקומי",
+      "נכסים למכירה או להשכרה כשזמינים",
+      "יצירת קשר עם המתווך"
+    ],
+    "illustration": "המחשה בלבד",
+    "showingTitle": "פחות תיאומים. יותר סיורים.",
+    "showingBody": "אפשרו לקונים לבקש או לתאם סיור בנכס באמצעות קישור התיאום שהגדרתם. חברו Calendly או השתמשו בקישור תיאום משלכם ושתפו אותו כשהקונה מוכן.",
+    "showingItems": [
+      "קישור לתיאום סיור בדפי נכס נתמכים",
+      "הצעות לתיאום כחלק מחבילת האוטומציה",
+      "כל השיחה והמעקב במקום אחד"
+    ],
+    "showingVisual": [
+      "התעניינות בנכס",
+      "תיאום סיור",
+      "קישור התיאום שלכם"
+    ],
+    "networkTitle": "ההפניה הבאה שלכם יכולה להתחיל בקשר אחד.",
+    "networkBody": "אנחנו מתכננים מדריך מתווכים בהצטרפות מרצון עבור משתמשי WhachatCRM. חפשו מתווך באזור אחר ושלחו לו בקשה להפניית לקוח באופן ישיר.",
+    "comingSoon": "בקרוב",
+    "networkSteps": [
+      "חיפוש מתווך לפי אזור",
+      "שליחת בקשת הפניה",
+      "יצירת קשר ישיר לאחר אישור"
+    ],
+    "networkNote": "תכונה מתוכננת שעדיין אינה זמינה. המתווכים ומשרדי התיווך מסדירים את הסכמי ההפניה והעמלות באופן עצמאי.",
+    "globalTitle": "צמחו בשוק שלכם, עם או בלי MLS.",
+    "globalBody": "דפי סוכן ושכונה, קליטת לידים, CRM וכלי תקשורת זמינים ללא מאגר MLS אמריקאי. מלאי מחובר והתאמת נכסים עם AI דורשים ספק נתמך.",
+    "pricingTitle": "מערכת אחת. מנוי אחד.",
+    "pricingNote": "Realtor Growth Engine ו-AI Brain כלולים במנוי Pro פעיל. ללא דמי הפעלה נפרדים.",
+    "pricingItems": [
+      "8 תהליכי אוטומציה מוכנים לנדל״ן",
+      "דפי סוכן ושכונה",
+      "סינון קונים עם AI והתאמת נכסים כשנתמך",
+      "קישורים לתיאום סיורים",
+      "תיבת שיחות מאוחדת, CRM ומעקבים"
+    ],
+    "seoDescription": "CRM נדל״ן עם AI, דפי סוכן ושכונה לקידום אורגני, שמונה תהליכי אוטומציה מוכנים, סינון קונים, התאמת נכסים ממאגר MLS נתמך וקישורים לתיאום סיורים.",
+    "seoKeywords": "יצירת לידים בנדל״ן, דפי שכונה, קידום אורגני למתווכים, אתר למתווך, CRM נדל״ן, התאמת נכסים MLS, תיאום סיורים",
+    "seoOg": "יצירת לידים, אוטומציית מעקב ותיאום סיורים במערכת נדל״ן אחת.",
+    "networkEyebrow": "רשת המתווכים של WhachatCRM",
+    "enlarge": "הגדלת תמונה",
+    "closeEnlarged": "סגירת תמונה מוגדלת",
+    "capabilities": [
+      "דפי שכונה מותאמים ל-SEO",
+      "דפי סוכן ממותגים",
+      "8 תהליכי אוטומציה מוכנים",
+      "סינון קונים עם AI",
+      "התאמת נכסים מ-MLS כשנתמך",
+      "קישורים לתיאום סיורים",
+      "תיבת שיחות מאוחדת ו-CRM"
+    ],
+    "faqQuestions": [
+      [
+        "האם צריך MLS כדי להשתמש ב-Realtor Growth Engine?",
+        "לא. דפי סוכן ושכונה, CRM וקליטת לידים יכולים לפעול ללא מאגר MLS. מלאי חי והתאמת נכסים עם AI דורשים חיבור נתמך."
+      ],
+      [
+        "האם אפשר להשתמש בקישור תיאום סיורים משלי?",
+        "כן. הגדירו קישור תיאום או חברו Calendly כדי לעזור לקונים לעבור מפנייה לתיאום סיור בנכס."
+      ],
+      [
+        "האם רשת המתווכים כבר זמינה?",
+        "עדיין לא. אנו מתכננים מדריך מתווכים בהצטרפות מרצון ובקשות הפניה ישירות. המתווכים ומשרדי התיווך יסדירו את הסכמי ההפניה באופן עצמאי."
+      ]
+    ]
+  }
+} as const;
