@@ -41,6 +41,7 @@ const fields = z.object({
   city: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   state: z.string().trim().min(1).max(60).regex(/[\p{L}\p{N}]/u),
   country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).default("US"),
+  publicLanguage: z.enum(["en", "he", "es"]).optional(),
   customBoundary: z.custom<PolygonBoundary>((value) => readCustomNeighborhoodBoundary(value) !== null)
     .transform((value) => readCustomNeighborhoodBoundary(value)!).nullable().optional(),
   content: z.string().trim().max(5000),
@@ -51,8 +52,8 @@ const fields = z.object({
 });
 
 function settings(page: NeighborhoodPage, agentSlug: string | null) {
-  const { id, name, city, state, country, customBoundary, content, photos, slug, published, updatedAt } = page;
-  return { id, name, city, state, country, customBoundary, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
+  const { id, name, city, state, country, publicLanguage, customBoundary, content, photos, slug, published, updatedAt } = page;
+  return { id, name, city, state, country, publicLanguage, customBoundary, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
     ? buildNeighborhoodUrl(agentSlug, slug, getAppOrigin()) : null };
 }
 

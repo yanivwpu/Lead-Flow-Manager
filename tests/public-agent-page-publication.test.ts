@@ -80,6 +80,9 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   await pg.exec(await readFile("migrations/20261124_agent_neighborhood_country.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261124_agent_neighborhood_custom_boundary.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261124_agent_neighborhood_custom_boundary.sql", "utf8"));
+  const publicLanguageMigration = await readFile("migrations/20261128_public_real_estate_languages.sql", "utf8");
+  await pg.exec(publicLanguageMigration);
+  await pg.exec(publicLanguageMigration);
   const dialect = new PgDialect();
   for (const table of [contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, teamMembers, workflows, workflowExecutions]) {
     const { name, columns } = getTableConfig(table);
@@ -212,6 +215,15 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   assert.match(await (await request("/robots.txt")).text(), /Allow: \/agents\//);
   assert.match(await (await request("/public-listings-sitemap.xml")).text(), /public-agents-sitemap-1\.xml/);
   assert.match(await sitemap(), /\/agents\/jane-agent/);
+  assert.match(html, /<html lang="en" dir="ltr">/);
+  assert.equal((await update({ agentPageLanguage: "he" })).status, 200);
+  const hebrew = await (await request("/agents/jane-agent", { headers: { "Accept-Language": "es" } })).text();
+  assert.match(hebrew, /<html lang="he" dir="rtl">/);
+  assert.ok(hebrew.includes(`<link rel="canonical" href="${origin}/agents/jane-agent"`));
+  assert.doesNotMatch(hebrew, /jane-public|mailto:|publicEmail/);
+  assert.equal((await update({ agentPageLanguage: "fr" })).status, 400);
+  assert.equal((await update({ agentPageLanguage: "en" })).status, 200);
+
 
   for (const path of ["/agents/jane-agent?location=Miami", "/agents/JANE-AGENT", "/agents/jane-agent/"]) {
     const response = await request(path);

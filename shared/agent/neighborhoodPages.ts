@@ -7,6 +7,7 @@ export const NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 export type NeighborhoodPhoto = { url: string; alt: string };
 
 export type NeighborhoodContent = {
+  publicLanguage?: string;
   name: string;
   city: string;
   state: string;

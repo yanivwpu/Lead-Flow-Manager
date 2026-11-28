@@ -1,3 +1,4 @@
+import { publicRealEstateLanguage, publicRealEstateLocale, publicRealEstateText, type publicRealEstateCopy } from "../agent/publicRealEstateLocale";
 import {
   formatBedsBathsForComposer,
   formatListingPriceForComposer,
@@ -27,6 +28,7 @@ export type PublicListingFlyerAgent = {
 export type PublicListingFlyerListing = {
   id: string;
   priceCents: number | null;
+  currency?: string | null;
   beds: number | null;
   baths: number | null;
   squareFeet: number | null;
@@ -52,6 +54,7 @@ export type PublicListingFlyerListing = {
 };
 
 export type PublicListingFlyerInput = {
+  publicLanguage?: string;
   listing: PublicListingFlyerListing;
   agent: PublicListingFlyerAgent;
   shareUrl: string;
@@ -287,6 +290,7 @@ export function applyPublicDisplayPermissions(
 }
 
 export type ListingOpenGraphInput = {
+  publicLanguage?: string;
   listing: PublicListingFlyerListing;
   agent: PublicListingFlyerAgent;
   shareUrl: string;
@@ -339,14 +343,20 @@ export function buildListingSeoMeta(input: ListingOpenGraphInput): Pick<
   "title" | "description" | "keywords"
 > {
   const { listing } = input;
+  const language = publicRealEstateLanguage(input.publicLanguage);
+  const text = flyerText(language);
+  const locale = publicRealEstateLocale(language);
+  const number = new Intl.NumberFormat(locale);
   const street =
     buildSeoStreetAddress(listing) ||
     buildFullAddress(listing) ||
     [listing.city, listing.state].filter(Boolean).join(", ") ||
-    "Property listing";
-  const price = formatListingPriceForComposer(listing.priceCents);
-  const bedsLabel = formatSeoBedBathCount(listing.beds, "Bed");
-  const bathsLabel = formatSeoBedBathCount(listing.baths, "Bath");
+    text("Property listing");
+  const price = localizedFlyerPrice(listing, language);
+  const bedsLabel = language === "en" ? formatSeoBedBathCount(listing.beds, "Bed")
+    : listing.beds == null ? null : text(listing.beds === 1 ? "{count} Bed" : "{count} Beds", { count: number.format(listing.beds) });
+  const bathsLabel = language === "en" ? formatSeoBedBathCount(listing.baths, "Bath")
+    : listing.baths == null ? null : text(listing.baths === 1 ? "{count} Bath" : "{count} Baths", { count: number.format(listing.baths) });
   const { sqft } = resolveFlyerSpecFields(listing);
 
   const titleParts: string[] = [street];
@@ -358,22 +368,30 @@ export function buildListingSeoMeta(input: ListingOpenGraphInput): Pick<
     titleParts.push(bathsLabel);
   }
   if (listing.city && listing.state) {
-    titleParts.push(`${listing.city}, ${listing.state} Real Estate`);
+    titleParts.push(text("{location} Real Estate", { location: `${listing.city}, ${listing.state}` }));
   }
   const title = truncateMetaText(titleParts.join(" | "), 120);
 
-  const descriptionParts: string[] = [`View ${street}.`];
+  const descriptionParts: string[] = [text("View {address}.", { address: street })];
   const detailBits: string[] = [];
   if (listing.beds != null) detailBits.push(`${listing.beds % 1 === 0 ? Math.round(listing.beds) : listing.beds} beds`);
   if (listing.baths != null) {
     detailBits.push(`${listing.baths % 1 === 0 ? Math.round(listing.baths) : listing.baths} baths`);
   }
   if (sqft) detailBits.push(`${sqft.replace(/\s*Sq Ft/i, "")} sq ft`);
+  if (language !== "en") {
+    detailBits.length = 0;
+    if (bedsLabel) detailBits.push(bedsLabel);
+    if (bathsLabel) detailBits.push(bathsLabel);
+    if (sqft) detailBits.push(text("{amount} Sq Ft", {
+      amount: listing.squareFeet == null ? sqft.replace(/ Sq Ft$/, "") : number.format(listing.squareFeet),
+    }));
+  }
   if (price) detailBits.push(price);
   if (detailBits.length > 0) {
     descriptionParts.push(`${detailBits.join(", ")}.`);
   }
-  descriptionParts.push("Schedule a showing or contact the agent.");
+  descriptionParts.push(text("Schedule a showing or contact the agent."));
   const description = truncateMetaText(descriptionParts.join(" "), 320);
 
   const keywordParts = [street, listing.city, listing.state, price, bedsLabel, bathsLabel, formatLabel(listing.propertyType)]
@@ -393,7 +411,8 @@ export function buildListingStructuredDataJson(input: ListingOpenGraphInput): st
   const payload: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": ["RealEstateListing", "Residence"],
-    name: street || buildFullAddress(listing) || "Property listing",
+    name: street || buildFullAddress(listing) || publicRealEstateText(input.publicLanguage, "Property listing"),
+    inLanguage: publicRealEstateLanguage(input.publicLanguage),
     url: shareUrl,
   };
 
@@ -403,7 +422,7 @@ export function buildListingStructuredDataJson(input: ListingOpenGraphInput): st
     payload.offers = {
       "@type": "Offer",
       price: String(price),
-      priceCurrency: "USD",
+      priceCurrency: flyerCurrency(listing),
     };
   }
 
@@ -563,11 +582,17 @@ export function buildStaticMapImageUrl(listing: PublicListingFlyerListing): stri
   return buildStaticMapImageUrls(listing)[0] ?? null;
 }
 
+type FlyerText = (key: keyof typeof publicRealEstateCopy, values?: Record<string, string | number>) => string;
+
+function flyerText(language: unknown): FlyerText {
+  return (key, values) => publicRealEstateText(language, key, values);
+}
+
 function renderMapFallbackPlaceholder(label = "Map preview"): string {
   return `<div class="map-fallback-placeholder" aria-hidden="true">${escapeHtml(label)}</div>`;
 }
 
-function renderMapEmbed(listing: PublicListingFlyerListing): string {
+function renderMapEmbed(text: FlyerText, listing: PublicListingFlyerListing): string {
   const embedUrl = buildGoogleMapsEmbedUrl(listing);
   if (!embedUrl) return "";
 
@@ -576,15 +601,15 @@ function renderMapEmbed(listing: PublicListingFlyerListing): string {
   const hasCoords = lat != null && lng != null;
   const staticMapUrls = hasCoords ? buildStaticMapImageUrls(listing) : [];
   const staticMap = staticMapUrls.length
-    ? `<img class="map-static" src="${escapeHtml(staticMapUrls[0])}" data-map-fallbacks="${escapeHtml(JSON.stringify(staticMapUrls.slice(1)))}" alt="Property location map" />`
+    ? `<img class="map-static" src="${escapeHtml(staticMapUrls[0])}" data-map-fallbacks="${escapeHtml(JSON.stringify(staticMapUrls.slice(1)))}" alt="${text("Property location map")}" />`
     : "";
   const iframePrintClass = staticMapUrls.length ? "no-print" : "";
   const wrapClass = hasCoords ? "map-embed-wrap" : "map-embed-wrap map-address-only";
 
   return `<div class="${wrapClass}">
       ${staticMap}
-      <iframe class="map-embed map-embed-interactive ${iframePrintClass}" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embedUrl)}"></iframe>
-      ${renderMapFallbackPlaceholder(hasCoords ? "Map preview" : "Location map")}
+      <iframe class="map-embed map-embed-interactive ${iframePrintClass}" title="${text("Property location map")}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embedUrl)}"></iframe>
+      ${renderMapFallbackPlaceholder(hasCoords ? text("Map preview") : text("Location map"))}
     </div>`;
 }
 
@@ -600,36 +625,36 @@ function renderPrintPhotoStrip(photos: { url: string; order: number }[]): string
   return `<div class="print-photo-strip print-only" aria-hidden="true">${items}</div>`;
 }
 
-function renderMapColumn(listing: PublicListingFlyerListing): string {
-  const mapEmbed = renderMapEmbed(listing);
+function renderMapColumn(text: FlyerText, listing: PublicListingFlyerListing): string {
+  const mapEmbed = renderMapEmbed(text, listing);
   const googleUrl = buildGoogleMapsUrl(listing);
   const mapsBtn = googleUrl
-    ? `<a class="btn btn-outline map-btn no-print" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`
+    ? `<a class="btn btn-outline map-btn no-print" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">${text("Open in Google Maps")}</a>`
     : "";
   if (!mapEmbed && !googleUrl) {
     return `<div class="bottom-col bottom-col-map bottom-col-empty" aria-hidden="true"></div>`;
   }
   return `<div class="bottom-col bottom-col-map">
-    <h3 class="bottom-col-heading">Location</h3>
+    <h3 class="bottom-col-heading">${text("Location")}</h3>
     ${mapEmbed}
     ${mapsBtn}
   </div>`;
 }
 
-function renderQrColumn(qrDataUrl: string): string {
+function renderQrColumn(text: FlyerText, qrDataUrl: string): string {
   if (!qrDataUrl) {
     return `<div class="bottom-col bottom-col-qr bottom-col-empty" aria-hidden="true"></div>`;
   }
   return `<div class="bottom-col bottom-col-qr">
-    <h3 class="bottom-col-heading">Scan To View Listing</h3>
+    <h3 class="bottom-col-heading">${text("Scan To View Listing")}</h3>
     <div class="qr-block">
-      <img src="${escapeHtml(qrDataUrl)}" alt="QR code to view listing" width="160" height="160" />
+      <img src="${escapeHtml(qrDataUrl)}" alt="${text("QR code to view listing")}" width="160" height="160" />
     </div>
-    <p class="qr-helper">Open listing on your phone</p>
+    <p class="qr-helper">${text("Open listing on your phone")}</p>
   </div>`;
 }
 
-function buildFlyerBottomRow(
+function buildFlyerBottomRow(text: FlyerText,
   listing: PublicListingFlyerListing,
   qrDataUrl: string,
   agent: PublicListingFlyerAgent,
@@ -637,9 +662,9 @@ function buildFlyerBottomRow(
   allowStreetAddress: boolean,
   inquiryPath?: string,
 ): string {
-  const mapCol = allowStreetAddress ? renderMapColumn(listing) : `<div class="bottom-col bottom-col-map bottom-col-empty" aria-hidden="true"></div>`;
-  const qrCol = renderQrColumn(qrDataUrl);
-  const agentCard = renderAgentCard(agent, companyLogoUrl, inquiryPath);
+  const mapCol = allowStreetAddress ? renderMapColumn(text, listing) : `<div class="bottom-col bottom-col-map bottom-col-empty" aria-hidden="true"></div>`;
+  const qrCol = renderQrColumn(text, qrDataUrl);
+  const agentCard = renderAgentCard(text, agent, companyLogoUrl, inquiryPath);
   const agentCol = agentCard
     ? `<div class="bottom-col bottom-col-agent">${agentCard}</div>`
     : `<div class="bottom-col bottom-col-agent bottom-col-empty" aria-hidden="true"></div>`;
@@ -655,19 +680,19 @@ function buildFlyerBottomRow(
 const PRINT_FLYER_HINT =
   "For best print results, turn off browser Headers and footers.";
 
-function renderListingBanner(listingLabel: "FOR SALE" | "FOR RENT"): string {
+function renderListingBanner(listingLabel: string): string {
   return `<div class="listing-banner" aria-label="${escapeHtml(listingLabel)}">${escapeHtml(listingLabel)}</div>`;
 }
 
-function renderListingBannerHeroOverlap(listingLabel: "FOR SALE" | "FOR RENT"): string {
+function renderListingBannerHeroOverlap(listingLabel: string): string {
   return `<div class="gallery-banner-anchor">${renderListingBanner(listingLabel)}</div>`;
 }
 
 /** Screen-only share/print — hidden from print layout via .no-print. */
-function renderFlyerFloatingActions(): string {
-  return `<div class="flyer-floating-actions no-print" aria-label="Page actions">
-      <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
-      <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer" title="${escapeHtml(PRINT_FLYER_HINT)}">${PRINT_ICON_SVG}</button>
+function renderFlyerFloatingActions(text: FlyerText): string {
+  return `<div class="flyer-floating-actions no-print" aria-label="${text("Page actions")}">
+      <button type="button" class="icon-btn" id="btn-share" aria-label="${text("Share listing")}">${SHARE_ICON_SVG}</button>
+      <button type="button" class="icon-btn" id="btn-print" aria-label="${text("Print flyer")}" title="${escapeHtml(text(PRINT_FLYER_HINT))}">${PRINT_ICON_SVG}</button>
     </div>`;
 }
 
@@ -683,7 +708,7 @@ function formatBathStat(baths: number | null): string | null {
   return `${n} Baths`;
 }
 
-function renderKeyStats(
+function renderKeyStats(text: FlyerText,
   price: string,
   beds: number | null,
   baths: number | null,
@@ -694,12 +719,12 @@ function renderKeyStats(
   const items: string[] = [];
   items.push(`<span class="key-stat key-price">${escapeHtml(price)}</span>`);
   const bedStat = formatBedStat(beds);
-  if (bedStat) items.push(`<span class="key-stat">${escapeHtml(bedStat)}</span>`);
+  if (bedStat) items.push(`<span class="key-stat">${escapeHtml(text("{count} Beds", { count: bedStat.split(" ")[0] }))}</span>`);
   const bathStat = formatBathStat(baths);
-  if (bathStat) items.push(`<span class="key-stat">${escapeHtml(bathStat)}</span>`);
-  if (sqft) items.push(`<span class="key-stat">${escapeHtml(sqft)}</span>`);
+  if (bathStat) items.push(`<span class="key-stat">${escapeHtml(text("{count} Baths", { count: bathStat.split(" ")[0] }))}</span>`);
+  if (sqft) items.push(`<span class="key-stat">${escapeHtml(text("{amount} Sq Ft", { amount: sqft.replace(/ Sq Ft$/, "") }))}</span>`);
   if (hoa) items.push(`<span class="key-stat">${escapeHtml(hoa)}</span>`);
-  if (yearBuilt) items.push(`<span class="key-stat">Built ${escapeHtml(yearBuilt)}</span>`);
+  if (yearBuilt) items.push(`<span class="key-stat">${escapeHtml(text("Built {year}", { year: yearBuilt }))}</span>`);
   const body = items.join('<span class="key-stat-sep" aria-hidden="true">|</span>');
   return `<div class="key-stats">${body}</div>`;
 }
@@ -729,9 +754,9 @@ function renderFlyerHeroResourceHints(photoUrl: string | undefined): string {
   }
 }
 
-function renderGallery(
+function renderGallery(text: FlyerText,
   photos: { url: string; order: number }[],
-  listingLabel: "FOR SALE" | "FOR RENT",
+  listingLabel: string,
 ): string {
   if (photos.length === 0) return "";
   const hero = photos[0].url;
@@ -739,15 +764,15 @@ function renderGallery(
   const thumbs = photos
     .map(
       (p, idx) =>
-        `<button type="button" class="thumb${idx === 0 ? " active" : ""}" data-index="${idx}" data-url="${escapeHtml(p.url)}" aria-label="Photo ${idx + 1}">
+        `<button type="button" class="thumb${idx === 0 ? " active" : ""}" data-index="${idx}" data-url="${escapeHtml(p.url)}" aria-label="${text("Photo {number}", { number: idx + 1 })}">
           <img src="${escapeHtml(p.url)}" alt="" loading="lazy" decoding="async" fetchpriority="low" />
         </button>`,
     )
     .join("");
   const nav =
     photos.length > 1
-      ? `<button type="button" class="gallery-nav gallery-prev" id="gallery-prev" aria-label="Previous photo">${CHEVRON_LEFT}</button>
-         <button type="button" class="gallery-nav gallery-next" id="gallery-next" aria-label="Next photo">${CHEVRON_RIGHT}</button>`
+      ? `<button type="button" class="gallery-nav gallery-prev" id="gallery-prev" aria-label="${text("Previous photo")}">${CHEVRON_LEFT}</button>
+         <button type="button" class="gallery-nav gallery-next" id="gallery-next" aria-label="${text("Next photo")}">${CHEVRON_RIGHT}</button>`
       : "";
   return `<section class="gallery">
     ${renderListingBannerHeroOverlap(listingLabel)}
@@ -761,7 +786,7 @@ function renderGallery(
   </section>`;
 }
 
-function renderAgentActions(agent: PublicListingFlyerAgent, inquiryPath?: string): string {
+function renderAgentActions(text: FlyerText, agent: PublicListingFlyerAgent, inquiryPath?: string): string {
   const bookingHref = isValidBookingLink(agent.bookingLink) ? agent.bookingLink.trim() : null;
   const phoneHref = publicAgentPhoneHref(agent.phone);
   const contactClass = bookingHref ? "btn agent-cta-secondary" : "btn btn-primary agent-cta";
@@ -769,11 +794,11 @@ function renderAgentActions(agent: PublicListingFlyerAgent, inquiryPath?: string
 
   if (bookingHref) {
     buttons.push(
-      `<a class="btn btn-primary agent-cta" href="${escapeHtml(bookingHref)}" target="_blank" rel="noopener noreferrer">Schedule Showing</a>`,
+      `<a class="btn btn-primary agent-cta" href="${escapeHtml(bookingHref)}" target="_blank" rel="noopener noreferrer">${text("Schedule Showing")}</a>`,
     );
   }
-  if (inquiryPath) buttons.push(`<button type="button" class="${contactClass}" id="open-listing-inquiry">Contact Agent</button>`);
-  else if (phoneHref) buttons.push(`<a class="${contactClass}" href="${escapeHtml(phoneHref)}">Contact Agent</a>`);
+  if (inquiryPath) buttons.push(`<button type="button" class="${contactClass}" id="open-listing-inquiry">${text("Contact Agent")}</button>`);
+  else if (phoneHref) buttons.push(`<a class="${contactClass}" href="${escapeHtml(phoneHref)}">${text("Contact Agent")}</a>`);
 
   if (buttons.length === 0) return "";
   return `<div class="agent-actions">${buttons.join("")}</div>`;
@@ -786,16 +811,16 @@ function agentInitials(agent: PublicListingFlyerAgent): string {
   return source.charAt(0).toUpperCase();
 }
 
-function renderListingInquiry(inquiryPath: string): string {
+function renderListingInquiry(text: FlyerText, inquiryPath: string, language: string): string {
   return `<dialog id="listing-inquiry" class="listing-inquiry no-print" aria-labelledby="listing-inquiry-title">
-    <h2 id="listing-inquiry-title">Contact Agent</h2>
+    <h2 id="listing-inquiry-title">${text("Contact Agent")}</h2>
     <form action="${escapeHtml(inquiryPath)}" method="post">
-      ${publicAgentContactFieldsHtml}
-      <label>Message<textarea name="message" maxlength="4000"></textarea></label>
+      ${publicAgentContactFieldsHtml(language)}
+      <label>${text("Message")}<textarea name="message" maxlength="4000"></textarea></label>
       <p id="listing-inquiry-status" role="status"></p>
       <div class="agent-actions">
-        <button type="submit" class="btn btn-primary agent-cta">Send inquiry</button>
-        <button type="button" class="btn agent-cta-secondary" id="close-listing-inquiry">Close</button>
+        <button type="submit" class="btn btn-primary agent-cta">${text("Send inquiry")}</button>
+        <button type="button" class="btn agent-cta-secondary" id="close-listing-inquiry">${text("Close")}</button>
       </div>
     </form>
   </dialog>
@@ -813,25 +838,29 @@ function renderListingInquiry(inquiryPath: string): string {
         fields.email = fields.email.trim() || undefined;
         fields.phone = fields.phone.trim() || undefined;
         if (!fields.email && !fields.phone) {
-          status.textContent = "Enter an email address or phone number.";
+          status.textContent = ${JSON.stringify(text("Enter an email address or phone number."))};
           form.elements.email.focus();
           return;
         }
         submit.disabled = true;
-        status.textContent = "Sending inquiry…";
+        status.textContent = ${JSON.stringify(text("Sending inquiry…"))};
         try {
           var response = await fetch(form.action, {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields),
           });
           var result = await response.json();
           if (!response.ok) {
-            if (result.field === "phone") form.elements.phone.focus();
+            if (result.field === "phone") {
+              form.elements.phone.focus();
+              status.textContent = ${JSON.stringify(text("Enter a valid phone number."))};
+              return;
+            }
             throw new Error(result.error || "Unable to send inquiry.");
           }
           form.reset();
-          status.textContent = "Thanks. Your inquiry was sent.";
+          status.textContent = ${JSON.stringify(text("Thanks. Your inquiry was sent."))};
         } catch (error) {
-          status.textContent = error.message || "Unable to send inquiry.";
+          status.textContent = ${JSON.stringify(text("Unable to send inquiry."))};
         } finally {
           submit.disabled = false;
         }
@@ -840,7 +869,7 @@ function renderListingInquiry(inquiryPath: string): string {
   </script>`;
 }
 
-function renderAgentCard(
+function renderAgentCard(text: FlyerText,
   agent: PublicListingFlyerAgent,
   companyLogoUrl: string | null,
   inquiryPath?: string,
@@ -870,8 +899,8 @@ function renderAgentCard(
   if (agent.phone) {
     lines.push(
       phoneHref
-        ? `<p class="agent-contact"><a href="${escapeHtml(phoneHref)}">${escapeHtml(agent.phone)}</a></p>`
-        : `<p class="agent-contact">${escapeHtml(agent.phone)}</p>`,
+        ? `<p class="agent-contact" dir="ltr"><a href="${escapeHtml(phoneHref)}">${escapeHtml(agent.phone)}</a></p>`
+        : `<p class="agent-contact" dir="ltr">${escapeHtml(agent.phone)}</p>`,
     );
   }
 
@@ -879,13 +908,13 @@ function renderAgentCard(
     ${avatar}
     <div class="agent-body">
       ${lines.join("")}
-      ${renderAgentActions(agent, inquiryPath)}
+      ${renderAgentActions(text, agent, inquiryPath)}
     </div>
     ${companyLogo ? `<div class="agent-logo-footer">${companyLogo}</div>` : ""}
   </div>`;
 }
 
-function renderPropertyHeader(
+function renderPropertyHeader(text: FlyerText,
   listing: PublicListingFlyerListing,
   price: string,
   sqft: string | null,
@@ -909,20 +938,20 @@ function renderPropertyHeader(
   return `<section class="property-header">
     ${streetHtml}
     ${locationHtml}
-    ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa, yearBuilt)}
+    ${renderKeyStats(text, price, listing.beds, listing.baths, sqft, hoa, yearBuilt)}
   </section>`;
 }
 
-function renderPoweredByFooter(): string {
+function renderPoweredByFooter(text: FlyerText): string {
   return `<footer class="site-footer">
     <a class="powered-by" href="${WHACHATCRM_HOME_URL}" target="_blank" rel="noopener noreferrer">
       <span class="powered-logo">${WHACHAT_W_LOGO_SVG}</span>
-      <span>Powered by WhachatCRM</span>
+      <span>${text("Powered by WhachatCRM")}</span>
     </a>
   </footer>`;
 }
 
-function renderListingComplianceAttribution(
+function renderListingComplianceAttribution(text: FlyerText,
   compliance: InventoryListingCompliance | null | undefined,
   presentingBrokerageName: string | null | undefined,
 ): string {
@@ -936,7 +965,7 @@ function renderListingComplianceAttribution(
 
   const mlsLine = `MLS#: ${escapeHtml(mlsId)} · Data Source: ${escapeHtml(mlsSource)}`;
   return `<footer class="listing-compliance-attribution" data-testid="listing-compliance-attribution">
-    <p class="listing-attribution-office">Listed By: ${escapeHtml(office)}</p>
+    <p class="listing-attribution-office">${escapeHtml(text("Listed By: {name}", { name: office }))}</p>
     <p class="listing-attribution-mls">${mlsLine}</p>
   </footer>`;
 }
@@ -944,6 +973,7 @@ function renderListingComplianceAttribution(
 export function inventoryRowToFlyerListing(row: {
   id: string;
   priceCents: number | null;
+  currency?: string | null;
   beds: string | number | null;
   baths: string | number | null;
   squareFeet: number | null;
@@ -976,6 +1006,7 @@ export function inventoryRowToFlyerListing(row: {
   return {
     id: row.id,
     priceCents: row.priceCents != null ? Number(row.priceCents) : null,
+    currency: row.currency,
     beds: row.beds != null ? Number(row.beds) : null,
     baths: row.baths != null ? Number(row.baths) : null,
     squareFeet: row.squareFeet != null ? Number(row.squareFeet) : null,
@@ -1000,7 +1031,23 @@ export function inventoryRowToFlyerListing(row: {
   };
 }
 
+function flyerCurrency(listing: PublicListingFlyerListing): string {
+  return listing.currency && /^[A-Z]{3}$/.test(listing.currency) ? listing.currency : "USD";
+}
+
+function localizedFlyerPrice(listing: PublicListingFlyerListing, language: string): string {
+  if (listing.priceCents == null) return "";
+  const currency = flyerCurrency(listing);
+  if (language === "en" && currency === "USD") return formatListingPriceForComposer(listing.priceCents) ?? "";
+  const price = new Intl.NumberFormat(publicRealEstateLocale(language), { style: "currency", currency })
+    .format(listing.priceCents / 100);
+  return resolveFlyerListingLabel(listing) === "FOR RENT"
+    ? publicRealEstateText(language, "{price}/mo", { price }) : price;
+}
+
 export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): string {
+  const language = publicRealEstateLanguage(input.publicLanguage);
+  const text = flyerText(language);
   const {
     listing: rawListing,
     agent,
@@ -1021,10 +1068,10 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   // Provider image URLs may themselves contain a street address.
   const seoListing = allowStreetAddress ? listing : { ...listing, photos: [] };
   const photos = pickFlyerHeroPhotos(parsePhotos(seoListing.photos));
-  const openGraph = buildListingOpenGraphMeta({ listing: seoListing, agent, shareUrl });
-  const structuredDataJson = buildListingStructuredDataJson({ listing: seoListing, agent, shareUrl });
-  const listingLabel = resolveFlyerListingLabel(listing);
-  const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
+  const openGraph = buildListingOpenGraphMeta({ listing: seoListing, agent, shareUrl, publicLanguage: language });
+  const structuredDataJson = buildListingStructuredDataJson({ listing: seoListing, agent, shareUrl, publicLanguage: language });
+  const listingLabel = text(resolveFlyerListingLabel(listing));
+  const price = localizedFlyerPrice(listing, language) || text("Price on request");
   const { sqft, hoa, yearBuilt } = resolveFlyerSpecFields(listing);
   // Free-form remarks may repeat the street address.
   const description = allowStreetAddress
@@ -1034,20 +1081,20 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
 
   const descHtml = description
     ? `<section class="description-section">
-      <h2>Description</h2>
-      <p class="description">${escapeHtml(description)}</p>
+      <h2>${text("Description")}</h2>
+      <p class="description" dir="auto">${escapeHtml(description)}</p>
     </section>`
     : "";
 
-  const propertyHeaderHtml = renderPropertyHeader(listing, price, sqft, hoa, yearBuilt);
-  const bottomRowHtml = buildFlyerBottomRow(listing, qrDataUrl, agent, companyLogoUrl, allowStreetAddress, inquiryPath);
-  const complianceAttributionHtml = renderListingComplianceAttribution(
+  const propertyHeaderHtml = renderPropertyHeader(text, listing, price, sqft, hoa, yearBuilt);
+  const bottomRowHtml = buildFlyerBottomRow(text, listing, qrDataUrl, agent, companyLogoUrl, allowStreetAddress, inquiryPath);
+  const complianceAttributionHtml = renderListingComplianceAttribution(text,
     listing.listingCompliance,
     agent.brokerageName,
   );
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${language}" dir="${language === "he" ? "rtl" : "ltr"}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1607,17 +1654,17 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
 <body>
   <div class="flyer">
     <div class="flyer-body">
-      ${photos.length === 0 ? `<div class="listing-banner-fallback">${renderListingBanner(listingLabel)}</div>` : renderGallery(photos, listingLabel)}
+      ${photos.length === 0 ? `<div class="listing-banner-fallback">${renderListingBanner(listingLabel)}</div>` : renderGallery(text, photos, listingLabel)}
       ${propertyHeaderHtml}
       ${descHtml}
       ${bottomRowHtml}
       ${complianceAttributionHtml}
-      ${renderPoweredByFooter()}
+      ${renderPoweredByFooter(text)}
     </div>
   </div>
-  ${renderFlyerFloatingActions()}
-  ${inquiryPath ? renderListingInquiry(inquiryPath) : ""}
-  <div id="toast" class="toast no-print" role="status" aria-live="polite">Listing link copied.</div>
+  ${renderFlyerFloatingActions(text)}
+  ${inquiryPath ? renderListingInquiry(text, inquiryPath, language) : ""}
+  <div id="toast" class="toast no-print" role="status" aria-live="polite">${text("Listing link copied.")}</div>
   <script>
     (function () {
       var hero = document.getElementById("hero-img");
@@ -1690,9 +1737,9 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
 </html>`;
 }
 
-function publicListingErrorPageShell(title: string, message: string, hint?: string): string {
+function publicListingErrorPageShell(title: string, message: string, hint?: string, language = "en"): string {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${language}" dir="${language === "he" ? "rtl" : "ltr"}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1721,18 +1768,25 @@ function publicListingErrorPageShell(title: string, message: string, hint?: stri
 }
 
 /** Friendly 404 when listing is inactive, missing, or not shareable. */
-export function buildPublicListingNotFoundHtml(): string {
+export function buildPublicListingNotFoundHtml(value?: string): string {
+  const language = publicRealEstateLanguage(value);
+  const text = flyerText(language);
   return publicListingErrorPageShell(
-    "Listing not available",
-    "This listing may have been sold, taken off market, or the link is no longer valid.",
+    text("Listing not available"),
+    text("This listing may have been sold, taken off market, or the link is no longer valid."),
+    undefined,
+    language,
   );
 }
 
 /** Generic load failure — distinct from not-found (e.g. unexpected server error). */
-export function buildPublicListingLoadErrorHtml(): string {
+export function buildPublicListingLoadErrorHtml(value?: string): string {
+  const language = publicRealEstateLanguage(value);
+  const text = flyerText(language);
   return publicListingErrorPageShell(
-    "Could not load listing",
-    "Something went wrong while loading this page. Please try again in a moment.",
-    "If the problem continues, ask your agent for an updated link.",
+    text("Could not load listing"),
+    text("Something went wrong while loading this page. Please try again in a moment."),
+    text("If the problem continues, ask your agent for an updated link."),
+    language,
   );
 }

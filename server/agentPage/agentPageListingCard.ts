@@ -86,6 +86,7 @@ export function inventoryListingToAgentPageCard(
     cityState,
     price,
     priceCents: listing.priceCents ?? null,
+    currency: listing.currency,
     beds,
     baths,
     sqft,

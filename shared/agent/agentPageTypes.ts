@@ -10,6 +10,7 @@ export type AgentPageListingCard = {
   cityState: string;
   price: string;
   priceCents: number | null;
+  currency?: string | null;
   beds: string | null;
   baths: string | null;
   sqft: string | null;
@@ -48,6 +49,7 @@ export type PublicAgentPageSocialLinks = {
 };
 
 export type PublicAgentPageRenderInput = {
+  publicLanguage?: string;
   userId: string;
   displayName: string;
   bio: string;

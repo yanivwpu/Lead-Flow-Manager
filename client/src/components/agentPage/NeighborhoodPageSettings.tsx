@@ -101,12 +101,12 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const stale = Boolean(active && active !== NEW_NEIGHBORHOOD && (!page || (draft && draft.baseVersion !== page.updatedAt)));
   const values = draft?.values ?? page ?? EMPTY_NEIGHBORHOOD;
   const dirty = Boolean(draft);
-  function editField(field: "name" | "city" | "state" | "country" | "content", value: string) {
+  function editField(field: "name" | "city" | "state" | "country" | "content" | "publicLanguage", value: string) {
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const { name, city, state, country, customBoundary, content, photos } = prior?.values ?? values;
-      const next = { name, city, state, country: country ?? "US", customBoundary: customBoundary ?? null,
+      const { name, city, state, country, publicLanguage, customBoundary, content, photos } = prior?.values ?? values;
+      const next = { name, city, state, publicLanguage, country: country ?? "US", customBoundary: customBoundary ?? null,
         content, photos: photos ?? [], [field]: value };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
@@ -388,6 +388,16 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               disabled={editingBusy} readOnly={stale} placeholder={defaultCountryCode} dir="ltr"
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
             <p className="mt-1 text-xs text-slate-500">{t("inboxUi.neighborhoodCountryExamples")}</p>
+          </div>
+          <div className="max-w-xs">
+            <Label htmlFor="neighborhood-public-language">{t("rgeNeighborhood.publicLanguage")}</Label>
+            <select id="neighborhood-public-language" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              disabled={editingBusy || stale} value={values.publicLanguage ?? "en"}
+              onChange={(event) => editField("publicLanguage", event.target.value)}>
+              <option value="en" lang="en">{t("language.english")}</option>
+              <option value="he" lang="he">{t("language.hebrew")}</option>
+              <option value="es" lang="es">{t("language.spanish")}</option>
+            </select>
           </div>
           <NeighborhoodBoundaryEditor key={active + ":" + mapEditorRevision} boundary={values.customBoundary} persistedBoundary={page?.customBoundary ?? null}
             persistedVersion={page?.updatedAt ?? null} stale={stale}

@@ -63,6 +63,7 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
         agentPageSlug: patch.agentPageSlug,
         agentPageUseCustomBio: patch.agentPageUseCustomBio,
         agentPageBio: patch.agentPageBio,
+        agentPageLanguage: patch.agentPageLanguage,
         agentPageMarketArea: patch.agentPageMarketArea,
         agentPagePreferredLeadCapture: patch.agentPagePreferredLeadCapture,
         agentPageShowHomeValueCta: patch.agentPageShowHomeValueCta,

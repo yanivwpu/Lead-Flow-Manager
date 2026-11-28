@@ -666,6 +666,19 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         <details className="border-t border-slate-200 px-4 py-3 sm:px-6">
           <summary className="cursor-pointer text-sm font-semibold text-slate-900">{t("rgeAgent.advanced")}</summary>
           <div className="mt-4 space-y-4">
+            <div className="mb-3 max-w-xs">
+              <Label htmlFor="agent-page-public-language">{t("rgeNeighborhood.publicLanguage")}</Label>
+              <select id="agent-page-public-language" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={data.agentPageLanguage ?? "en"} disabled={saveMutation.isPending}
+                onChange={(event) => {
+                  const language = event.target.value;
+                  if (language === "en" || language === "he" || language === "es") saveMutation.mutate({ agentPageLanguage: language });
+                }}>
+                <option value="en" lang="en">{t("language.english")}</option>
+                <option value="he" lang="he">{t("language.hebrew")}</option>
+                <option value="es" lang="es">{t("language.spanish")}</option>
+              </select>
+            </div>
             <Label htmlFor="agent-page-slug">{t("rgeAgent.path")}</Label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input

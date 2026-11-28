@@ -1,3 +1,4 @@
+import { getAgentPageSettingsRow } from "../agentPage/agentPageDb";
 import type { Express, Request, Response } from "express";
 import { rateLimit } from "express-rate-limit";
 import QRCode from "qrcode";
@@ -99,6 +100,7 @@ export function registerPublicListingRoutes(app: Express): void {
       const inquiryEnabled = await hasAgentPagePublicationAccess(flyerData.listing.userId).catch(() => false);
 
       const html = buildPublicListingFlyerHtml({
+        publicLanguage: (await getAgentPageSettingsRow(flyerData.listing.userId).catch(() => null))?.agentPageLanguage,
         listing: inventoryRowToFlyerListing(flyerData.listing),
         agent: flyerData.agent,
         shareUrl: flyerData.shareUrl,

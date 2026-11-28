@@ -35,6 +35,7 @@ export type AgentPageKnowledgeRow = {
   agentPageSlug: string | null;
   agentPageUseCustomBio: boolean;
   agentPageBio: string | null;
+  agentPageLanguage?: string;
   agentPageMarketArea: string | null;
   agentPagePreferredLeadCapture: string;
   agentPageShowHomeValueCta: boolean;
@@ -61,6 +62,7 @@ export async function getAgentPageSettingsRow(userId: string): Promise<AgentPage
       agentPageSlug: aiBusinessKnowledge.agentPageSlug,
       agentPageUseCustomBio: aiBusinessKnowledge.agentPageUseCustomBio,
       agentPageBio: aiBusinessKnowledge.agentPageBio,
+      agentPageLanguage: aiBusinessKnowledge.agentPageLanguage,
       agentPageMarketArea: aiBusinessKnowledge.agentPageMarketArea,
       agentPagePreferredLeadCapture: aiBusinessKnowledge.agentPagePreferredLeadCapture,
       agentPageShowHomeValueCta: aiBusinessKnowledge.agentPageShowHomeValueCta,
@@ -101,6 +103,7 @@ export async function resolveAgentPageBySlug(slug: string): Promise<AgentPageKno
       agentPageSlug: aiBusinessKnowledge.agentPageSlug,
       agentPageUseCustomBio: aiBusinessKnowledge.agentPageUseCustomBio,
       agentPageBio: aiBusinessKnowledge.agentPageBio,
+      agentPageLanguage: aiBusinessKnowledge.agentPageLanguage,
       agentPageMarketArea: aiBusinessKnowledge.agentPageMarketArea,
       agentPagePreferredLeadCapture: aiBusinessKnowledge.agentPagePreferredLeadCapture,
       agentPageShowHomeValueCta: aiBusinessKnowledge.agentPageShowHomeValueCta,
@@ -171,6 +174,7 @@ export async function patchAgentPageSettings(
     agentPageSlug?: string | null;
     agentPageUseCustomBio?: boolean;
     agentPageBio?: string | null;
+    agentPageLanguage?: string;
     agentPageMarketArea?: string | null;
     agentPagePreferredLeadCapture?: AgentPageLeadCapture;
     agentPageShowHomeValueCta?: boolean;
@@ -200,6 +204,7 @@ export async function patchAgentPageSettings(
   if (patch.agentPageUseCustomBio !== undefined) {
     set.agentPageUseCustomBio = patch.agentPageUseCustomBio;
   }
+  if (patch.agentPageLanguage !== undefined) set.agentPageLanguage = patch.agentPageLanguage;
   if (patch.agentPageBio !== undefined) set.agentPageBio = patch.agentPageBio;
   if (patch.agentPageMarketArea !== undefined) set.agentPageMarketArea = patch.agentPageMarketArea;
   if (patch.agentPagePreferredLeadCapture !== undefined) {

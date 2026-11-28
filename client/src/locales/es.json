@@ -4453,6 +4453,7 @@
     "stale": "La página guardada cambió — revísala antes de editar"
   },
   "rgeNeighborhood": {
+    "publicLanguage": "Idioma de la página pública",
     "empty": "Todavía no hay páginas de barrios.",
     "unavailable": "Las páginas de barrios no están disponibles para esta cuenta.",
     "active": "Publicada",

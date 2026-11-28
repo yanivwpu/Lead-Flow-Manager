@@ -121,7 +121,7 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         res.json({
           listings: cards,
           html: (result.boundaryStatus === "verified" || result.boundaryStatus === "custom")
-            ? renderAgentPageListingCards(cards, parsed.data.offset) : "",
+            ? renderAgentPageListingCards(cards, parsed.data.offset, { publicLanguage: neighborhood.publicLanguage }) : "",
           total, offset: parsed.data.offset, limit: parsed.data.limit, hasMore,
           boundaryStatus: result.boundaryStatus,
           boundarySource: result.boundarySource,
@@ -157,7 +157,7 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         offset: parsed.data.offset,
         limit: parsed.data.limit,
         renderHtml: (cards, startIndex) =>
-          renderAgentPageListingCards(cards, startIndex, { embedMode }),
+          renderAgentPageListingCards(cards, startIndex, { embedMode, publicLanguage: agent.agentPageLanguage }),
       });
       res.json(result);
     } catch (error) {

@@ -18,7 +18,7 @@ export function neighborhoodDraftKey(userId: string): string {
 }
 
 export function sameNeighborhoodContent(a: NeighborhoodContent, b: NeighborhoodContent): boolean {
-  return a.name === b.name && a.city === b.city && a.state === b.state && (a.country ?? "US") === (b.country ?? "US") && a.content === b.content &&
+  return (a.publicLanguage ?? "en") === (b.publicLanguage ?? "en") && a.name === b.name && a.city === b.city && a.state === b.state && (a.country ?? "US") === (b.country ?? "US") && a.content === b.content &&
     JSON.stringify(a.photos ?? []) === JSON.stringify(b.photos ?? []) &&
     JSON.stringify(a.customBoundary ?? null) === JSON.stringify(b.customBoundary ?? null);
 }
@@ -36,9 +36,10 @@ export function readNeighborhoodDrafts(storage: Pick<Storage, "getItem">, key: s
       const draft = raw as NeighborhoodDraft | undefined;
       if (!validIdentity(id) || !draft?.values ||
         (id === NEW_NEIGHBORHOOD ? draft.baseVersion !== null : typeof draft.baseVersion !== "string")) continue;
-      const { name, city, state, country, customBoundary, content, photos } = draft.values;
+      const { name, city, state, country, publicLanguage, customBoundary, content, photos } = draft.values;
       if (customBoundary != null && !readCustomNeighborhoodBoundary(customBoundary)) continue;
       const values = { name, city, state, country: country ?? "US",
+        ...(["en", "he", "es"].includes(publicLanguage ?? "") ? { publicLanguage } : {}),
         ...(customBoundary === undefined ? {} : { customBoundary }), content,
         ...(photos === undefined ? {} : { photos }) };
       if ((Object.keys(limits) as Array<keyof typeof limits>).every(
