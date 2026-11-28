@@ -360,13 +360,13 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
         toast({
           title: t("rgeInventory.connectionUpdated"),
-          description: "The replacement token was saved and sync started.",
+          description: t("rgeInventory.replacementSaved"),
         });
         return;
       }
       toast({
         title: t("rgeInventory.saved"),
-        description: "Your connection settings are saved. Automatic background sync stays on.",
+        description: t("rgeInventory.backgroundEnabled"),
       });
     },
     onError: (err: Error) => {
@@ -403,14 +403,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: t("rgeInventory.syncStarted"),
-        description: "Your listings are syncing in the background.",
+        description: t("rgeInventory.backgroundSync"),
       });
       void refetchSources();
     },
     onError: (err: Error & { validationFailed?: boolean }) => {
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: err.validationFailed ? "Connection failed" : "Could not start sync",
+        title: err.validationFailed ? t("rgeInventory.validationFailed") : t("rgeInventory.syncFailed"),
         description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
         variant: "destructive",
       });
@@ -423,7 +423,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     if (!formOpen || !providerAvailable || !providerSupportsListingSync(selectedProvider)) {
       toast({
         title: t("rgeInventory.providerUnavailable"),
-        description: `${providerOption?.label ?? "This provider"} is not available yet.`,
       });
       return false;
     }
@@ -999,9 +998,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     <DialogTitle>
                       {activeSource
                         ? replacingSecret || activeSource.connectionStatus === "error" || activeSource.lastSyncStatus === "failed"
-                          ? "Fix connection"
-                          : "Edit settings"
-                        : `Connect ${providerOption?.label ?? "provider"}`}
+                          ? t("rgeInventory.fixConnection")
+                          : t("rgeInventory.editConnection")
+                        : t("rgeInventory.connectProvider", { name: providerOption?.label ?? t("rgeInventory.providerFallback") })}
                     </DialogTitle>
                     <DialogDescription>
                       {activeSource

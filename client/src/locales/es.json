@@ -3768,6 +3768,15 @@
     "pathExample": "Ruta de ejemplo: /agents/your-slug"
   },
   "rgeInventory": {
+    "replacementSaved": "Se guardó el token de reemplazo y se inició la sincronización.",
+    "backgroundEnabled": "Se guardó la configuración de conexión. La sincronización automática en segundo plano sigue activa.",
+    "backgroundSync": "Tus anuncios se están sincronizando en segundo plano.",
+    "validationFailed": "Falló la conexión",
+    "syncFailed": "No se pudo iniciar la sincronización",
+    "fixConnection": "Reparar conexión",
+    "editConnection": "Editar configuración",
+    "connectProvider": "Conectar {{name}}",
+    "providerFallback": "proveedor",
     "comingSoon": "Próximamente",
     "available": "Disponible",
     "myBridge": "Mi inventario de Bridge",

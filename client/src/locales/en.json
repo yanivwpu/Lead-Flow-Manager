@@ -3743,6 +3743,15 @@
     "pathExample": "URL path: /agents/your-slug"
   },
   "rgeInventory": {
+    "replacementSaved": "The replacement token was saved and sync started.",
+    "backgroundEnabled": "Your connection settings are saved. Automatic background sync stays on.",
+    "backgroundSync": "Your listings are syncing in the background.",
+    "validationFailed": "Connection failed",
+    "syncFailed": "Could not start sync",
+    "fixConnection": "Fix connection",
+    "editConnection": "Edit settings",
+    "connectProvider": "Connect {{name}}",
+    "providerFallback": "provider",
     "comingSoon": "Coming soon",
     "available": "Available",
     "myBridge": "My Bridge inventory",

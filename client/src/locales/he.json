@@ -3768,6 +3768,15 @@
     "pathExample": "נתיב לדוגמה: /agents/your-slug"
   },
   "rgeInventory": {
+    "replacementSaved": "האסימון החלופי נשמר והסנכרון התחיל.",
+    "backgroundEnabled": "הגדרות החיבור נשמרו. הסנכרון האוטומטי ברקע נשאר פעיל.",
+    "backgroundSync": "הנכסים מסתנכרנים ברקע.",
+    "validationFailed": "החיבור נכשל",
+    "syncFailed": "לא ניתן להתחיל את הסנכרון",
+    "fixConnection": "תיקון החיבור",
+    "editConnection": "עריכת הגדרות",
+    "connectProvider": "חיבור אל {{name}}",
+    "providerFallback": "ספק",
     "comingSoon": "בקרוב",
     "available": "זמין",
     "myBridge": "מלאי Bridge שלי",
