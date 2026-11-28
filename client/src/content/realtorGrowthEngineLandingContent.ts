@@ -3,6 +3,7 @@
  * Pricing and capability claims must stay aligned with live product packaging.
  */
 import { S } from "@shared/marketingScreenshots";
+import { RGE_GROWTH_COPY } from "@shared/realtorGrowthEngineLandingLocales";
 import {
   formatUsdDisplay,
   getPaidPlanMonthlyPriceUsd,
@@ -13,28 +14,21 @@ const PRO_MONTHLY_PRICE = `${formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))
 export const RGE_LANDING_SEO = {
   title: "Realtor Growth Engine | AI CRM for Real Estate Agents | WhachatCRM",
   description:
-    "AI real estate CRM with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, buyer qualification, supported MLS property matching and showing booking links.",
+    RGE_GROWTH_COPY.en.seoDescription,
   keywords:
     "AI CRM for real estate agents, real estate AI CRM, AI for real estate agents, real estate lead follow up automation, real estate lead qualification, real estate CRM with MLS integration, AI property matching, real estate agent CRM, automated real estate follow up, real estate lead management software, real estate lead generation, neighborhood pages for real estate agents, local SEO for Realtors, agent websites, real estate CRM, MLS property matching, showing booking links",
-  ogTitle: "Realtor Growth Engine — From Local Search to Closed Deals.",
+  ogTitle: `Realtor Growth Engine — ${RGE_GROWTH_COPY.en.headline}`,
   ogDescription:
-    "Generate leads, automate follow-ups and move buyers toward showings with a connected real estate growth system.",
+    RGE_GROWTH_COPY.en.seoOg,
 } as const;
 
 export const RGE_LANDING = {
   hero: {
     eyebrow: "Realtor Growth Engine",
-    h1: "From Local Search to Closed Deals.",
+    h1: RGE_GROWTH_COPY.en.headline,
     support:
-      "An AI-powered real estate growth system with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, MLS property matching where supported, and showing booking links. Connect your tools, activate your engine and focus on clients.",
-    capabilities: [
-      "AI Buyer Qualification",
-      "Live Inventory Matching",
-      "Personalized Property Flyers",
-      "Automated Follow-Up",
-      "Agent Page",
-      "Unified Inbox + Copilot",
-    ],
+      RGE_GROWTH_COPY.en.support,
+    capabilities: [...RGE_GROWTH_COPY.en.capabilities],
     cta: "Install Realtor Growth Engine",
     secondaryCta: "See how it works",
   },
