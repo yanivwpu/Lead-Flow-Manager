@@ -78,6 +78,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       if (error) {
         const e = error as { code?: string };
         res.status(e.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({
+          code: e.code === "LIMIT_FILE_SIZE" ? "imageSize" : "imageType",
           error: e.code === "LIMIT_FILE_SIZE" ? "Images must be 5 MB or smaller." : "Choose a JPG, PNG, or WebP image.",
         });
         return;
@@ -105,18 +106,18 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   // exposing it to the browser or requiring a new map provider.
   router.get("/map-center", run(async (req, res, userId) => {
     const parsed = mapCenterQuery.safeParse(req.query);
-    if (!parsed.success) return res.status(400).json({ error: "Enter a valid city, region and country first." });
+    if (!parsed.success) return res.status(400).json({ code: "locationInvalid", error: "Enter a valid city, region and country first." });
     const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
-    if (!key) return res.status(503).json({ error: "Automatic map location is unavailable; enter map coordinates to center the map." });
+    if (!key) return res.status(503).json({ code: "mapUnavailable", error: "Automatic map location is unavailable; enter map coordinates to center the map." });
     const { name, city, state, country } = parsed.data;
     const queryKey = [name, city, state, country].map((s) => s.toLowerCase()).join("|");
     const now = Date.now();
     const cached = mapCenterCache.get(queryKey);
     if (cached && cached.expires > now) return res.json({ latitude: cached.latitude, longitude: cached.longitude, precision: cached.precision });
-    if (now - lastMapCenterLookup < 1000) return res.status(429).json({ error: "Try locating again in a moment." });
+    if (now - lastMapCenterLookup < 1000) return res.status(429).json({ code: "mapRetry", error: "Try locating again in a moment." });
     const day = new Date(now).toISOString().slice(0, 10);
     const usage = mapCenterDailyQuota.get(userId);
-    if (usage?.day === day && usage.count >= 15) return res.status(429).json({ error: "Daily map location limit reached. Enter coordinates manually." });
+    if (usage?.day === day && usage.count >= 15) return res.status(429).json({ code: "mapLimit", error: "Daily map location limit reached. Enter coordinates manually." });
     if (mapCenterDailyQuota.size > 10000) mapCenterDailyQuota.clear();
     mapCenterDailyQuota.set(userId, { day, count: (usage?.day === day ? usage.count : 0) + 1 });
     lastMapCenterLookup = now;
@@ -129,11 +130,11 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       if (resolved.unavailable) {
         console.warn("[agent-neighborhoods] map-center provider unavailable (check Google Maps API permissions)");
         return res.status(503).json({
-          error: "Map search is temporarily unavailable. Check that Geocoding API or Places API (New) is enabled for the configured Google key, or center the map manually.",
+          code: "mapProvider", error: "Map search is temporarily unavailable. Check that Geocoding API or Places API (New) is enabled for the configured Google key, or center the map manually.",
         });
       }
       return res.status(404).json({
-        error: "No matching neighborhood or city found. Verify the spelling and location, or center the map manually.",
+        code: "mapNotFound", error: "No matching neighborhood or city found. Verify the spelling and location, or center the map manually.",
       });
     }
     if (mapCenterCache.size > 2000) mapCenterCache.clear();
@@ -143,26 +144,26 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
 
   router.post("/", run(async (req, res, userId) => {
     const parsed = fields.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
+    if (!parsed.success) return res.status(400).json({ code: "invalidPage", error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
     if (!ownedPhotos(userId, parsed.data.photos)) {
-      return res.status(400).json({ error: "Choose photos uploaded to your own Neighborhood Page." });
+      return res.status(400).json({ code: "ownPhotos", error: "Choose photos uploaded to your own Neighborhood Page." });
     }
-    if (parsed.data.photos?.length) return res.status(400).json({ error: "Save the new neighborhood before uploading photos." });
+    if (parsed.data.photos?.length) return res.status(400).json({ code: "saveFirst", error: "Save the new neighborhood before uploading photos." });
     const page = await createNeighborhoodPage(userId, parsed.data);
     res.status(201).json(settings(page, null));
   }));
 
   router.put("/:id", run(async (req, res, userId) => {
     const parsed = fields.extend({ published: z.boolean(), expectedUpdatedAt: z.string().datetime().optional() }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
+    if (!parsed.success) return res.status(400).json({ code: "invalidPage", error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
     if (!ownedPhotos(userId, parsed.data.photos)) {
-      return res.status(400).json({ error: "Choose photos uploaded to your own Neighborhood Page." });
+      return res.status(400).json({ code: "ownPhotos", error: "Choose photos uploaded to your own Neighborhood Page." });
     }
     let liveSlug: string | null = null;
     if (parsed.data.published) {
       const agent = await getAgentPageSettingsRow(userId);
-      if (!agent || !canResolvePublicAgentPage(agent)) return res.status(403).json({ error: "Enable your public Agent Page before publishing." });
-      if (!neighborhoodContentComplete(parsed.data.content)) return res.status(400).json({ error: "Add at least 240 characters of useful local information across two paragraphs, or one detailed paragraph with a section heading." });
+      if (!agent || !canResolvePublicAgentPage(agent)) return res.status(403).json({ code: "publishDisabled", error: "Enable your public Agent Page before publishing." });
+      if (!neighborhoodContentComplete(parsed.data.content)) return res.status(400).json({ code: "publishIncomplete", error: "Add at least 240 characters of useful local information across two paragraphs, or one detailed paragraph with a section heading." });
       liveSlug = agent.agentPageSlug;
     }
     const id = String(req.params.id);
@@ -170,7 +171,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const page = await updateNeighborhoodPage(userId, id, content, expectedUpdatedAt);
     if (!page) {
       if (expectedUpdatedAt && await getNeighborhoodPage(userId, id)) {
-        return res.status(409).json({ error: "This page changed since you opened it. Review the saved version before editing again." });
+        return res.status(409).json({ code: "editConflict", error: "This page changed since you opened it. Review the saved version before editing again." });
       }
       return res.sendStatus(404);
     }
@@ -183,7 +184,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const id = String(req.params.id);
     if (await deleteNeighborhoodPage(userId, id, version.data)) return res.sendStatus(204);
     if (version.data && await getNeighborhoodPage(userId, id)) {
-      return res.status(409).json({ error: "This page changed since you opened it. Review the saved version before deleting." });
+      return res.status(409).json({ code: "deleteConflict", error: "This page changed since you opened it. Review the saved version before deleting." });
     }
     res.sendStatus(404);
   }));
@@ -193,29 +194,29 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const page = await getNeighborhoodPage(userId, String(req.params.id));
     if (!page) return res.sendStatus(404);
     if ((page.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) {
-      return res.status(400).json({ error: "Remove an existing photo before adding another." });
+      return res.status(400).json({ code: "imageLimit", error: "Remove an existing photo before adding another." });
     }
     const file = (req as Request & { file?: {
       buffer: Buffer; originalname: string; mimetype: string; size: number;
     } }).file;
-    if (!file?.buffer) return res.status(400).json({ error: "Choose a JPG, PNG, or WebP image." });
+    if (!file?.buffer) return res.status(400).json({ code: "imageType", error: "Choose a JPG, PNG, or WebP image." });
     const checked = inspectBusinessProfileLogoUpload(file);
     if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
     // Decode, constrain pixel dimensions, and strip metadata before placing photos on public pages.
     const prepared = await prepareWebchatVisitorImage({ buffer: file.buffer, declaredMime: checked.mime });
-    if (!prepared.ok) return res.status(400).json({ error: "Could not process this image. Try a smaller JPG, PNG, or WebP." });
+    if (!prepared.ok) return res.status(400).json({ code: "imageProcessing", error: "Could not process this image. Try a smaller JPG, PNG, or WebP." });
     // R2 is required: never put SEO photographs on Railway's ephemeral local disk.
     if (!process.env.CLOUDFLARE_R2_ACCOUNT_ID || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
         !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET ||
         !process.env.CLOUDFLARE_R2_PUBLIC_URL) {
-      return res.status(503).json({ error: "Photo storage is unavailable. Try again later." });
+      return res.status(503).json({ code: "imageStorage", error: "Photo storage is unavailable. Try again later." });
     }
     const stored = await uploadOutboundUserMedia({
       userId, buffer: prepared.buffer, contentType: prepared.mime,
       originChannel: "neighborhood-guide",
     });
     if (!isOwnedNeighborhoodGuidePhotoUrl(stored.mediaUrl, userId, process.env.CLOUDFLARE_R2_PUBLIC_URL)) {
-      return res.status(503).json({ error: "Could not verify the uploaded image. Try again." });
+      return res.status(503).json({ code: "imageVerification", error: "Could not verify the uploaded image. Try again." });
     }
     return res.status(201).json({ url: stored.mediaUrl });
   }));
@@ -236,11 +237,11 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const cause = error && typeof error === "object" && "cause" in error ? error.cause : undefined;
     if (isAgentPageSlugConflictError(error) || (cause && isAgentPageSlugConflictError(cause))) {
-      res.status(409).json({ error: "You already have a neighborhood page with this URL." });
+      res.status(409).json({ code: "duplicateUrl", error: "You already have a neighborhood page with this URL." });
       return;
     }
     console.error("[agent-neighborhoods] settings failed", error);
-    res.status(500).json({ error: "Unable to update neighborhood pages." });
+    res.status(500).json({ code: "updateFailed", error: "Unable to update neighborhood pages." });
   });
   app.use("/api/agent-page/neighborhoods", router);
 }

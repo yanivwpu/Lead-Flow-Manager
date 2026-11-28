@@ -24,3 +24,10 @@ export async function fetchAgentPageSettings(): Promise<AgentPageSettingsRespons
   }
   return res.json();
 }
+
+export function neighborhoodApiErrorKey(body: { code?: unknown } | null): string | undefined {
+  const code = body?.code;
+  return typeof code === "string" && /^[a-zA-Z]+$/.test(code)
+    ? `rgeNeighborhoodErrors.${code}`
+    : undefined;
+}

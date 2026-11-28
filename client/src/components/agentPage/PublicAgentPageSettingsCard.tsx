@@ -22,7 +22,7 @@ import type { AgentPageLeadCapture, AgentPageSettingsResponse } from "@shared/ag
 import { agentPageLeadCaptureSchema } from "@shared/agent/agentPageSchema";
 import { validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 import { buildAgentPageEmbedIframeHtml } from "@shared/agent/agentPageEmbed";
-import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
+import { fetchAgentPageSettings } from "@/lib/agentPageApi";
 import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarketAreaChips";
@@ -45,12 +45,12 @@ function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin:
     title: "Long-Term Rentals",
   });
 
-  const copySnippet = async (label: string, code: string) => {
+  const copySnippet = async (message: string, code: string) => {
     try {
       await navigator.clipboard.writeText(code);
-      toast({ title: `${label} embed code copied` });
+      toast({ title: message });
     } catch {
-      toast({ title: t("rgeAgent.embedError"), description: "Check clipboard permissions and try again.", variant: "destructive" });
+      toast({ title: t("rgeAgent.embedError"), description: t("rgeNeighborhood.clipboardHelp"), variant: "destructive" });
     }
   };
 
@@ -64,11 +64,11 @@ function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin:
           {t("rgeAgent.embedHelp")}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Homes for sale", saleSnippet)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet(t("rgeNeighborhood.saleEmbedCopied"), saleSnippet)}>
             <Copy className="h-3.5 w-3.5 mr-1.5" />
             {t("rgeAgent.copySales")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Rentals", rentSnippet)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet(t("rgeNeighborhood.rentEmbedCopied"), rentSnippet)}>
             <Copy className="h-3.5 w-3.5 mr-1.5" />
             {t("rgeAgent.copyRent")}
           </Button>
@@ -88,7 +88,8 @@ type Props = {
 };
 
 export function PublicAgentPageSettingsCard({ className }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const formatCount = (count: number) => count.toLocaleString(i18n.resolvedLanguage);
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["/api/agent-page"],
@@ -158,7 +159,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(parseAgentPageApiError(payload));
+        throw new Error(payload.code ?? "");
       }
       return payload as AgentPageSettingsResponse;
     },
@@ -173,7 +174,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     onError: (e: Error) => {
       leadCaptureMutating.current = false;
       setLeadCaptureDraft(null);
-      toast({ title: t("rgeAgent.saveError"), description: e.message, variant: "destructive" });
+      toast({ title: t("rgeAgent.saveError"), description: e.message === "slug_taken" ? t("rgeNeighborhood.slugTaken")
+        : e.message === "rge_required" ? t("rgeNeighborhood.accessRequired")
+        : e.message === "invalid_slug" ? t("rgeNeighborhood.slugInvalid")
+        : e.message === "validation_error" ? t("rgeNeighborhood.checkFields")
+        : undefined,
+        variant: "destructive" });
     },
   });
 
@@ -186,7 +192,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         body: JSON.stringify({}),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(parseAgentPageApiError(payload));
+      if (!res.ok) throw new Error();
       return payload as { slug: string | null };
     },
   });
@@ -231,11 +237,11 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       );
       toast({
         title: t("rgeAgent.published"),
-        description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
+        description: t("rgeNeighborhood.publishedListings", { count: result.published }),
       });
     },
-    onError: (e: Error) => {
-      toast({ title: t("rgeAgent.bulkError"), description: e.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: t("rgeAgent.bulkError"), variant: "destructive" });
     },
   });
 
@@ -253,13 +259,13 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       }
       const validated = validateAgentPageSlugInput(trimmed);
       if (!validated.ok) {
-        setSlugError(validated.error);
+        setSlugError(t("rgeNeighborhood.slugInvalid"));
         return;
       }
       setSlugError(null);
       saveMutation.mutate({ agentPageSlug: validated.slug });
     },
-    [data?.agentPageSlug, saveMutation],
+    [data?.agentPageSlug, saveMutation, t],
   );
 
   const saveProfileLink = useCallback(
@@ -303,7 +309,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     );
   }
 
-  const publishStatusLabel = pageIsPublic ? "Live" : "Offline";
+  const publishStatusLabel = pageIsPublic ? t("rgeNeighborhood.active") : t("rgeNeighborhood.inactive");
 
   const publishStatusClass = pageIsPublic
     ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -428,7 +434,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   const seed = customBioDraft.trim() || data.businessProfileAbout?.trim() || "";
                   if (!seed) {
                     setCustomBioError(
-                      "Add an about blurb in Business Profile or enter a custom bio below.",
+                      t("rgeNeighborhood.bioRequired"),
                     );
                     return;
                   }
@@ -546,18 +552,10 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               {data.publishListingsPublicly && pageIsPublic && (
                 <div className="space-y-2 pt-1" data-testid="agent-page-listing-publish">
                   <p className="text-xs text-muted-foreground leading-snug">
-                    <span className="font-medium text-gray-800 tabular-nums">
-                      {data.publishedOnAgentPage.toLocaleString()}
-                    </span>{" "}
-                    listings on your Agent Page
-                    {data.eligibleToPublish > 0 ? (
-                      <>
-                        {" "}
-                        ·{" "}
-                        <span className="tabular-nums">{data.eligibleToPublish.toLocaleString()}</span> eligible
-                        to publish
-                      </>
-                    ) : null}
+                    {t("rgeNeighborhood.listingsTotal", { total: formatCount(data.publishedOnAgentPage) })}
+                    {data.eligibleToPublish > 0 && (
+                      <> · {t("rgeNeighborhood.listingsEligible", { total: formatCount(data.eligibleToPublish) })}</>
+                    )}
                   </p>
                   {data.publishedOnAgentPage === 0 && data.eligibleToPublish > 0 && (
                     <p className="text-xs text-amber-700 leading-snug">
@@ -580,7 +578,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                           {t("rgeAgent.publishing")}
                         </>
                       ) : (
-                        `Publish ${data.eligibleToPublish.toLocaleString()} eligible listings`
+                        t("rgeNeighborhood.publishEligible", { total: formatCount(data.eligibleToPublish) })
                       )}
                     </Button>
                   )}
@@ -696,10 +694,9 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                         setSlugError(null);
                         saveMutation.mutate({ agentPageSlug: result.slug });
                       }
-                    } catch (e) {
+                    } catch {
                       toast({
                         title: t("rgeAgent.slugError"),
-                        description: e instanceof Error ? e.message : undefined,
                         variant: "destructive",
                       });
                     }

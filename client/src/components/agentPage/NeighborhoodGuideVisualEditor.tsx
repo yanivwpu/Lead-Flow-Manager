@@ -77,7 +77,7 @@ function articleToText(editor: HTMLElement, before?: HTMLElement): string {
   return sections.join("\n\n");
 }
 
-function createPhotoNode(photo: NeighborhoodPhoto, width = 100): HTMLElement | null {
+function createPhotoNode(photo: NeighborhoodPhoto, width: number, resizeLabel: string): HTMLElement | null {
   const id = neighborhoodGuidePhotoId(photo.url);
   if (!id) return null;
   const figure = document.createElement("figure");
@@ -98,22 +98,22 @@ function createPhotoNode(photo: NeighborhoodPhoto, width = 100): HTMLElement | n
   const grip = document.createElement("button");
   grip.type = "button";
   grip.dataset.photoResizeHandle = "true";
-  grip.setAttribute("aria-label", "Drag to resize image");
-  grip.title = "Drag to resize";
+  grip.setAttribute("aria-label", resizeLabel);
+  grip.title = resizeLabel;
   grip.textContent = "↘";
   grip.className = "absolute bottom-8 right-2 flex h-9 w-9 touch-none items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-xl font-semibold text-slate-700 shadow-sm cursor-nwse-resize hover:bg-white";
   figure.append(img, caption, grip);
   return figure;
 }
 
-function restoreEditor(editor: HTMLElement, text: string, photos: NeighborhoodPhoto[]) {
+function restoreEditor(editor: HTMLElement, text: string, photos: NeighborhoodPhoto[], resizeLabel: string) {
   editor.replaceChildren();
   const blocks = parseNeighborhoodGuideBlocks(text);
   for (const block of blocks) {
     if (block.type === "photo") {
       const photo = photos.find((item) => neighborhoodGuidePhotoId(item.url) === block.id);
       if (photo) {
-        const node = createPhotoNode(photo, block.width);
+        const node = createPhotoNode(photo, block.width, resizeLabel);
         if (node) editor.append(node);
       }
       continue;
@@ -129,7 +129,8 @@ export function NeighborhoodGuideVisualEditor({
   content, photos, disabled, canUpload, uploading, uploadDraftRequired, uploadedInlinePhotoId,
   onChange, onPhotoAltChange, onUploadPhoto,
 }: EditorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const resizeLabel = t("rgeNeighborhood.resizeHandle");
   const editorRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pickerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -145,7 +146,7 @@ export function NeighborhoodGuideVisualEditor({
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor || content === lastAuthored.current) return;
-    restoreEditor(editor, content, photosRef.current);
+    restoreEditor(editor, content, photosRef.current, resizeLabel);
     lastAuthored.current = content;
     pickerAnchorRef.current = null;
     setPickerHost(null);
@@ -159,6 +160,11 @@ export function NeighborhoodGuideVisualEditor({
     if (!editor) return;
     for (const figure of Array.from(editor.querySelectorAll<HTMLElement>("figure[data-photo-id]"))) {
       const photo = photos.find((p) => neighborhoodGuidePhotoId(p.url) === figure.dataset.photoId);
+      const grip = figure.querySelector<HTMLButtonElement>("[data-photo-resize-handle]");
+      if (grip) {
+        grip.setAttribute("aria-label", resizeLabel);
+        grip.title = resizeLabel;
+      }
       const img = figure.querySelector("img");
       const caption = figure.querySelector("figcaption");
       if (photo && img && caption) {
@@ -166,7 +172,7 @@ export function NeighborhoodGuideVisualEditor({
         caption.textContent = photo.alt;
       }
     }
-  }, [photos]);
+  }, [photos, resizeLabel]);
 
   // Inline uploads commit the placement in the parent draft, so the picker
   // and editable DOM can be replaced without losing the image or selection.
@@ -192,7 +198,7 @@ export function NeighborhoodGuideVisualEditor({
     if (!editor.children.length ||
         (content && !articleToText(editor).trim() &&
           !editor.querySelector('[data-inline-photo-picker="true"]'))) {
-      restoreEditor(editor, content, photosRef.current);
+      restoreEditor(editor, content, photosRef.current, resizeLabel);
       lastAuthored.current = content;
     }
   }
@@ -214,8 +220,8 @@ export function NeighborhoodGuideVisualEditor({
     if (!editor || disabled) return;
     const next = articleToText(editor);
     if (next.length > 5000) {
-      toast({ title: "Guide is too long", description: "Maximum length is 5,000 characters.", variant: "destructive" });
-      restoreEditor(editor, lastAuthored.current ?? content, photosRef.current);
+      toast({ title: t("rgeNeighborhood.tooLong"), description: t("rgeNeighborhood.maxLength"), variant: "destructive" });
+      restoreEditor(editor, lastAuthored.current ?? content, photosRef.current, resizeLabel);
       return;
     }
     if (next === lastAuthored.current) return;
@@ -294,12 +300,12 @@ export function NeighborhoodGuideVisualEditor({
   function insertPhoto(photo: NeighborhoodPhoto) {
     const editor = editorRef.current;
     const anchor = pickerAnchorRef.current;
-    const figure = createPhotoNode(photo, 100);
+    const figure = createPhotoNode(photo, 100, resizeLabel);
     if (!editor || !figure || disabled || !anchor || !editor.contains(anchor)) return;
     const id = neighborhoodGuidePhotoId(photo.url);
     if (!id) return;
     if (editor.querySelector('figure[data-photo-id="' + id + '"]')) {
-      toast({ title: "Photo already in this article", description: "Click the existing photo to adjust its size." });
+      toast({ title: t("rgeNeighborhood.alreadyInserted"), description: t("rgeNeighborhood.adjustExisting") });
       closePicker();
       return;
     }
@@ -311,7 +317,7 @@ export function NeighborhoodGuideVisualEditor({
     if (!figure.nextElementSibling) editor.append(document.createElement("p"));
     syncEditor();
     figure.scrollIntoView({ block: "nearest" });
-    toast({ title: "Image inserted", description: "You can see the image here. Adjust its width below, then update the page." });
+    toast({ title: t("rgeNeighborhood.inserted"), description: t("rgeNeighborhood.insertedHelp") });
   }
 
   function resizePhoto(width: number) {
@@ -386,28 +392,28 @@ export function NeighborhoodGuideVisualEditor({
   });
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="Neighborhood article editor">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={t("rgeNeighborhood.editor")}>
       <div className="border-b border-slate-100 px-4 py-3">
-        <h5 className="text-sm font-semibold text-slate-900">Your local guide</h5>
-        <p className="text-xs text-slate-500">Write, format and insert photos directly in your article.</p>
+        <h5 className="text-sm font-semibold text-slate-900">{t("rgeNeighborhood.guide")}</h5>
+        <p className="text-xs text-slate-500">{t("rgeNeighborhood.guideIntro")}</p>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-0.5" role="toolbar" aria-label="Article formatting">
-          {toolbarButton("Bold", <Bold className="h-4 w-4" />, () => format("bold"))}
-          {toolbarButton("Italic", <Italic className="h-4 w-4" />, () => format("italic"))}
+        <div className="flex flex-wrap items-center gap-0.5" role="toolbar" aria-label={t("rgeNeighborhood.formatting")}>
+          {toolbarButton(t("rgeNeighborhood.bold"), <Bold className="h-4 w-4" />, () => format("bold"))}
+          {toolbarButton(t("rgeNeighborhood.italic"), <Italic className="h-4 w-4" />, () => format("italic"))}
           <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
-          {toolbarButton("Heading", <Heading2 className="h-4 w-4" />, () => format("formatBlock", "h3"))}
-          {toolbarButton("Normal paragraph", <Pilcrow className="h-4 w-4" />, () => format("formatBlock", "p"))}
+          {toolbarButton(t("rgeNeighborhood.heading"), <Heading2 className="h-4 w-4" />, () => format("formatBlock", "h3"))}
+          {toolbarButton(t("rgeNeighborhood.paragraph"), <Pilcrow className="h-4 w-4" />, () => format("formatBlock", "p"))}
           <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
-          {toolbarButton("Insert image", <ImagePlus className="h-4 w-4" />, openPickerAtCursor)}
+          {toolbarButton(t("rgeNeighborhood.insert"), <ImagePlus className="h-4 w-4" />, openPickerAtCursor)}
         </div>
-        <span className="text-xs tabular-nums text-slate-500">{content.length.toLocaleString()} / 5,000</span>
+        <span className="text-xs tabular-nums text-slate-500">{content.length.toLocaleString(i18n.resolvedLanguage)} / {(5000).toLocaleString(i18n.resolvedLanguage)}</span>
       </div>
       {pickerHost && createPortal(
-        <div className="rounded-lg bg-white p-3" role="region" aria-label="Choose article image" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onKeyUp={(event) => event.stopPropagation()}>
+        <div className="rounded-lg bg-white p-3" role="region" aria-label={t("rgeNeighborhood.picker")} onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onKeyUp={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-900">Choose a photo for this spot</p>
-            <Button type="button" size="icon" variant="ghost" aria-label="Close photo picker" className="h-8 w-8"
+            <p className="text-sm font-medium text-slate-900">{t("rgeNeighborhood.pickerSpot")}</p>
+            <Button type="button" size="icon" variant="ghost" aria-label={t("rgeNeighborhood.closePicker")} className="h-8 w-8"
               disabled={uploading} onClick={closePicker}><X className="h-4 w-4" /></Button>
           </div>
           {available.length > 0 && (
@@ -423,15 +429,15 @@ export function NeighborhoodGuideVisualEditor({
           )}
           <Button type="button" variant="outline" size="sm" className="mt-2" disabled={disabled || !canUpload || uploading}
             onClick={() => fileRef.current?.click()}>
-            <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />{uploading ? "Uploading…" : "Upload new photo"}
+            <Upload className="me-1.5 h-4 w-4" aria-hidden="true" />{uploading ? t("rgeNeighborhood.uploading") : t("rgeNeighborhood.uploadNew")}
           </Button>
           {!canUpload && <p className="mt-1 text-xs text-slate-500">{photos.length >= 6
-            ? "Six photos maximum; remove an unused photo to upload another."
+            ? t("rgeNeighborhood.photoLimit")
             : t("rgeNeighborhoodUpload.requiredLocation")}</p>}
           {uploadDraftRequired && canUpload &&
             <p className="mt-1 text-xs text-slate-500">{t("rgeNeighborhoodUpload.inlineDraft")}</p>}
-          <p className="mt-1 text-xs text-slate-500">JPG, PNG or WebP, up to 5 MB. Only use photos you own or are licensed to share.</p>
-          <input ref={fileRef} type="file" className="sr-only" accept="image/jpeg,image/png,image/webp" aria-label="Upload article image"
+          <p className="mt-1 text-xs text-slate-500">{t("rgeNeighborhood.license")}</p>
+          <input ref={fileRef} type="file" className="sr-only" accept="image/jpeg,image/png,image/webp" aria-label={t("rgeNeighborhood.uploadArticle")}
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
@@ -439,8 +445,8 @@ export function NeighborhoodGuideVisualEditor({
             }} />
         </div>, pickerHost)}
       <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning
-        role="textbox" aria-label="Your local guide article" aria-multiline="true"
-        data-placeholder="Start writing your neighborhood guide…"
+        dir={content.trim() ? "auto" : undefined} role="textbox" aria-label={t("rgeNeighborhood.article")} aria-multiline="true"
+        data-placeholder={t("rgeNeighborhood.placeholder")}
         className="min-h-[280px] px-5 py-6 text-[15px] leading-7 text-slate-800 outline-none
           focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500
           [&>p]:mb-4 [&>p]:min-h-7 [&>h3]:mb-3 [&>h3]:mt-5 [&>h3]:text-xl [&>h3]:font-semibold
@@ -463,31 +469,31 @@ export function NeighborhoodGuideVisualEditor({
         <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <Label htmlFor="neighborhood-inline-image-width" className="text-sm font-medium text-slate-700">
-              Image width
+              {t("rgeNeighborhood.width")}
             </Label>
             <input id="neighborhood-inline-image-width" type="range" min={40} max={100} step={5}
               disabled={disabled} value={selectedWidth} onChange={(event) => resizePhoto(Number(event.target.value))}
               className="h-2 min-w-[140px] flex-1 cursor-pointer accent-emerald-600"
-              aria-label="Resize selected article image" />
+              aria-label={t("rgeNeighborhood.resize")} />
             <span className="w-12 text-right text-sm tabular-nums text-slate-700">{selectedWidth}%</span>
             <Button type="button" size="sm" variant="outline" disabled={disabled || selectedWidth === 100}
-              onClick={() => resizePhoto(100)}>Full width</Button>
+              onClick={() => resizePhoto(100)}>{t("rgeNeighborhood.fullWidth")}</Button>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[200px] flex-1">
-              <Label htmlFor="inline-guide-image-caption" className="text-xs text-slate-600">Image caption</Label>
+              <Label htmlFor="inline-guide-image-caption" className="text-xs text-slate-600">{t("rgeNeighborhood.caption")}</Label>
               <Input id="inline-guide-image-caption" maxLength={140} disabled={disabled} value={selectedPhoto.alt}
                 onChange={(event) => onPhotoAltChange(selectedPhoto.url, event.target.value)} className="mt-1 h-9" />
             </div>
             <Button type="button" variant="ghost" size="sm" className="text-red-600" disabled={disabled} onClick={removeImage}>
-              <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" /> Remove from article
+              <Trash2 className="me-1 h-4 w-4" aria-hidden="true" /> {t("rgeNeighborhood.removeArticle")}
             </Button>
           </div>
-          <p className="text-xs text-slate-500">Drag the corner handle on the photo, or use the width slider. The published guide will use the same width.</p>
+          <p className="text-xs text-slate-500">{t("rgeNeighborhood.resizeHelp")}</p>
         </div>
       )}
       <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-        Click inside a paragraph or below a heading, then select the image icon. The photo chooser opens at that spot in your article.
+        {t("rgeNeighborhood.insertHelp")}
       </p>
     </section>
   );

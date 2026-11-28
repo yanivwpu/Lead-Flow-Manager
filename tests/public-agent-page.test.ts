@@ -267,38 +267,38 @@ function testAgentPageDbSavePath() {
   assert(card.includes("agentPageEnabled: checked"), "enable page toggle saves");
   assert(card.includes("agentPageUseCustomBio: true"), "custom bio toggle saves");
   assert(
-    card.includes("Add an about blurb in Business Profile"),
+    card.includes('t("rgeNeighborhood.bioRequired")'),
     "inline validation when custom bio cannot be seeded",
   );
-  assert(card.includes('pageIsPublic ? "Live" : "Offline"'), "public status label");
-  assert(card.includes("Edit Business Profile"), "business profile link");
-  assert(card.includes("Managed in Business Profile"), "business profile managed label");
+  assert(card.includes('pageIsPublic ? t("rgeNeighborhood.active") : t("rgeNeighborhood.inactive")'), "public status label");
+  assert(card.includes('t("rgeAgent.editProfile")'), "business profile link");
+  assert(card.includes('t("rgeAgent.managed")'), "business profile managed label");
   assert(card.includes("AgentPageMarketAreaChips"), "market area chips component");
   assert(!card.includes("agent-page-future-analytics"), "no future analytics placeholder");
   assert(!card.includes("Lead capture analytics"), "no analytics placeholder cards");
   assert(card.includes("agent-page-url-block"), "agent url block");
   assert(card.includes("agent-page-embed-code"), "embed options panel");
   assert(!card.includes("<pre className"), "raw iframe markup is not displayed in Agent Page settings");
-  assert(card.includes("Copy homes for sale embed"), "for-sale embed has a copy button");
-  assert(card.includes("Copy rentals embed"), "rental embed has a copy button");
+  assert(card.includes('t("rgeAgent.copySales")'), "for-sale embed has a copy button");
+  assert(card.includes('t("rgeAgent.copyRent")'), "rental embed has a copy button");
   assert(card.indexOf("<NeighborhoodPageSettings") < card.indexOf('data-testid="agent-page-controls-column"'), "Neighborhood Pages appears before advanced Agent Page controls");
   assert(card.includes("buildAgentPageEmbedIframeHtml"), "embed iframe helper");
   assert(card.includes('listingType: "for_sale"'), "for sale embed param in snippet builder");
   assert(card.includes('listingType: "for_rent"'), "for rent embed param in snippet builder");
-  assert(card.includes("Primary contact button"), "primary contact button label");
+  assert(card.includes('t("rgeAgent.primaryButton")'), "primary contact button label");
   assert(card.includes("agent-page-primary-contact-button"), "primary contact button test id");
-  assert(card.includes("Contact form"), "legacy email preference now labels the contact form");
-  assert(card.includes("Phone call"), "phone call option label");
+  assert(card.includes('t("rgeAgent.form")'), "legacy email preference now labels the contact form");
+  assert(card.includes('t("rgeAgent.call")'), "phone call option label");
   assert(
-    card.includes("Web chat and forms create CRM leads in your Inbox"),
+    card.includes('t("rgeAgent.contactHelp")'),
     "primary contact helper text",
   );
   assert(card.includes("agent-page-social-links"), "social links settings block");
-  assert(card.includes("Website URL"), "website url field");
-  assert(card.includes("Facebook URL"), "facebook url field");
-  assert(card.includes("Instagram URL"), "instagram url field");
-  assert(card.includes("LinkedIn URL"), "linkedin url field");
-  assert(card.includes("YouTube URL"), "youtube url field");
+  assert(card.includes('t("rgeAgent.website")'), "website url field");
+  assert(card.includes('t("rgeAgent.facebook")'), "facebook url field");
+  assert(card.includes('t("rgeAgent.instagram")'), "instagram url field");
+  assert(card.includes('t("rgeAgent.linkedin")'), "linkedin url field");
+  assert(card.includes('t("rgeAgent.youtube")'), "youtube url field");
 
   const rge = readFileSync(
     join(process.cwd(), "client", "src", "pages", "RealtorGrowthEngine.tsx"),
@@ -329,10 +329,10 @@ function testAgentPageDbSavePath() {
   const mainEnd = mainBlock.indexOf('data-testid="rge-dashboard-sidebar"');
   assert(mainEnd > 0, "main column before sidebar");
   const mainOnly = mainBlock.slice(0, mainEnd);
-  assert(mainOnly.includes("Active Automations"), "automations in main column");
+  assert(mainOnly.includes('t("rgeApp.activeAutomations")'), "automations in main column");
   assert(mainOnly.includes("<PublicAgentPageSettingsCard"), "agent page under automations in main column");
   assert(
-    mainOnly.indexOf("Active Automations") < mainOnly.indexOf("<PublicAgentPageSettingsCard"),
+    mainOnly.indexOf('t("rgeApp.activeAutomations")') < mainOnly.indexOf("<PublicAgentPageSettingsCard"),
     "agent page below automations",
   );
 

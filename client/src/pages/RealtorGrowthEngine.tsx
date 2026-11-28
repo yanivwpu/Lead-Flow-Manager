@@ -53,6 +53,13 @@ class RealtorEngineErrorBoundary extends Component<{ children: React.ReactNode; 
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+const featuredConciergeZones = new Set([
+  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "America/Anchorage", "Pacific/Honolulu",
+]);
+const conciergeZones = ((Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] }).supportedValuesOf?.("timeZone") ?? ["Asia/Jerusalem", "Europe/Madrid", "America/Mexico_City"])
+  .filter(zone => !featuredConciergeZones.has(zone));
+
 function RealtorMark() {
   return (
     <span className="inline">Realtor<span style={{ fontSize: '0.35em', verticalAlign: 'super', lineHeight: 0, position: 'relative', top: '-0.15em' }}>&reg;</span></span>
@@ -849,6 +856,11 @@ function RGEOnboardingWizard({
                                   <option value="America/Los_Angeles">{t("rgeApp.pacific")}</option>
                                   <option value="America/Anchorage">{t("rgeApp.alaska")}</option>
                                   <option value="Pacific/Honolulu">{t("rgeApp.hawaii")}</option>
+                                  <optgroup label={t("rgeNeighborhood.otherTimezones")}>
+                                    {field.value && !featuredConciergeZones.has(field.value) && !conciergeZones.includes(field.value) &&
+                                      <option value={field.value}>{field.value}</option>}
+                                    {conciergeZones.map(zone => <option key={zone} value={zone}>{zone}</option>)}
+                                  </optgroup>
                                 </RgeSelect>
                               </FormControl>
                               <FormMessage />
@@ -1514,8 +1526,8 @@ export function RealtorGrowthEngine() {
                         <div className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500">
                           <Sparkles className="h-2.5 w-2.5 text-white" aria-hidden />
                         </div>
-                        <span className="text-[10px] font-medium text-emerald-700">AI Copilot Active</span>
-                        <Badge className="ml-auto border-0 bg-emerald-100 px-1.5 py-0 text-[8px] text-emerald-700">New Lead</Badge>
+                        <span className="text-[10px] font-medium text-emerald-700">{t("rgeNeighborhood.copilotActive")}</span>
+                        <Badge className="ml-auto border-0 bg-emerald-100 px-1.5 py-0 text-[8px] text-emerald-700">{t("rgeNeighborhood.newLead")}</Badge>
                       </div>
                     </div>
 
@@ -1567,7 +1579,7 @@ export function RealtorGrowthEngine() {
 
                     <div className="flex items-center gap-2 bg-[#f0f0f0] px-2 py-1.5">
                       <Smile className="h-5 w-5 text-gray-500" aria-hidden />
-                      <div className="flex-1 rounded-full bg-white px-3 py-1.5 text-[11px] text-gray-400 shadow-sm">Type a message</div>
+                      <div className="flex-1 rounded-full bg-white px-3 py-1.5 text-[11px] text-gray-400 shadow-sm">{t("rgeNeighborhood.typeMessage")}</div>
                       <Paperclip className="h-4 w-4 text-gray-500" aria-hidden />
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 shadow-md">
                         <Send className="ms-0.5 h-3.5 w-3.5 text-white" aria-hidden />
@@ -1593,7 +1605,7 @@ export function RealtorGrowthEngine() {
                   <div className="mt-2 space-y-1">
                     <div className="flex items-center gap-1.5 text-[9px]">
                       <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" aria-hidden />
-                      <span className="text-gray-600">Budget qualified</span>
+                      <span className="text-gray-600">{t("rgeNeighborhood.budgetQualified")}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-[9px]">
                       <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" aria-hidden />
@@ -1601,7 +1613,7 @@ export function RealtorGrowthEngine() {
                     </div>
                     <div className="flex items-center gap-1.5 text-[9px]">
                       <AlertCircle className="h-2.5 w-2.5 text-amber-500" aria-hidden />
-                      <span className="text-gray-600">Financing TBD</span>
+                      <span className="text-gray-600">{t("rgeNeighborhood.financingPending")}</span>
                     </div>
                   </div>
                 </div>
@@ -1905,8 +1917,8 @@ export function RealtorGrowthEngine() {
                     </div>
                     <div className="h-2 w-px bg-gray-300" />
                     <div className="flex items-center gap-1.5">
-                      <div className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[7px] font-medium text-gray-600">Wait</div>
-                      <div className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[7px] font-medium text-gray-600">If reply</div>
+                      <div className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[7px] font-medium text-gray-600">{t("rgeNeighborhood.wait")}</div>
+                      <div className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[7px] font-medium text-gray-600">{t("rgeNeighborhood.ifReply")}</div>
                     </div>
                     <div className="h-2 w-px bg-gray-300" />
                     <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[8px] font-medium text-gray-700">
@@ -1915,7 +1927,7 @@ export function RealtorGrowthEngine() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
-                  <span className="text-[8px] text-gray-500">Lead Nurture</span>
+                  <span className="text-[8px] text-gray-500">{t("rgeNeighborhood.leadNurture")}</span>
                   <Badge className="border-0 bg-emerald-100 px-1.5 py-0 text-[7px] text-emerald-700">{t("inboxUi.active")}</Badge>
                 </div>
               </div>
@@ -1926,7 +1938,7 @@ export function RealtorGrowthEngine() {
             <div className="group">
               <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
                 <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
-                  <span className="text-[10px] font-semibold text-white">Pipeline</span>
+                  <span className="text-[10px] font-semibold text-white">{t("rgeNeighborhood.pipeline")}</span>
                   <Filter className="h-3 w-3 text-white/60" aria-hidden />
                 </div>
                 <div className="flex gap-1.5 overflow-hidden p-2">
@@ -1940,7 +1952,7 @@ export function RealtorGrowthEngine() {
                     </div>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">QUAL</div>
+                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">{t("rgeNeighborhood.qualified")}</div>
                     <div className="space-y-1 rounded bg-emerald-50/50 p-1">
                       <div className="rounded border border-gray-100 bg-white p-1.5 shadow-sm">
                         <p className="text-[8px] font-medium text-gray-800">John D.</p>
@@ -1949,11 +1961,11 @@ export function RealtorGrowthEngine() {
                     </div>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">SHOW</div>
+                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">{t("rgeNeighborhood.showing")}</div>
                     <div className="rounded bg-gray-50 p-1">
                       <div className="rounded border border-gray-100 bg-white p-1.5 shadow-sm">
                         <p className="text-[8px] font-medium text-gray-800">Mike R.</p>
-                        <span className="text-[7px] text-gray-500">Tmrw</span>
+                        <span className="text-[7px] text-gray-500">{t("rgeNeighborhood.tomorrow")}</span>
                       </div>
                     </div>
                   </div>
@@ -1977,7 +1989,7 @@ export function RealtorGrowthEngine() {
                   <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
                     <div className="mb-0.5 flex items-center justify-between">
                       <span className="text-[9px] font-semibold text-gray-800">Re-engagement</span>
-                      <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">Approved</Badge>
+                      <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">{t("rgeNeighborhood.approved")}</Badge>
                     </div>
                     <p className="text-[8px] text-gray-500">
                       Hi {"{name}"}, following up on...
@@ -1985,8 +1997,8 @@ export function RealtorGrowthEngine() {
                   </div>
                   <div className="rounded-lg border border-gray-100 bg-white p-2">
                     <div className="mb-0.5 flex items-center justify-between">
-                      <span className="text-[9px] font-semibold text-gray-800">Showing Reminder</span>
-                      <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">Approved</Badge>
+                      <span className="text-[9px] font-semibold text-gray-800">{t("rgeNeighborhood.showingReminder")}</span>
+                      <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">{t("rgeNeighborhood.approved")}</Badge>
                     </div>
                     <p className="text-[8px] text-gray-500">Reminder: Showing on {"{date}"}...</p>
                   </div>
