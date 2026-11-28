@@ -220,7 +220,7 @@ function PipelineCard({
   onDragStart,
   onDragEnd,
   isDragging,
-  stage, stages, layout, onStageChange, onSetReminder, isMobile, stagePending
+  stage, stages, layout, onStageChange, onSetReminder, onRemove, isMobile, stagePending
 }: {
   chat: Chat;
   onClick: (chatId: string) => void;
@@ -230,6 +230,7 @@ function PipelineCard({
   stage: string; stages: string[]; layout: readonly PipelineStageLayout[];
   onStageChange: (chatId: string, stage: string) => void;
   onSetReminder: (chat: Chat) => void;
+  onRemove: (chatId: string) => void;
   isMobile: boolean; stagePending: boolean;
 }) {
   const { t, i18n } = useTranslation();
@@ -287,6 +288,7 @@ function PipelineCard({
           <Button type="button" size="sm" variant="ghost" className="h-auto flex-1 px-1.5 py-1 text-xs" onClick={() => onClick(chat.id)} data-testid={`pipeline-open-${chat.id}`}><MessageSquare className="h-3.5 w-3.5 shrink-0" />{t("followups.openConversation")}</Button>
           <Button type="button" size="sm" variant="ghost" className="h-auto flex-1 px-1.5 py-1 text-xs" onClick={() => onSetReminder(chat)} data-testid={`pipeline-reminder-${chat.id}`}><CalendarIcon className="h-3.5 w-3.5 shrink-0" />{t("followups.reminder")}</Button>
         </div>
+        <Button type="button" size="sm" variant="ghost" className="h-auto w-full justify-center px-1.5 py-1 text-xs text-slate-600" disabled={stagePending} onClick={() => onRemove(chat.id)} data-testid={`pipeline-remove-${chat.id}`}><X className="h-3.5 w-3.5 shrink-0" />{t("followups.removeFromPipeline")}</Button>
       </div>
     </div>
   );
@@ -296,13 +298,14 @@ function PipelineView({
   chats,
   onCardClick,
   onStageChange,
-  isMobile, actorId, stagePending, onSetReminder, sessionAligned
+  isMobile, actorId, stagePending, onSetReminder, onRemove, sessionAligned
 }: {
   chats: Chat[];
   onCardClick: (chatId: string) => void;
   onStageChange: (chatId: string, newStage: string, move?: PipelineLayoutMove) => void;
   isMobile: boolean; actorId?: string; stagePending: boolean; sessionAligned: boolean;
   onSetReminder: (chat: Chat) => void;
+  onRemove: (chatId: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
@@ -441,7 +444,7 @@ function PipelineView({
                   onDragEnd={handleDragEnd}
                   isDragging={draggedChat?.id === chat.id}
                   stage={stage} stages={stages} layout={layout} isMobile={isMobile} stagePending={stagePending}
-                  onStageChange={moveToColumn} onSetReminder={onSetReminder}
+                  onStageChange={moveToColumn} onSetReminder={onSetReminder} onRemove={onRemove}
                 />
               ))}
               {stageChats.length === 0 && (
@@ -770,6 +773,20 @@ export function FollowUps() {
     onError: () => { void invalidateAll(); void queryClient.invalidateQueries({ queryKey: ['/api/inbox/pipeline-layout'] }); toast({ title: t('followups.stageSaveFailed'), variant: 'destructive' }); },
   });
 
+  const removePipelineMutation = useMutation({
+    mutationFn: async (chatId: string) => {
+      if (!sessionAligned) throw new Error("Workspace changed");
+      return patchContact(chatId, { pipelineRemove: true });
+    },
+    onSuccess: async () => { await invalidateAll(); toast({ title: t("followups.pipelineRemoved") }); },
+    onError: () => { void invalidateAll(); toast({ title: t("followups.pipelineRemoveFailed"), variant: "destructive" }); },
+  });
+  const handleRemovePipeline = (chatId: string) => {
+    if (!sessionAligned || removePipelineMutation.isPending || updatePipelineStageMutation.isPending ||
+        !chats.some(chat => chat.id === chatId && chat.isOpportunity)) return;
+    if (window.confirm(t("followups.pipelineRemoveConfirm"))) removePipelineMutation.mutate(chatId);
+  };
+
   const filteredChats = useMemo(() => {
     return applyKPIFilter(chats, kpiFilter);
   }, [chats, kpiFilter]);
@@ -841,8 +858,8 @@ export function FollowUps() {
 
   const handleStageChange = (chatId: string, newStage: string, move?: PipelineLayoutMove) => {
     const chat = chats.find(item => item.id === chatId && item.isOpportunity);
-    if (!chat || updatePipelineStageMutation.isPending || (!move && !chat.pipelineCustomStageId && boardStage(chat.pipelineStage) === newStage)) return;
-    if (!isSalesOpportunity({ id: chat.id, name: chat.name, tag: chat.tag, pipelineStage: newStage, sourceDetails: { pipelineManuallyAdded: chat.pipelineManuallyAdded === true } }) && !window.confirm(t('followups.moveOutOfPipeline'))) return;
+    if (!chat || updatePipelineStageMutation.isPending || removePipelineMutation.isPending || (!move && !chat.pipelineCustomStageId && boardStage(chat.pipelineStage) === newStage)) return;
+    if (!isSalesOpportunity({ id: chat.id, name: chat.name, tag: chat.tag, pipelineStage: newStage, source: chat.source, sourceDetails: { pipelineManuallyAdded: chat.pipelineManuallyAdded === true, emailPipelineSalesEvidence: chat.emailPipelineSalesEvidence === true } }) && !window.confirm(t('followups.moveOutOfPipeline'))) return;
     updatePipelineStageMutation.mutate({ chatId, newStage, move });
   };
 
@@ -1052,7 +1069,7 @@ export function FollowUps() {
             chats={filteredChats.filter(chat => chat.isOpportunity)}
             onCardClick={handleRowClick}
             onStageChange={handleStageChange}
-            isMobile={isMobile} actorId={user?.id} sessionAligned={sessionAligned} stagePending={updatePipelineStageMutation.isPending} onSetReminder={setReminder}
+            isMobile={isMobile} actorId={user?.id} sessionAligned={sessionAligned} stagePending={updatePipelineStageMutation.isPending || removePipelineMutation.isPending || !sessionAligned} onSetReminder={setReminder} onRemove={handleRemovePipeline}
           />
         )}
       </div>

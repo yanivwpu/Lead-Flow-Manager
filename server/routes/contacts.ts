@@ -2,7 +2,7 @@ import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inbo
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
 import { defaultPipelineLayout, pipelineLayoutSchema, isCustomPipelineStageId } from "@shared/pipelineLayout";
-import { canManuallyAdmitToPipeline, isSalesOpportunity, isPassiveEmailIdentity } from "@shared/followUpTasks";
+import { canManuallyAdmitToPipeline, isSalesOpportunity, isPassiveEmailIdentity, isManuallyRemovedFromPipeline } from "@shared/followUpTasks";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
@@ -649,8 +649,20 @@ export function registerContactRoutes(app: Express): void {
       // Coerce date strings → Date objects for timestamp columns
       const parsedPatch = contactPatchSchema.safeParse(req.body);
       if (!parsedPatch.success) return res.status(400).json({ error: "Invalid contact fields", fields: parsedPatch.error.flatten() });
-      const { pipelineLayoutMove, ...contactFields } = parsedPatch.data;
+      const { pipelineLayoutMove, pipelineRemove, ...contactFields } = parsedPatch.data;
       const body: Record<string, any> = { ...contactFields };
+      if (pipelineRemove) {
+        if (!req.is("application/json") || pipelineLayoutMove || Object.keys(body).length || identityVersion) {
+          return res.status(400).json({ error: "Use a standalone JSON pipeline removal" });
+        }
+        const removed = await storage.updateContact(contact.id, {}, {
+          expectedWorkspaceUserId: inboxWorkspaceId(req), expectedActorUserId: req.user.id,
+          removeFromPipeline: true, skipAutomationHooks: true,
+        });
+        if (!removed) return res.status(403).json({ error: "Workspace permission changed" });
+        notifyUser(inboxWorkspaceId(req), { type: "contact_updated", contactId: removed.id });
+        return res.json(removed);
+      }
       if (pipelineLayoutMove) {
         if (!req.is("application/json")) return res.status(400).json({ error: "JSON pipeline move required" });
         if (Object.keys(body).length || pipelineLayoutMove.workspaceId !== inboxWorkspaceId(req)) return res.status(409).json({ error: "Workspace or pipeline changed" });
@@ -692,9 +704,10 @@ export function registerContactRoutes(app: Express): void {
       }
       const sourceDetails = contact.sourceDetails as Record<string, unknown> | null;
       // Explicit authenticated stage selection, not automatic score/tag changes.
-      if (isPassiveEmailIdentity(contact) && typeof body.pipelineStage === "string" && body.pipelineStage !== contact.pipelineStage && !pipelineLayoutMove) {
-        body.sourceDetails = { ...sourceDetails, pipelineManuallyAdded: true };
-      }
+      const legacyStageAdmission = !pipelineLayoutMove && !identityVersion &&
+        (isPassiveEmailIdentity(contact) || isManuallyRemovedFromPipeline(contact)) &&
+        canManuallyAdmitToPipeline(contact) && typeof body.pipelineStage === "string" &&
+        body.pipelineStage !== contact.pipelineStage && Object.keys(body).every(key => key === "pipelineStage" || key === "pipelineCustomStageId");
       const storedCustomPhone = (contact.customFields as { phone?: unknown } | null)?.phone;
       if (contact.source === "webchat" || sourceDetails?.agentPageForm === true) {
         if (("phone" in body && body.phone !== contact.phone) || ("customFields" in body && body.customFields?.phone !== storedCustomPhone)) {
@@ -731,7 +744,7 @@ export function registerContactRoutes(app: Express): void {
 
       const updated = await storage.updateContact(req.params.id, body, {
         expectedWorkspaceUserId: inboxWorkspaceId(req), expectedActorUserId: req.user.id,
-        ...(pipelineLayoutMove ? { expectedPipelineLayoutRevision: pipelineLayoutMove.revision, admitToPipeline: pipelineLayoutMove.admit } : {}),
+        ...(pipelineLayoutMove ? { expectedPipelineLayoutRevision: pipelineLayoutMove.revision, admitToPipeline: pipelineLayoutMove.admit } : legacyStageAdmission ? { admitToPipeline: true } : {}),
         ...(identityVersion ? { expectedUpdatedAt, requireUnsyncedIdentity: true } : {}),
       });
       if (!updated && pipelineLayoutMove) return res.status(409).json({ error: "Pipeline or workspace changed; refresh before moving" });

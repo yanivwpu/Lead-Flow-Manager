@@ -5,7 +5,7 @@ import {
 } from './aiDomainEligibility';
 import { agentInquiryRecommendation, isAgentInquiryThread } from './agent/agentPageInquiry';
 import { customerAuthoredText } from './buyerPreferenceEvidence';
-import { contactLifecycleFromDetails, isEmailInboxIdentitySource } from './contactCrmVisibility';
+import { isEmailInboxIdentitySource } from './contactCrmVisibility';
 
 export type FollowUpInboxItem = {
   contact: {
@@ -31,7 +31,7 @@ export type FollowUpItem = {
   id: string; name: string; avatar: string; lastMessage: string; time: string;
   unread: number; tag: string; followUp: string | null; followUpDate: string | null;
   notes: string; pipelineStage: string; pipelineCustomStageId?: string | null; needsReply: boolean; isOpportunity: boolean;
-  urgent: boolean; engaged: boolean; pipelineManuallyAdded?: boolean;
+  urgent: boolean; engaged: boolean; pipelineManuallyAdded?: boolean; source?: string | null; emailPipelineSalesEvidence?: boolean;
   reviewRecommended?: string;
   channel?: string; assignedTo?: string | null;
   conversationId?: string;
@@ -59,13 +59,19 @@ export function isClosedStage(stage: string): boolean {
   return ['closed', 'closed won', 'closed lost', 'won', 'lost'].includes(normalized(stage));
 }
 
-/** Passive email identities cannot enter the board from automatic tags or legacy stages. */
+/** Email-origin identities (including old source=email records) require actual sales evidence or manual admission. */
 export function isPassiveEmailIdentity(contact: Pick<FollowUpInboxItem['contact'], 'source' | 'sourceDetails'>): boolean {
-  return isEmailInboxIdentitySource(contact.source) ||
-    (contact.source === 'email' && contactLifecycleFromDetails(contact.sourceDetails) === 'inbox_only');
+  return isEmailInboxIdentitySource(contact.source) || normalized(contact.source || '') === 'email';
 }
 function manuallyAddedToPipeline(contact: { sourceDetails?: unknown }): boolean {
   return (contact.sourceDetails as { pipelineManuallyAdded?: unknown } | null)?.pipelineManuallyAdded === true;
+}
+
+export function isManuallyRemovedFromPipeline(contact: { sourceDetails?: unknown }): boolean {
+  return (contact.sourceDetails as { pipelineManuallyRemoved?: unknown } | null)?.pipelineManuallyRemoved === true;
+}
+function hasEmailPipelineSalesEvidence(contact: { sourceDetails?: unknown }): boolean {
+  return (contact.sourceDetails as { emailPipelineSalesEvidence?: unknown } | null)?.emailPipelineSalesEvidence === true;
 }
 
 export function canManuallyAdmitToPipeline(contact: Pick<FollowUpInboxItem['contact'], 'tag'>): boolean {
@@ -78,7 +84,8 @@ export function isSalesOpportunity(contact: FollowUpInboxItem['contact']): boole
   const tag = normalized(contact.tag);
   if (['unqualified', 'disqualified', 'archived'].includes(stage) ||
       !canManuallyAdmitToPipeline(contact)) return false;
-  if (isPassiveEmailIdentity(contact) && !manuallyAddedToPipeline(contact)) return false;
+  if (isManuallyRemovedFromPipeline(contact)) return false;
+  if (isPassiveEmailIdentity(contact) && !manuallyAddedToPipeline(contact) && !hasEmailPipelineSalesEvidence(contact)) return false;
   if (manuallyAddedToPipeline(contact) && ['lead', 'contacted'].includes(stage)) return true;
   return isClosedStage(stage) ||
     ['opportunity', 'proposal', 'negotiation', 'qualified', 'qualified (hot)', 'qualified (warm)', 'under contract'].includes(stage) ||
@@ -87,7 +94,7 @@ export function isSalesOpportunity(contact: FollowUpInboxItem['contact']): boole
 
 // These are evidence of broadcast/system content, not general customer vocabulary.
 // Do not block a whole channel or provider domain (a Railway customer can ask for help).
-const TASK_NOTIFICATION_CONTENT = /\b(?:newsletter|weekly digest|daily digest|unsubscribe|promotional offer|limited[- ]time offer|flash sale|shop now|save \d+%|\d+% off|reset your password|verification code|shipping notification|delivery status notification)\b|(?:^|\n)(?:your\s+)?(?:railway\s+)?(?:deployment (?:failed|successful|succeeded|complete|completed|crashed)|build (?:failed|successful|succeeded)|usage (?:alert|limit)|service (?:crashed|deployed))\b/i;
+const TASK_NOTIFICATION_CONTENT = /\b(?:newsletter|weekly digest|daily digest|unsubscribe|promotional offer|limited[- ]time offer|flash sale|shop now|save \d+%|\d+% off|reset your password|verification code|shipping notification|delivery status notification|you have used\s+\$?[\d,.]+\s+of\s+usage)\b|(?:^|\n)(?:your\s+)?(?:railway\s+)?(?:deployment (?:failed|successful|succeeded|complete|completed|crashed)|build (?:failed|successful|succeeded)|usage (?:alert|limit)|service (?:crashed|deployed))\b/i;
 const SOCIAL_ONLY = /^(?:hi|hello|hey|thanks|thank you|ok|okay|great|sounds good|got it|how are you|good (?:morning|afternoon|evening))[\s!.?]*$/i;
 const CUSTOMER_REQUEST = /\b(?:interested in|looking (?:for|to)|(?:i|we)(?: (?:need|want|would like)|'d like) (?:help|support|info(?:rmation)?|a (?:refund|quote|demo)|to (?:buy|rent|book|order|schedule|sell))|(?:need|please|can you|could you) (?:help|send|share|check|confirm|call|contact|fix|reschedule)|(?:quote|pricing|refund|demo|support) (?:please|request)|arrived (?:broken|damaged)|was charged twice|(?:cannot|can't) log in|not working|(?:my|our) (?:order|package|item|account|payment|subscription).{0,40}(?:missing|never arrived|hasn't arrived|damaged|locked|failed))\b/i;
 const CUSTOMER_TOPIC = /\b(?:pric(?:e|es|ing)|cost|quot(?:e|es|ation)|proposal|demo|support|refund|return|invoice|cancel\w*|reschedul\w*|appointment|availability|available|(?:my|our) (?:order|account|payment|subscription|delivery)|tour|showing)\b/i;
@@ -105,6 +112,29 @@ const EMAIL_HE_TOPIC = /(?:לקנות|לרכוש|לשכור|למכור|הצעת 
 
 function emailPlainText(value: string): string {
   return value.replace(/&(?:#0*39|#x0*27|apos);|’/gi, "'").replace(/&(?:#0*160|nbsp);/gi, ' ').replace(/&amp;/gi, '&');
+}
+
+// Durable deal evidence is deliberately narrower than a reply-worthy support inquiry.
+const EMAIL_SALES_INTENT = /\b(?:quote|estimate|pricing|price|cost|demo|consultation|buy(?:ing)?|rent(?:ing)?|lease|sell(?:ing)?|tour|showing|remodel\w*|renovat\w*|cabinet\w*)\b/i;
+const EMAIL_SALES_ES = /\b(?:comprar|alquilar|vender|presupuesto|cotizaci[oó]n|precio|consulta|reforma|cocina|visita|demostraci[oó]n)\b/i;
+const EMAIL_SALES_HE = /(?:לקנות|לרכוש|לשכור|למכור|הצעת מחיר|מחיר|ייעוץ|מטבח|שיפוץ|דירה|בית)/u;
+const EMAIL_SUPPORT_ONLY = /\b(?:refund|return|cancel\w*|damaged|broken|reschedul\w*|charged|billing|invoice|my (?:order|account|subscription|payment|package)|privacy policy|password|log in|not working)\b/i;
+
+export function qualifiesEmailPipelineSalesEvidence(input: {
+  senderEmail: string; subject?: string | null; body: string; headers?: Record<string, string>;
+}): boolean {
+  const headers = Object.fromEntries(Object.entries(input.headers || {}).map(([key, value]) => [key.toLowerCase(), value]));
+  if (headers['list-id'] || headers['list-unsubscribe'] ||
+      (headers['auto-submitted'] && headers['auto-submitted'].toLowerCase() !== 'no') ||
+      /^(?:bulk|list|junk)$/i.test(headers.precedence || '')) return false;
+  const body = customerAuthoredText(emailPlainText(input.body));
+  if (EMAIL_SUPPORT_ONLY.test(body)) return false;
+  if (!hasStrongEmailInquiry({
+    contact: { id: '', name: '', email: input.senderEmail, tag: '', pipelineStage: '' },
+    conversation: { channel: 'email', status: 'open', lastMessageDirection: 'inbound', subject: input.subject, lastMessagePreview: body },
+    channel: 'email', lastMessage: body, lastMessageAt: null, unreadCount: 0,
+  })) return false;
+  return EMAIL_SALES_INTENT.test(body) || EMAIL_SALES_ES.test(body) || EMAIL_SALES_HE.test(body);
 }
 
 export function hasStrongEmailInquiry(row: FollowUpInboxItem): boolean {
@@ -160,7 +190,7 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
       reviewRecommended: agentInquiryRecommendation(contact),
       followUpDate: followUp ? validTaskDate(contact.followUpDate) : null,
       notes: contact.notes || '', pipelineStage: contact.pipelineStage, pipelineCustomStageId: contact.pipelineCustomStageId,
-      needsReply, isOpportunity: isSalesOpportunity(contact), pipelineManuallyAdded: manuallyAddedToPipeline(contact),
+      needsReply, isOpportunity: isSalesOpportunity(contact), pipelineManuallyAdded: manuallyAddedToPipeline(contact), source: contact.source, emailPipelineSalesEvidence: hasEmailPipelineSalesEvidence(contact),
       urgent: /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(followUp || '') ||
         (needsReply && /\b(?:urgent|asap|emergency|today|immediately)\b/i.test(row.conversation?.lastMessagePreview || row.lastMessage)),
       engaged: needsReply,
