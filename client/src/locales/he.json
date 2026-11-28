@@ -292,6 +292,10 @@
     "saveAndOpen": "שמור ופתח"
   },
   "followups": {
+    "removeFromPipeline": "הסרה מצינור המכירות",
+    "pipelineRemoved": "ההזדמנות הוסרה מצינור המכירות",
+    "pipelineRemoveFailed": "לא ניתן להסיר את ההזדמנות. יש לרענן ולנסות שוב.",
+    "pipelineRemoveConfirm": "להסיר את ההזדמנות מצינור המכירות? איש הקשר, ההודעות והתזכורות יישמרו. ניתן להוסיף אותה שוב מתיבת ההודעות.",
     "localizedStageNames": "שמות תצוגה לפי שפה (רשות)",
     "dismissRecommendation": "הסרת המלצה",
     "markResolved": "סימון כטופל",

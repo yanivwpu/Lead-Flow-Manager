@@ -290,6 +290,10 @@
     "saveAndOpen": "Save & Open"
   },
   "followups": {
+    "removeFromPipeline": "Remove from pipeline",
+    "pipelineRemoved": "Removed from pipeline",
+    "pipelineRemoveFailed": "Could not remove the opportunity. Refresh and try again.",
+    "pipelineRemoveConfirm": "Remove this opportunity from the pipeline? The contact, messages and reminders will be kept. You can add it back from the Inbox.",
     "localizedStageNames": "Display names by language (optional)",
     "dismissRecommendation": "Dismiss",
     "markResolved": "Mark resolved",

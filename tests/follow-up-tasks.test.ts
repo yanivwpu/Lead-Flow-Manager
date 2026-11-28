@@ -3,7 +3,7 @@ import test from 'node:test';
 import { defaultPipelineLayout, orderedPipelineStages, pipelineLayoutPatchSchema, pipelineLayoutSchema, pipelineStageDisplayLabel, preparePipelineLayoutSave, customPipelineColumn, type PipelineStageLayout } from '../shared/pipelineLayout';
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasActionableInquiry,
-  hasScheduledFollowUp, hasTask, isActiveDeal, isSalesOpportunity, prioritizeTasks,
+  hasScheduledFollowUp, hasTask, isActiveDeal, isSalesOpportunity, prioritizeTasks, qualifiesEmailPipelineSalesEvidence,
   validTaskDate, filterPipelineItems, type PipelineFilters, type FollowUpInboxItem,
 } from '../shared/followUpTasks';
 
@@ -92,11 +92,11 @@ test('only qualified contacts or meaningful sales pipeline stages count as oppor
       assert.equal(isSalesOpportunity({ ...contact, source, pipelineStage }), false, `${source}/${pipelineStage}`);
     }
     for (const pipelineStage of ['Opportunity', 'Proposal', 'Negotiation', 'Qualified (Hot)', 'Qualified (Warm)', 'Under Contract']) {
-      const [item] = buildFollowUpItems([row('', { contact: { ...contact, source, pipelineStage, sourceDetails: source === 'email_inbox' ? { pipelineManuallyAdded: true } : undefined } })]);
+      const [item] = buildFollowUpItems([row('', { contact: { ...contact, source, pipelineStage, sourceDetails: ['email', 'email_inbox'].includes(source) ? { pipelineManuallyAdded: true } : undefined } })]);
       assert.equal(isActiveDeal(item), true, `${source}/${pipelineStage}`);
     }
     for (const tag of ['Hot Lead', 'Warm Lead', 'Hot', 'Warm']) {
-      assert.equal(isSalesOpportunity({ ...contact, source, tag }), source !== 'email_inbox');
+      assert.equal(isSalesOpportunity({ ...contact, source, tag }), !['email', 'email_inbox'].includes(source));
     }
   }
   for (const pipelineStage of ['Closed', 'Closed Won', 'Closed Lost', 'Lost', 'Unqualified']) {
@@ -142,7 +142,7 @@ test('only real tasks with valid dates are scheduled; invalid and undated tasks 
 
 test('thread expansion does not duplicate reminders or deals, or hide actionable sibling inquiries', () => {
   const inquiry = row('Can you send a quote?', { contact: {
-    ...row().contact, source: 'email', tag: 'Hot Lead', followUp: 'Call customer', followUpDate: '2026-11-10T15:00:00Z',
+    ...row().contact, source: 'email', sourceDetails: { emailPipelineSalesEvidence: true }, tag: 'Hot Lead', followUp: 'Call customer', followUpDate: '2026-11-10T15:00:00Z',
   } });
   const notice = row('Your deployment failed', {
     contact: inquiry.contact, conversation: { ...row().conversation, id: 'notice' }, lastMessageAt: '2026-11-10T13:00:00Z',
@@ -170,7 +170,7 @@ test('ranking favors overdue work, urgency and engagement; unread volume has no 
   const before = prioritizeTasks([routine, urgent, overdue], now).map(t => t.id);
   routine.unread = 0; urgent.unread = 9999;
   assert.deepEqual(prioritizeTasks([routine, urgent, overdue], now).map(t => t.id), before);
-  const [dealWithoutWork] = buildFollowUpItems([row('Thanks', { contact: { ...row().contact, pipelineStage: 'Proposal', source: 'email' } })]);
+  const [dealWithoutWork] = buildFollowUpItems([row('Thanks', { contact: { ...row().contact, pipelineStage: 'Proposal', source: 'email', sourceDetails: { pipelineManuallyAdded: true } } })]);
   assert.deepEqual(prioritizeTasks([dealWithoutWork], now), [], 'a deal alone is not recommended as a task');
   const recent = task('recent', 'What is the price?', null);
   const stale = task('older', 'What is the price?', null);
@@ -181,7 +181,7 @@ test('ranking favors overdue work, urgency and engagement; unread volume has no 
 test('pipeline search, channel, tags and assignment filter without modifying opportunities', () => {
   const make = (id: string, channel: string, assignedTo: string | null | undefined, tag: string) => {
     const fixture = row('Can you send a quote?');
-    return { ...fixture, contact: { ...fixture.contact, id, name: id, pipelineStage: 'Proposal', assignedTo, tag }, channel, conversation: { ...fixture.conversation!, channel } };
+    return { ...fixture, contact: { ...fixture.contact, id, name: id, sourceDetails: { pipelineManuallyAdded: true }, pipelineStage: 'Proposal', assignedTo, tag }, channel, conversation: { ...fixture.conversation!, channel } };
   };
   const items = buildFollowUpItems([make('Alice', 'whatsapp', 'me', 'Warm'), make('Bob', 'email', null, 'New'), make('Carol', 'instagram', 'teammate', 'Hot'), make('Unknown', 'email', undefined, 'New')]);
   const all: PipelineFilters = { search: '', channel: '', tag: '', assignment: 'all' };
@@ -211,7 +211,7 @@ test('pipeline layouts only rename and reorder stable stages and preserve observ
   assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => ({ ...stage, label: ' ' }))).success, false);
   assert.equal(pipelineLayoutSchema.safeParse(moved.map(stage => stage.id === 'Proposal' ? { ...stage, id: 'Estimate sent' } : stage)).success, false);
   assert.equal(pipelineLayoutPatchSchema.safeParse({ workspaceId: 'owner', revision: 0, stages: moved, userId: 'foreign' }).success, false);
-  const [item] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', source: 'email' } })]);
+  const [item] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', source: 'email', sourceDetails: { pipelineManuallyAdded: true } } })]);
   assert.equal(isActiveDeal(item), true);
   assert.equal(item.pipelineStage, 'Proposal');
 });
@@ -235,7 +235,7 @@ test('custom columns require stable mapped stages, cannot be remapped, and canno
   const renamed = preparePipelineLayoutSave(saved.map(stage => stage.id === savedId ? { ...stage, label: 'Measurements' } : stage), saved, () => recreatedId)!;
   assert.equal(renamed[5].id, savedId);
   assert.equal(preparePipelineLayoutSave(saved, base, () => recreatedId)![5].id, recreatedId);
-  const [deal] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', pipelineCustomStageId: savedId, source: 'email' } })]);
+  const [deal] = buildFollowUpItems([row('Thanks!', { contact: { ...row().contact, pipelineStage: 'Proposal', pipelineCustomStageId: savedId, source: 'email', sourceDetails: { pipelineManuallyAdded: true } } })]);
   assert.equal(deal.pipelineStage, 'Proposal');
   assert.equal(deal.pipelineCustomStageId, savedId);
   assert.equal(isActiveDeal(deal), true);
@@ -297,4 +297,38 @@ test('dismissed recommendation is message-specific and preserves reminders and o
   assert.equal(representative.replyMessageAt, now.toISOString());
   const reminder = { ...dismissed, contact: { ...dismissed.contact, followUp: 'Call customer', followUpDate: now.toISOString() } };
   assert.equal(hasScheduledFollowUp(buildFollowUpItems([reminder])[0]), true);
+});
+
+test('legacy email notification with Warm Lead and Appointment Requested is not a deal', () => {
+  for (const source of ['email', 'email_inbox']) {
+    const contact = { ...row().contact, source, pipelineStage: 'Appointment Requested', tag: 'Warm Lead' };
+    const notice = row('You have used $2.51 of usage so far', { contact });
+    assert.equal(isSalesOpportunity(contact), false);
+    assert.equal(buildFollowUpItems([notice])[0].isOpportunity, false);
+    assert.equal(hasActionableInquiry(notice), false);
+    assert.equal(isSalesOpportunity({ ...contact, sourceDetails: { contactLifecycle: 'saved' } }), false);
+    assert.equal(isSalesOpportunity({ ...contact, sourceDetails: { pipelineManuallyAdded: true } }), true);
+    assert.equal(isSalesOpportunity({ ...contact, sourceDetails: { emailPipelineSalesEvidence: true } }), true);
+  }
+});
+test('only direct inbound sales requests establish durable email pipeline evidence', () => {
+  const check = (body: string, headers?: Record<string,string>) => qualifiesEmailPipelineSalesEvidence({ senderEmail: 'customer@example.com', subject: 'Question', body, headers });
+  assert.equal(check('Could you send a quote for kitchen remodeling?'), true);
+  assert.equal(check('I would like to book a consultation.'), true);
+  assert.equal(check('You have used $2.51 of usage so far'), false);
+  assert.equal(check('Can you help with my account?'), false);
+  assert.equal(check('Thanks!\nOn Tuesday Alex wrote:\nCould you send a quote?'), false);
+  assert.equal(check('Can you reschedule my appointment?'), false);
+  assert.equal(check('Can you share your availability for a demo of our product?'), false);
+  assert.equal(check('Could you send a quote?', { 'Auto-Submitted': 'auto-generated' }), false);
+  assert.equal(check('Could you send a quote?', { 'List-ID': 'newsletter' }), false);
+});
+test('removal wins over every admission reason and preserves independent work', () => {
+  const contact = { ...row().contact, source: 'email', tag: 'Hot Lead', pipelineStage: 'Proposal', followUp: 'Call customer', followUpDate: now.toISOString(), sourceDetails: { pipelineManuallyRemoved: true, pipelineManuallyAdded: true, emailPipelineSalesEvidence: true } };
+  const item = buildFollowUpItems([row('Could you send a quote?', { contact })])[0];
+  assert.equal(item.isOpportunity, false);
+  assert.equal(item.needsReply, true);
+  assert.equal(hasScheduledFollowUp(item), true);
+  assert.equal(isSalesOpportunity({ ...contact, source: 'whatsapp' }), false);
+  assert.equal(isSalesOpportunity({ ...contact, sourceDetails: { pipelineManuallyAdded: true } }), true);
 });

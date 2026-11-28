@@ -66,12 +66,12 @@ function render(view: string, filter: string | null = null) {
 function reset() {
   state.layout = undefined;
   state.rows = [
-    fixture('ordinary'), fixture('railway', 'Your deployment failed. Please check logs.'),
+    fixture('ordinary'), fixture('railway', 'You have used $2.51 of usage so far', { source: 'email', tag: 'Warm Lead', pipelineStage: 'Appointment Requested' }),
     fixture('promo', 'Interested in buying? Save 30% off today!'),
     fixture('inquiry', 'Can you send a quote?'),
     fixture('manual', 'Thanks!', { source: 'manual', followUp: 'Call customer', followUpDate: overdue.toISOString() }),
     fixture('realtor', 'Thanks!', { source: 'whatsapp', tag: 'Warm', pipelineStage: 'Qualified (Warm)', followUp: 'Realtor follow-up', followUpDate: future.toISOString() }),
-    fixture('deal', 'Thanks!', { source: 'email', pipelineStage: 'Proposal' }),
+    fixture('deal', 'Thanks!', { source: 'email', pipelineStage: 'Proposal', sourceDetails: { pipelineManuallyAdded: true } }),
     fixture('undated', 'Thanks!', { followUp: 'Prepare quote', followUpDate: 'invalid' }),
     fixture('vendor-pitch', 'Hello, Just checking if you are interested in improving your website', { tag: 'Warm', pipelineStage: 'Proposal' }),
   ];
@@ -319,6 +319,23 @@ test('reply recommendations expose both actions without adding them to manual re
   assert.equal(dismissed.querySelector('[data-testid="task-item-inquiry"]'), null);
   assert.equal(dismissed.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '0');
   assert.ok(dismissed.querySelector('[data-testid="task-item-manual"]'));
+  assert.equal(state.writes, 0);
+  reset();
+});
+
+test('pipeline removal action is available and removed deals no longer count, without deleting reminders', () => {
+  reset();
+  const board = render('pipeline');
+  assert.ok(board.querySelector('[data-testid="pipeline-remove-deal"]'));
+  assert.equal(board.querySelector('[data-testid="pipeline-card-railway"]'), null);
+  const deal = state.rows.find(row => row.contact.id === 'deal');
+  deal.contact.sourceDetails = { pipelineManuallyRemoved: true };
+  deal.contact.followUp = 'Call customer';
+  deal.contact.followUpDate = future.toISOString();
+  const removed = render('pipeline');
+  assert.equal(removed.querySelector('[data-testid="pipeline-card-deal"]'), null);
+  assert.equal(removed.querySelector('[data-testid="kpi-active-deals"] p')?.textContent, '1');
+  assert.ok(render('list').querySelector('[data-testid="task-item-deal"]'));
   assert.equal(state.writes, 0);
   reset();
 });
