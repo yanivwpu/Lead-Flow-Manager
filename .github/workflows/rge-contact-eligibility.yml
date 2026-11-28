@@ -67,6 +67,8 @@ jobs:
           tests/rge-neighborhood-visual-editor.test.ts
           tests/rge-neighborhood-inline-photo-size.test.ts
           tests/rge-neighborhood-photo-editor-browser.test.ts
+          tests/rge-matching-locale-browser.test.ts
+          tests/rge-public-real-estate-locale.test.ts
           tests/rge-public-branding-neighborhood-upload.test.ts
           tests/rge-neighborhood-blog-editor.test.ts
           tests/rge-neighborhood-verified-listings.test.ts

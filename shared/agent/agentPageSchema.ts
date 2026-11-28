@@ -34,6 +34,7 @@ export const agentPageSettingsPatchSchema = z
     agentPageSlug: z.string().max(80).optional().nullable(),
     agentPageUseCustomBio: z.boolean().optional(),
     agentPageBio: z.string().max(4000).optional().nullable(),
+    agentPageLanguage: z.enum(["en", "he", "es"]).optional(),
     agentPageMarketArea: z.string().max(500).optional().nullable(),
     agentPagePreferredLeadCapture: agentPageLeadCaptureSchema.optional(),
     agentPageShowHomeValueCta: z.boolean().optional(),
@@ -49,6 +50,7 @@ export type AgentPageSettingsResponse = {
   agentPageSlug: string | null;
   agentPageUseCustomBio: boolean;
   agentPageBio: string | null;
+  agentPageLanguage?: string;
   agentPageMarketArea: string | null;
   agentPagePreferredLeadCapture: AgentPageLeadCapture;
   agentPageShowHomeValueCta: boolean;

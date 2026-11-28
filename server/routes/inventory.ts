@@ -1,3 +1,4 @@
+import { getAgentPageSettingsRow } from "../agentPage/agentPageDb";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { DEV_SEED_PRODUCTION_BLOCK_MESSAGE } from "@shared/inventory/inventoryDevSeedGuard";
@@ -349,6 +350,7 @@ export function registerInventoryRoutes(app: Express): void {
       });
 
       const html = buildPublicListingFlyerHtml({
+        publicLanguage: (await getAgentPageSettingsRow(flyerData.listing.userId).catch(() => null))?.agentPageLanguage,
         listing: inventoryRowToFlyerListing(flyerData.listing),
         agent: flyerData.agent,
         shareUrl: flyerData.shareUrl,

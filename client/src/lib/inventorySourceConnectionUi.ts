@@ -195,7 +195,7 @@ export function isInventorySourceEnrolledInBackgroundSync(
   return source.config?.initialImportComplete === true;
 }
 
-function lastSuccessfulSyncIso(source: PublicInventorySource): string | null {
+export function lastSuccessfulSyncIso(source: PublicInventorySource): string | null {
   const fromStats = source.lastSyncStats?.lastSuccessfulSyncAt;
   if (typeof fromStats === "string" && fromStats.trim()) return fromStats;
   const fromConfig = source.config?.lastSuccessfulSyncAt;

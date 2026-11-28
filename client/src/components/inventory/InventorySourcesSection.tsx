@@ -1,3 +1,7 @@
+import { lastSuccessfulSyncIso } from "@/lib/inventorySourceConnectionUi";
+import type { TFunction } from "i18next";
+import { formatRegionalDate, formatRegionalNumber } from "@/lib/regionalFormatting";
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -107,25 +111,25 @@ type Props = {
 
 const PRODUCTION_UI = import.meta.env.PROD;
 
-function defaultDisplayNamePlaceholder(provider: InventoryProvider): string {
+function defaultDisplayNamePlaceholder(t: TFunction, provider: InventoryProvider): string {
   if (provider === "bridge_interactive") {
-    return PRODUCTION_UI ? "My Bridge inventory" : "Bridge inventory source";
+    return PRODUCTION_UI ? t("rgeInventory.myBridge") : t("rgeInventory.bridgeSource");
   }
   if (provider === "trestle") {
-    return PRODUCTION_UI ? "My Trestle inventory" : "Trestle inventory source";
+    return PRODUCTION_UI ? t("rgeInventory.myTrestle") : t("rgeInventory.trestleSource");
   }
-  return PRODUCTION_UI ? "My MLS inventory" : "Primary inventory source";
+  return PRODUCTION_UI ? t("rgeInventory.myMls") : t("rgeInventory.primarySource");
 }
 
-function datasetIdPlaceholder(): string {
-  return PRODUCTION_UI ? "From your Bridge Data Output account" : "e.g. abor_ref";
+function datasetIdPlaceholder(t: TFunction): string {
+  return PRODUCTION_UI ? t("rgeInventory.bridgeAccount") : "e.g. abor_ref";
 }
 
-function originatingSystemPlaceholder(provider: InventoryProvider): string {
+function originatingSystemPlaceholder(t: TFunction, provider: InventoryProvider): string {
   if (provider === "trestle") {
-    return PRODUCTION_UI ? "From your Trestle feed configuration" : "e.g. trestle";
+    return PRODUCTION_UI ? t("rgeInventory.trestleConfig") : "e.g. trestle";
   }
-  return PRODUCTION_UI ? "Provided by your MLS data provider" : "e.g. miamire";
+  return PRODUCTION_UI ? t("rgeInventory.mlsProvider") : "e.g. miamire";
 }
 
 function inventoryInputClass(hasError: boolean, extra?: string): string {
@@ -144,7 +148,25 @@ function normalizeMaxListingsSelectValue(value: number | undefined): string {
   return String(normalized ?? DEFAULT_MAX_LISTINGS);
 }
 
+function inventoryProviderError(raw: string, t: TFunction): string {
+  const safeMessage = friendlyInventoryErrorMessage(raw.replace(/^\d+:\s*/, ""));
+  if (/was rejected|were rejected|access was denied|access denied|rejected this connection/i.test(safeMessage)) return t("rgeMatching.providerAuth");
+  if (/^Too many requests/i.test(safeMessage)) return t("rgeMatching.providerRate");
+  if (/required(?: when connecting a new inventory source)?\.$/.test(safeMessage)) return t("rgeMatching.providerFields");
+  if (/^Could not reach/i.test(safeMessage)) return t("rgeMatching.providerReach");
+  return t("rgeMatching.providerUnknown");
+}
+
 export function InventorySourcesSection({ variant = "section", className }: Props) {
+  const { t, i18n } = useTranslation();
+  const number = (value: number) => formatRegionalNumber(value, i18n.language);
+  const connectionLabels = {
+    connected: t("rgeMatching.connected"),
+    needs_attention: t("rgeMatching.needsAttention"),
+    disconnected: t("rgeMatching.disconnected"),
+    paused: t("rgeMatching.paused"),
+    syncing: t("rgeInventory.syncing"),
+  };
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -340,11 +362,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       setMaxListingsDraft(null);
       setReplacingSecret(false);
       if (!shouldCloseInventorySourceEditorAfterSave({ syncError: payload.syncError })) {
-        setFormBannerError(friendlyInventoryErrorMessage((payload.syncError || "").replace(/^\d+:\s*/, "")));
+        setFormBannerError(inventoryProviderError(payload.syncError || "", t));
         void refetchSources();
         toast({
-          title: "Saved, but connection failed",
-          description: friendlyInventoryErrorMessage((payload.syncError || "").replace(/^\d+:\s*/, "")),
+          title: t("rgeInventory.savedFailed"),
+          description: inventoryProviderError(payload.syncError || "", t),
           variant: "destructive",
         });
         return;
@@ -356,21 +378,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       if (payload.syncStarted) {
         queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
         toast({
-          title: "Connection updated",
-          description: "The replacement token was saved and sync started.",
+          title: t("rgeInventory.connectionUpdated"),
+          description: t("rgeInventory.replacementSaved"),
         });
         return;
       }
       toast({
-        title: "Inventory source saved",
-        description: "Your connection settings are saved. Automatic background sync stays on.",
+        title: t("rgeInventory.saved"),
+        description: t("rgeInventory.backgroundEnabled"),
       });
     },
     onError: (err: Error) => {
-      setFormBannerError(friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")));
+      setFormBannerError(inventoryProviderError(err.message, t));
       toast({
-        title: "Could not save inventory source",
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        title: t("rgeInventory.saveError"),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -399,16 +421,16 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: "Sync started",
-        description: "Your listings are syncing in the background.",
+        title: t("rgeInventory.syncStarted"),
+        description: t("rgeInventory.backgroundSync"),
       });
       void refetchSources();
     },
     onError: (err: Error & { validationFailed?: boolean }) => {
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: err.validationFailed ? "Connection failed" : "Could not start sync",
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        title: err.validationFailed ? t("rgeInventory.validationFailed") : t("rgeInventory.syncFailed"),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -419,8 +441,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
     if (!formOpen || !providerAvailable || !providerSupportsListingSync(selectedProvider)) {
       toast({
-        title: "Provider not available",
-        description: `${providerOption?.label ?? "This provider"} is not available yet.`,
+        title: t("rgeInventory.providerUnavailable"),
       });
       return false;
     }
@@ -460,15 +481,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: "Inventory sync paused",
-        description: "No new scheduled, retry, or manual syncs will run. Listings and credentials were kept.",
+        title: t("rgeInventory.syncPaused"),
+        description: t("rgeMatching.pauseHelp"),
       });
       void refetchSources();
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not pause sync",
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        title: t("rgeInventory.pauseError"),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -487,15 +508,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: "Inventory sync resumed",
-        description: "Scheduled and manual syncs can run again. Use Sync now if you want an immediate run.",
+        title: t("rgeInventory.syncResumed"),
+        description: t("rgeMatching.resumeHelp"),
       });
       void refetchSources();
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not resume sync",
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        title: t("rgeInventory.resumeError"),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -545,12 +566,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       setDisconnectSourceId(null);
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       closeFormPanel();
-      toast({ title: "Inventory source disconnected" });
+      toast({ title: t("rgeInventory.disconnected") });
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not remove source",
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        title: t("rgeInventory.removeError"),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -562,12 +583,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       setBulkPublishConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: "Listings published",
-        description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
+        title: t("rgeInventory.published"),
+        description: t("rgeNeighborhood.publishedListings", { count: result.published }),
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Bulk publish failed", description: err.message, variant: "destructive" });
+      toast({ title: t("rgeInventory.publishError"), description: inventoryProviderError(err.message, t), variant: "destructive" });
     },
   });
 
@@ -577,12 +598,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       setBulkUnpublishConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
-        title: "Listings unpublished",
-        description: `${result.unpublished.toLocaleString()} listing${result.unpublished === 1 ? "" : "s"} removed from your Agent Page.`,
+        title: t("rgeInventory.unpublished"),
+        description: t("rgeMatching.unpublishedCount", { number: number(result.unpublished) }),
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Bulk unpublish failed", description: err.message, variant: "destructive" });
+      toast({ title: t("rgeInventory.unpublishError"), description: inventoryProviderError(err.message, t), variant: "destructive" });
     },
   });
 
@@ -613,11 +634,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       {!status.rgeInstalled && !hideGrowthEngine && (
         <Alert className="border-amber-200 bg-amber-50/80">
           <AlertCircle className="h-4 w-4 text-amber-800" />
-          <AlertTitle className="text-amber-950">Realtor Growth Engine required</AlertTitle>
+          <AlertTitle className="text-amber-950">{t("rgeInventory.engineRequired")}</AlertTitle>
           <AlertDescription className="text-amber-900/90 text-sm">
-            Install the Realtor Growth Engine to connect an inventory source.{" "}
+            {t("rgeInventory.installHint")}{" "}
             <Link href={RGE_INVENTORY_SETTINGS_PATH} className="font-medium underline underline-offset-2">
-              Open Growth Engine
+              {t("rgeApp.openEngine")}
             </Link>
           </AlertDescription>
         </Alert>
@@ -626,15 +647,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       {status.canUse && (
         <>
           {!isCompact && <p className="text-sm text-muted-foreground">
-            Connected listing feeds support buyer matching, opportunities, price reduction alerts, and listing drafts.
+            {t("rgeInventory.inventoryHelp")}
           </p>}
 
           {sourcesError ? (
             <Alert className="border-red-200 bg-red-50/80">
               <AlertCircle className="h-4 w-4 text-red-800" />
-              <AlertTitle className="text-red-950">Could not load inventory source</AlertTitle>
+              <AlertTitle className="text-red-950">{t("rgeInventory.loadError")}</AlertTitle>
               <AlertDescription className="text-red-900/90 text-sm flex flex-wrap items-center gap-2">
-                Check your connection and try again.
+                {t("rgeInventory.tryAgain")}
                 <Button
                   type="button"
                   variant="outline"
@@ -642,23 +663,28 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   onClick={() => void refetchSources()}
                   data-testid="button-inventory-sources-retry"
                 >
-                  Try again
+                  {t("common.tryAgain")}
                 </Button>
               </AlertDescription>
             </Alert>
           ) : sourcesLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading inventory source…
+              {t("rgeInventory.loading")}
             </div>
           ) : (
             <>
               {hasConnectedSource && (
                 <div className="space-y-2" data-testid="inventory-connected-sources">
-                  <h3 className="sr-only">Connected sources</h3>
+                  <h3 className="sr-only">{t("rgeInventory.sources")}</h3>
                   {connectedSummaries.map((card) => {
                     const source = sources.find((s) => s.id === card.sourceId);
                     const cardSyncing = source?.lastSyncStatus === "running";
+                    const lastSync = source ? lastSuccessfulSyncIso(source) : null;
+                    const lastSyncDate = lastSync ? new Date(lastSync) : null;
+                    const lastSyncLabel = lastSyncDate && Number.isFinite(lastSyncDate.getTime())
+                      ? formatRegionalDate(lastSyncDate, i18n.language, { dateStyle: "short", timeStyle: "short" })
+                      : t("rgeMatching.never");
                     return (
                       <div
                         key={card.sourceId}
@@ -680,7 +706,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               )}
                               data-testid="inventory-source-connection-state"
                             >
-                              {card.connectionStateLabel}
+                              {connectionLabels[card.connectionState]}
                             </span>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -689,7 +715,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8"
-                                  aria-label="More source actions"
+                                  aria-label={t("rgeInventory.more")}
                                   data-testid="button-inventory-source-more"
                                 >
                                   <MoreHorizontal className="h-4 w-4" />
@@ -700,7 +726,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                   onClick={() => openEditSettings(card.sourceId, false)}
                                   data-testid="button-inventory-edit"
                                 >
-                                  Edit settings
+                                  {t("rgeInventory.edit")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-600 focus:text-red-600"
@@ -711,28 +737,28 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                   }}
                                   data-testid="button-inventory-remove"
                                 >
-                                  Disconnect
+                                  {t("rgeInventory.disconnect")}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
                         </div>
                         <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-700">
-                          <span className="font-semibold tabular-nums" data-testid="inventory-total-synced">{card.listingCountLabel}</span>
-                          <span>{cardSyncing ? "Syncing" : card.syncPaused ? "Sync paused" : `Last successful sync ${card.lastSuccessfulSyncLabel}`}</span>
+                          <span className="font-semibold tabular-nums" data-testid="inventory-total-synced">{t("rgeMatching.syncedCap", { countShown: number(card.listingCount), cap: number(card.listingCap) })}</span>
+                          <span>{cardSyncing ? t("rgeInventory.syncing") : card.syncPaused ? t("rgeMatching.paused") : t("rgeMatching.lastSync", { time: lastSyncLabel })}</span>
                         </p>
                         {(card.listingsScanned > 0 || card.totalStoredRows > card.listingCount) && (
                           <details className="text-sm text-slate-700">
-                            <summary className="cursor-pointer">Sync details</summary>
+                            <summary className="cursor-pointer">{t("rgeInventory.syncDetails")}</summary>
                             <div className="mt-1 flex flex-wrap gap-3">
-                              <span data-testid="inventory-listings-scanned">Scanned {card.listingsScanned.toLocaleString()}</span>
-                              <span data-testid="inventory-stored-rows">{card.totalStoredRows.toLocaleString()} stored rows</span>
+                              <span data-testid="inventory-listings-scanned">{t("rgeInventory.scanned")} {formatRegionalNumber(card.listingsScanned, i18n.language)}</span>
+                              <span data-testid="inventory-stored-rows">{t("rgeMatching.storedRows", { total: formatRegionalNumber(card.totalStoredRows, i18n.language) })}</span>
                             </div>
                           </details>
                         )}
                         {card.lastError ? (
                           <p className="text-xs text-red-700 leading-snug" data-testid="inventory-sync-error">
-                            {card.lastError}
+                            {inventoryProviderError(card.lastError, t)}
                           </p>
                         ) : null}
                         <div className="flex flex-wrap gap-2">
@@ -744,7 +770,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               onClick={() => openEditSettings(card.sourceId, true)}
                               data-testid="button-inventory-fix-connection"
                             >
-                              Fix connection
+                              {t("rgeInventory.fix")}
                             </Button>
                           ) : null}
                           {card.syncPaused ? (
@@ -761,7 +787,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               ) : (
                                 <Play className="h-4 w-4 mr-1" />
                               )}
-                              Resume
+                              {t("rgeInventory.resume")}
                             </Button>
                           ) : (
                             <Button
@@ -777,7 +803,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               ) : (
                                 <Pause className="h-4 w-4 mr-1" />
                               )}
-                              Pause
+                              {t("rgeInventory.pause")}
                             </Button>
                           )}
                           <Button
@@ -791,12 +817,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             {syncMutation.isPending || cardSyncing ? (
                               <>
                                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                Syncing…
+                                {t("rgeInventory.syncingPending")}
                               </>
                             ) : (
                               <>
                                 <RefreshCw className="h-4 w-4 mr-1" />
-                                Sync now
+                                {t("rgeInventory.syncNow")}
                               </>
                             )}
                           </Button>
@@ -812,44 +838,44 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 className="rounded-lg border border-gray-200 bg-white px-4 py-3 space-y-2"
                 data-testid="inventory-agent-page-publication"
               >
-                <p className="text-sm font-semibold text-gray-900">Agent Page listings</p>
+                <p className="text-sm font-semibold text-gray-900">{t("rgeInventory.pageListings")}</p>
                 <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
                       <div>
-                        <dt className="text-muted-foreground">Active synced listings</dt>
+                        <dt className="text-muted-foreground">{t("rgeInventory.activeListings")}</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-total-synced">
                           {(publicationStats.activeStored ?? publicationStats.totalSynced).toLocaleString()}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">Published to Agent Page</dt>
+                        <dt className="text-muted-foreground">{t("rgeInventory.pagePublished")}</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-published">
                           {publicationStats.publishedOnAgentPage.toLocaleString()}
                         </dd>
                       </div>
                 </dl>
                 <details className="text-sm text-slate-700">
-                  <summary className="cursor-pointer">Publication details</summary>
+                  <summary className="cursor-pointer">{t("rgeInventory.publication")}</summary>
                   <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div>
-                        <dt className="text-muted-foreground">Scanned this sync</dt>
+                        <dt className="text-muted-foreground">{t("rgeInventory.thisSync")}</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-listings-scanned">
                           {(publicationStats.listingsScanned ?? 0).toLocaleString()}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">Stored listing rows</dt>
+                        <dt className="text-muted-foreground">{t("rgeInventory.storedRows")}</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-stored-rows">
                           {(publicationStats.totalStoredRows ?? publicationStats.totalSynced).toLocaleString()}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">MLS eligible</dt>
+                        <dt className="text-muted-foreground">{t("rgeInventory.eligible")}</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-mls-eligible">
                           {publicationStats.mlsEligible.toLocaleString()}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">Hidden / unpublished</dt>
+                        <dt className="text-muted-foreground">{t("rgeInventory.hidden")}</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-hidden">
                           {publicationStats.hiddenUnpublished.toLocaleString()}
                         </dd>
@@ -859,8 +885,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
                     {!publicationStats.workspacePublishEnabled && (
                       <p className="text-xs text-amber-700 leading-snug">
-                        Turn on &quot;Publish listings publicly&quot; in Agent Page settings before publishing to your
-                        Agent Page.
+                        {t("rgeInventory.agentPagePublishHint")}
                       </p>
                     )}
 
@@ -879,11 +904,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       >
                         {bulkPublishMutation.isPending ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Publishing…
+                            <Loader2 className="h-4 w-4 me-2 animate-spin" />
+                            {t("rgeInventory.publishing")}
                           </>
                         ) : (
-                          "Publish eligible listings to Agent Page"
+                          t("rgeMatching.publishAgent")
                         )}
                       </Button>
                       <Button
@@ -898,11 +923,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       >
                         {bulkUnpublishMutation.isPending ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Unpublishing…
+                            <Loader2 className="h-4 w-4 me-2 animate-spin" />
+                            {t("rgeInventory.unpublishing")}
                           </>
                         ) : (
-                          "Unpublish all from Agent Page"
+                          t("rgeMatching.unpublishAgent")
                         )}
                       </Button>
                     </div>
@@ -919,14 +944,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     onClick={() => setShowConnectorPicker(true)}
                     data-testid="button-inventory-add-another-source"
                   >
-                    Add another source
+                    {t("rgeInventory.addSource")}
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-2" data-testid="inventory-available-connectors">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-gray-900">
-                      {hasConnectedSource ? "Add another source" : "Available connectors"}
+                      {hasConnectedSource ? t("rgeInventory.addSource") : t("rgeInventory.connectors")}
                     </h3>
                     {hasConnectedSource ? (
                       <Button
@@ -935,7 +960,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         size="sm"
                         onClick={() => setShowConnectorPicker(false)}
                       >
-                        Hide
+                        {t("rgeInventory.hide")}
                       </Button>
                     ) : null}
                   </div>
@@ -957,7 +982,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
                             data-testid={`inventory-connector-status-${connector.id}`}
                           >
-                            {connector.statusLabel}
+                            {connector.status === "connected"
+                              ? t("rgeApp.connected")
+                              : connector.status === "available"
+                                ? t("rgeInventory.available")
+                                : t("rgeInventory.comingSoon")}
                           </span>
                         </div>
                         <Button
@@ -969,7 +998,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           onClick={() => openConnectProvider(connector.id)}
                           data-testid={`button-inventory-connect-${connector.id}`}
                         >
-                          {connector.actionLabel}
+                          {connector.status === "available"
+                            ? t("settings.connect")
+                            : connector.status === "connected" ? t("rgeApp.connected") : t("rgeInventory.comingSoon")}
                         </Button>
                       </div>
                     ))}
@@ -991,14 +1022,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     <DialogTitle>
                       {activeSource
                         ? replacingSecret || activeSource.connectionStatus === "error" || activeSource.lastSyncStatus === "failed"
-                          ? "Fix connection"
-                          : "Edit settings"
-                        : `Connect ${providerOption?.label ?? "provider"}`}
+                          ? t("rgeInventory.fixConnection")
+                          : t("rgeInventory.editConnection")
+                        : t("rgeInventory.connectProvider", { name: providerOption?.label ?? t("rgeInventory.providerFallback") })}
                     </DialogTitle>
                     <DialogDescription>
                       {activeSource
-                        ? "Saved settings stay on this source. Credentials stay encrypted."
-                        : "This creates a new inventory source for the current workspace."}
+                        ? t("rgeInventory.savedHint")
+                        : t("rgeInventory.newSource")}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1012,25 +1043,25 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       </div>
                     )}
                     <div className="space-y-2">
-                      <Label htmlFor="inventory-display-name">Display name</Label>
+                      <Label htmlFor="inventory-display-name">{t("rgeInventory.name")}</Label>
                       <Input
                         id="inventory-display-name"
                         value={form.displayName}
                         onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                        placeholder={defaultDisplayNamePlaceholder(selectedProvider)}
+                        placeholder={defaultDisplayNamePlaceholder(t, selectedProvider)}
                         data-testid="input-inventory-display-name"
                       />
                     </div>
                     <div className="space-y-3 sm:col-span-2 rounded-md border border-border/60 bg-muted/20 p-4">
                       <div>
-                        <p className="text-sm font-medium">Market scope</p>
+                        <p className="text-sm font-medium">{t("rgeInventory.scope")}</p>
                         <p className="text-[11px] text-muted-foreground mt-1">
-                          Limit sync to your market with cities or ZIP codes.
+                          {t("rgeInventory.scopeHelp")}
                         </p>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label htmlFor="inventory-sync-cities">Cities</Label>
+                          <Label htmlFor="inventory-sync-cities">{t("rgeInventory.cities")}</Label>
                           <Input
                             id="inventory-sync-cities"
                             value={form.syncCities}
@@ -1041,7 +1072,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="inventory-sync-zips">ZIP codes</Label>
+                          <Label htmlFor="inventory-sync-zips">{t("rgeInventory.zip")}</Label>
                           <Input
                             id="inventory-sync-zips"
                             value={form.syncZipCodes}
@@ -1052,7 +1083,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="inventory-max-listings">Max listings</Label>
+                          <Label htmlFor="inventory-max-listings">{t("rgeInventory.max")}</Label>
                           <Select
                             value={maxListingsValue}
                             onValueChange={(value) => {
@@ -1086,7 +1117,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </div>
                         {isBridge ? (
                           <div className="space-y-2">
-                            <Label htmlFor="inventory-dataset-id">Dataset ID</Label>
+                            <Label htmlFor="inventory-dataset-id">{t("rgeInventory.dataset")}</Label>
                             <Input
                               id="inventory-dataset-id"
                               value={form.datasetId}
@@ -1094,7 +1125,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                 setForm((f) => ({ ...f, datasetId: e.target.value }));
                                 clearFieldError("datasetId");
                               }}
-                              placeholder={datasetIdPlaceholder()}
+                              placeholder={datasetIdPlaceholder(t)}
                               autoComplete="off"
                               aria-invalid={inventoryFieldHasError(fieldErrors, "datasetId")}
                               className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "datasetId"))}
@@ -1108,7 +1139,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           </div>
                         ) : (isMlsGrid || isTrestle) ? (
                           <div className="space-y-2">
-                            <Label htmlFor="inventory-originating-system">Originating system name</Label>
+                            <Label htmlFor="inventory-originating-system">{t("rgeInventory.origin")}</Label>
                             <Input
                               id="inventory-originating-system"
                               value={form.originatingSystemName}
@@ -1116,7 +1147,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                 setForm((f) => ({ ...f, originatingSystemName: e.target.value }));
                                 clearFieldError("originatingSystemName");
                               }}
-                              placeholder={originatingSystemPlaceholder(selectedProvider)}
+                              placeholder={originatingSystemPlaceholder(t, selectedProvider)}
                               autoComplete="off"
                               aria-invalid={inventoryFieldHasError(fieldErrors, "originatingSystemName")}
                               className={inventoryInputClass(
@@ -1151,7 +1182,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     )}
                     {isMlsGrid && secretMode !== "hidden_configured" && (
                       <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="inventory-access-token">Access token</Label>
+                        <Label htmlFor="inventory-access-token">{t("rgeInventory.accessToken")}</Label>
                         <div className="relative">
                           <Input
                             id="inventory-access-token"
@@ -1161,7 +1192,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, accessToken: e.target.value }));
                               clearFieldError("accessToken");
                             }}
-                            placeholder="Paste access token"
+                            placeholder={t("rgeInventory.pasteAccess")}
                             autoComplete="off"
                             aria-invalid={inventoryFieldHasError(fieldErrors, "accessToken")}
                             className={inventoryInputClass(
@@ -1174,7 +1205,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             type="button"
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                             onClick={() => setShowSecrets((v) => !v)}
-                            aria-label={showSecrets ? "Hide token" : "Show token"}
+                            aria-label={showSecrets ? t("rgeMatching.hideToken") : t("rgeMatching.showToken")}
                           >
                             {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -1186,8 +1217,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         ) : (
                           activeSource?.hasCredentials && (
                             <p className="text-[11px] text-muted-foreground">
-                              Token is stored securely and never shown again after save. If MLS Grid rotates your
-                              token, paste the new one here and save — the previous token is replaced.
+                              {t("rgeInventory.accessHelp")}
                             </p>
                           )
                         )}
@@ -1211,7 +1241,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     )}
                     {isBridge && secretMode !== "hidden_configured" && (
                       <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="inventory-server-token">Server token</Label>
+                        <Label htmlFor="inventory-server-token">{t("rgeInventory.serverToken")}</Label>
                         <div className="relative">
                           <Input
                             id="inventory-server-token"
@@ -1221,7 +1251,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, serverToken: e.target.value }));
                               clearFieldError("serverToken");
                             }}
-                            placeholder="Paste Bridge server token"
+                            placeholder={t("rgeInventory.bridgeToken")}
                             autoComplete="off"
                             aria-invalid={inventoryFieldHasError(fieldErrors, "serverToken")}
                             className={inventoryInputClass(
@@ -1234,7 +1264,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             type="button"
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                             onClick={() => setShowSecrets((v) => !v)}
-                            aria-label={showSecrets ? "Hide token" : "Show token"}
+                            aria-label={showSecrets ? t("rgeMatching.hideToken") : t("rgeMatching.showToken")}
                           >
                             {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -1258,7 +1288,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, serverToken: "" }));
                             }}
                           >
-                            Cancel replace
+                            {t("rgeInventory.cancelReplace")}
                           </Button>
                         ) : null}
                       </div>
@@ -1282,7 +1312,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     {isTrestle && secretMode !== "hidden_configured" && (
                       <>
                         <div className="space-y-2">
-                          <Label htmlFor="inventory-client-id">Client ID</Label>
+                          <Label htmlFor="inventory-client-id">{t("rgeInventory.clientId")}</Label>
                           <Input
                             id="inventory-client-id"
                             value={form.clientId}
@@ -1290,7 +1320,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, clientId: e.target.value }));
                               clearFieldError("clientId");
                             }}
-                            placeholder="Paste Trestle client ID"
+                            placeholder={t("rgeInventory.pasteClient")}
                             autoComplete="off"
                             aria-invalid={inventoryFieldHasError(fieldErrors, "clientId")}
                             className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "clientId"))}
@@ -1303,7 +1333,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           )}
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="inventory-client-secret">Client secret</Label>
+                          <Label htmlFor="inventory-client-secret">{t("rgeInventory.clientSecret")}</Label>
                           <div className="relative">
                             <Input
                               id="inventory-client-secret"
@@ -1313,7 +1343,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                 setForm((f) => ({ ...f, clientSecret: e.target.value }));
                                 clearFieldError("clientSecret");
                               }}
-                              placeholder="Paste Trestle client secret"
+                              placeholder={t("rgeInventory.pasteSecret")}
                               autoComplete="off"
                               aria-invalid={inventoryFieldHasError(fieldErrors, "clientSecret")}
                               className={inventoryInputClass(
@@ -1326,7 +1356,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               type="button"
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                               onClick={() => setShowSecrets((v) => !v)}
-                              aria-label={showSecrets ? "Hide secret" : "Show secret"}
+                              aria-label={showSecrets ? t("rgeMatching.hideSecret") : t("rgeMatching.showSecret")}
                             >
                               {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
@@ -1338,8 +1368,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           ) : (
                             activeSource?.hasCredentials && (
                               <p className="text-[11px] text-muted-foreground">
-                                Credentials are stored securely and never shown again after save. Paste updated
-                                values here to rotate your Trestle client secret.
+                                {t("rgeInventory.secretHelp")}
                               </p>
                             )
                           )}
@@ -1354,7 +1383,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       disabled={saveMutation.isPending}
                       onClick={closeFormPanel}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                     <Button
                       type="button"
@@ -1365,11 +1394,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     >
                       {saveMutation.isPending ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving…
+                          <Loader2 className="h-4 w-4 me-2 animate-spin" />
+                          {t("rgeInventory.saving")}
                         </>
                       ) : (
-                        "Save changes"
+                        t("rgeMatching.saveChanges")
                       )}
                     </Button>
                   </DialogFooter>
@@ -1386,27 +1415,28 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     <AlertDialog open={removeSourceConfirmOpen} onOpenChange={setRemoveSourceConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Disconnect inventory source?</AlertDialogTitle>
+          <AlertDialogTitle>{t("rgeInventory.disconnectConfirm")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                This will disconnect this MLS feed and remove all synced listings imported from this source. This
-                action cannot be undone.
+                {t("rgeInventory.disconnectHelp")}
               </p>
               {disconnectSource != null && (
                 <p>
-                  This source currently has {(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount).toLocaleString()} synced listing
-                  {(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount) === 1 ? "" : "s"}
-                  {disconnectSource.inventoryStats
-                    ? ` (${disconnectSource.inventoryStats.activeForMatching.toLocaleString()} active listings available, cap ${disconnectSource.inventoryStats.configuredCap.toLocaleString()}).`
-                    : "."}
+                  {t("rgeMatching.syncedTotal", { number: number(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount) })}
+                  {disconnectSource.inventoryStats && (
+                    <> · {t("rgeMatching.matchingCap", {
+                      active: number(disconnectSource.inventoryStats.activeForMatching),
+                      cap: number(disconnectSource.inventoryStats.configuredCap),
+                    })}</>
+                  )}
                 </p>
               )}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={deleteMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             disabled={deleteMutation.isPending}
@@ -1414,8 +1444,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           >
             {deleteMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Removing…
+                <Loader2 className="h-4 w-4 me-2 animate-spin" />
+                {t("rgeInventory.removing")}
               </>
             ) : (
               "Disconnect"
@@ -1430,36 +1460,31 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     <AlertDialog open={bulkPublishConfirmOpen} onOpenChange={setBulkPublishConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Publish listings to Agent Page?</AlertDialogTitle>
+          <AlertDialogTitle>{t("rgeInventory.publishConfirm")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                This will publish{" "}
-                <span className="font-medium text-gray-900 tabular-nums">
-                  {(publicationStats?.eligibleToPublish ?? 0).toLocaleString()}
-                </span>{" "}
-                MLS-eligible active/coming soon listings to your Agent Page.
+                {t("rgeMatching.publishConfirm", { number: number(publicationStats?.eligibleToPublish ?? 0) })}
               </p>
               <p>
-                Only listings that pass MLS compliance will be published. Sold, expired, and off-market listings are
-                excluded.
+                {t("rgeInventory.compliance")}
               </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={bulkPublishMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={bulkPublishMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={bulkPublishMutation.isPending}
             onClick={() => bulkPublishMutation.mutate()}
           >
             {bulkPublishMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Publishing…
+                <Loader2 className="h-4 w-4 me-2 animate-spin" />
+                {t("rgeInventory.publishing")}
               </>
             ) : (
-              "Publish listings"
+              t("rgeMatching.publishListings")
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -1471,21 +1496,17 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     <AlertDialog open={bulkUnpublishConfirmOpen} onOpenChange={setBulkUnpublishConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Unpublish all from Agent Page?</AlertDialogTitle>
+          <AlertDialogTitle>{t("rgeInventory.unpublishConfirm")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                This will unpublish{" "}
-                <span className="font-medium text-gray-900 tabular-nums">
-                  {(publicationStats?.publishedOnAgentPage ?? 0).toLocaleString()}
-                </span>{" "}
-                listings from your Agent Page. Inventory data stays synced — nothing is deleted.
+                {t("rgeMatching.unpublishConfirm", { number: number(publicationStats?.publishedOnAgentPage ?? 0) })}
               </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={bulkUnpublishMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={bulkUnpublishMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             disabled={bulkUnpublishMutation.isPending}
@@ -1493,11 +1514,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           >
             {bulkUnpublishMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Unpublishing…
+                <Loader2 className="h-4 w-4 me-2 animate-spin" />
+                {t("rgeInventory.unpublishing")}
               </>
             ) : (
-              "Unpublish all"
+              t("rgeMatching.unpublishAll")
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -1516,7 +1537,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <CardHeader className="p-4 pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Home className="h-4 w-4 text-brand-green" />
-              Inventory sources
+              {t("rgeInventory.section")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">{inner}</CardContent>
@@ -1536,20 +1557,19 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         data-testid="section-inventory-sources"
       >
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inventory sources</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t("rgeInventory.section")}</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Connected feeds stay configured. Add another provider only if this workspace does not already use it.
+            {t("rgeInventory.addHint")}
           </p>
         </div>
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Home className="h-5 w-5 text-brand-green" />
-              Inventory sources
+              {t("rgeInventory.section")}
             </CardTitle>
             <CardDescription>
-              Review connected feeds, edit the existing source, or connect a provider that is still available.
-              Credentials are encrypted and never returned to the browser after save.
+              {t("rgeInventory.reviewHint")}
             </CardDescription>
           </CardHeader>
           <CardContent>{inner}</CardContent>

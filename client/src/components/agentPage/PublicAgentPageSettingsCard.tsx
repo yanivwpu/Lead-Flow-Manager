@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { NeighborhoodPageSettings } from "./NeighborhoodPageSettings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ import type { AgentPageLeadCapture, AgentPageSettingsResponse } from "@shared/ag
 import { agentPageLeadCaptureSchema } from "@shared/agent/agentPageSchema";
 import { validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 import { buildAgentPageEmbedIframeHtml } from "@shared/agent/agentPageEmbed";
-import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
+import { fetchAgentPageSettings } from "@/lib/agentPageApi";
 import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarketAreaChips";
@@ -30,6 +31,7 @@ const BUSINESS_PROFILE_SETTINGS_PATH = "/app/settings";
 const DEFAULT_LEAD_CAPTURE: AgentPageLeadCapture = "webchat";
 
 function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin: string }) {
+  const { t } = useTranslation();
   const saleSnippet = buildAgentPageEmbedIframeHtml({
     slug,
     appOrigin,
@@ -43,32 +45,32 @@ function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin:
     title: "Long-Term Rentals",
   });
 
-  const copySnippet = async (label: string, code: string) => {
+  const copySnippet = async (message: string, code: string) => {
     try {
       await navigator.clipboard.writeText(code);
-      toast({ title: `${label} embed code copied` });
+      toast({ title: message });
     } catch {
-      toast({ title: "Could not copy embed code", description: "Check clipboard permissions and try again.", variant: "destructive" });
+      toast({ title: t("rgeAgent.embedError"), description: t("rgeNeighborhood.clipboardHelp"), variant: "destructive" });
     }
   };
 
   return (
     <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-embed-code">
       <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">
-        Embed listings on another website
+        {t("rgeAgent.embed")}
       </summary>
       <div className="mt-3 space-y-3">
         <p className="text-xs text-muted-foreground leading-snug">
-          Add your listings to a brokerage or personal website. Click to copy the embed code, then paste it into your website builder.
+          {t("rgeAgent.embedHelp")}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Homes for sale", saleSnippet)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet(t("rgeNeighborhood.saleEmbedCopied"), saleSnippet)}>
             <Copy className="h-3.5 w-3.5 mr-1.5" />
-            Copy homes for sale embed
+            {t("rgeAgent.copySales")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Rentals", rentSnippet)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet(t("rgeNeighborhood.rentEmbedCopied"), rentSnippet)}>
             <Copy className="h-3.5 w-3.5 mr-1.5" />
-            Copy rentals embed
+            {t("rgeAgent.copyRent")}
           </Button>
         </div>
       </div>
@@ -86,6 +88,8 @@ type Props = {
 };
 
 export function PublicAgentPageSettingsCard({ className }: Props) {
+  const { t, i18n } = useTranslation();
+  const formatCount = (count: number) => count.toLocaleString(i18n.resolvedLanguage);
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["/api/agent-page"],
@@ -155,7 +159,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(parseAgentPageApiError(payload));
+        throw new Error(payload.code ?? "");
       }
       return payload as AgentPageSettingsResponse;
     },
@@ -165,12 +169,17 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       queryClient.invalidateQueries({ queryKey: ["/api/business-profile"] });
       leadCaptureMutating.current = false;
       setLeadCaptureDraft(null);
-      toast({ title: "Agent page settings saved" });
+      toast({ title: t("rgeAgent.saved") });
     },
     onError: (e: Error) => {
       leadCaptureMutating.current = false;
       setLeadCaptureDraft(null);
-      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+      toast({ title: t("rgeAgent.saveError"), description: e.message === "slug_taken" ? t("rgeNeighborhood.slugTaken")
+        : e.message === "rge_required" ? t("rgeNeighborhood.accessRequired")
+        : e.message === "invalid_slug" ? t("rgeNeighborhood.slugInvalid")
+        : e.message === "validation_error" ? t("rgeNeighborhood.checkFields")
+        : undefined,
+        variant: "destructive" });
     },
   });
 
@@ -183,7 +192,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         body: JSON.stringify({}),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(parseAgentPageApiError(payload));
+      if (!res.ok) throw new Error();
       return payload as { slug: string | null };
     },
   });
@@ -227,12 +236,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         },
       );
       toast({
-        title: "Listings published",
-        description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
+        title: t("rgeAgent.published"),
+        description: t("rgeNeighborhood.publishedListings", { count: result.published }),
       });
     },
-    onError: (e: Error) => {
-      toast({ title: "Bulk publish failed", description: e.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: t("rgeAgent.bulkError"), variant: "destructive" });
     },
   });
 
@@ -250,13 +259,13 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       }
       const validated = validateAgentPageSlugInput(trimmed);
       if (!validated.ok) {
-        setSlugError(validated.error);
+        setSlugError(t("rgeNeighborhood.slugInvalid"));
         return;
       }
       setSlugError(null);
       saveMutation.mutate({ agentPageSlug: validated.slug });
     },
-    [data?.agentPageSlug, saveMutation],
+    [data?.agentPageSlug, saveMutation, t],
   );
 
   const saveProfileLink = useCallback(
@@ -283,7 +292,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
   const pageIsPublic = Boolean(agentDisplayUrl);
 
   if (isError && !data) {
-    return <p role="alert" className="rounded-xl border bg-white p-4 text-sm text-slate-700">Unable to load Agent Page settings.</p>;
+    return <p role="alert" className="rounded-xl border bg-white p-4 text-sm text-slate-700">{t("rgeAgent.loadError")}</p>;
   }
 
   if (isLoading || !data) {
@@ -294,13 +303,13 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       >
         <div className="flex justify-center text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          Loading agent page…
+          {t("rgeAgent.loading")}
         </div>
       </div>
     );
   }
 
-  const publishStatusLabel = pageIsPublic ? "Live" : "Offline";
+  const publishStatusLabel = pageIsPublic ? t("rgeNeighborhood.active") : t("rgeNeighborhood.inactive");
 
   const publishStatusClass = pageIsPublic
     ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -318,14 +327,14 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
               <Globe className="h-4 w-4 shrink-0 text-brand-green" />
-              Public Agent Page
+              {t("rgeAgent.publicPage")}
             </h2>
             <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", publishStatusClass)}
               data-testid="agent-page-active-status">{publishStatusLabel}</span>
           </div>
             <div className="flex items-center gap-3 shrink-0">
               <Label htmlFor="agent-page-enabled" className="text-sm font-medium">
-                Enable page
+                {t("rgeAgent.enable")}
               </Label>
               <Switch
                 id="agent-page-enabled"
@@ -343,9 +352,9 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               {agentDisplayUrl ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
                   <p className="min-w-0 break-all text-sm text-slate-800">{agentDisplayUrl}</p>
-                  <div className="flex items-center gap-1" role="group" aria-label="Agent Page actions">
+                  <div className="flex items-center gap-1" role="group" aria-label={t("rgeAgent.actions")}>
                     <Button asChild variant="ghost" size="icon" className="h-9 w-9 text-slate-600 hover:bg-slate-200 hover:text-slate-900">
-                      <a href={agentDisplayUrl} target="_blank" rel="noopener noreferrer" aria-label="View Agent Page" title="View Agent Page">
+                      <a href={agentDisplayUrl} target="_blank" rel="noopener noreferrer" aria-label={t("rgeAgent.view")} title={t("rgeAgent.view")}>
                         <Eye className="h-4 w-4" aria-hidden="true" />
                       </a>
                     </Button>
@@ -354,14 +363,14 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-                      aria-label="Copy Agent Page link"
-                      title="Copy Agent Page link"
+                      aria-label={t("rgeAgent.copyLink")}
+                      title={t("rgeAgent.copyLink")}
                       onClick={async () => {
                         try {
                           await navigator.clipboard.writeText(agentDisplayUrl);
-                          toast({ title: "Link copied" });
+                          toast({ title: t("rgeAgent.copied") });
                         } catch {
-                          toast({ title: "Could not copy the link", variant: "destructive" });
+                          toast({ title: t("rgeAgent.copyError"), variant: "destructive" });
                         }
                       }}
                     >
@@ -371,7 +380,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Enabling the page publishes your profile and makes it eligible for search.
+                  {t("rgeAgent.enableHelp")}
                 </p>
               )}
         </div>
@@ -380,25 +389,25 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       <NeighborhoodPageSettings publicPageUrl={agentDisplayUrl} />
       <div data-testid="agent-page-controls-column">
         <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-profile-column">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Profile and branding</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">{t("rgeAgent.profile")}</summary>
           <div className="mt-4 space-y-4">
             <div className="space-y-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Managed in Business Profile
+                  {t("rgeAgent.managed")}
                 </p>
                 <Button asChild variant="outline" size="sm" className="h-8 w-fit">
-                  <Link href={BUSINESS_PROFILE_SETTINGS_PATH}>Edit Business Profile</Link>
+                  <Link href={BUSINESS_PROFILE_SETTINGS_PATH}>{t("rgeAgent.editProfile")}</Link>
                 </Button>
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Display name</p>
+                <p className="text-xs text-muted-foreground">{t("rgeAgent.displayName")}</p>
                 <p className="text-sm font-medium text-gray-900" data-testid="agent-page-inherited-name">
                   {data.businessProfileDisplayName}
                 </p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Default about</p>
+                <p className="text-xs text-muted-foreground">{t("rgeAgent.defaultAbout")}</p>
                 <p
                   className="text-sm text-gray-700 whitespace-pre-wrap"
                   data-testid="agent-page-inherited-about"
@@ -410,7 +419,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
 
             <div className="flex items-center justify-between gap-3 pt-1 border-t border-gray-100">
               <Label htmlFor="agent-page-custom-bio" className="text-sm font-medium">
-                Use custom Agent Page bio
+                {t("rgeAgent.customBio")}
               </Label>
               <Switch
                 id="agent-page-custom-bio"
@@ -425,7 +434,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   const seed = customBioDraft.trim() || data.businessProfileAbout?.trim() || "";
                   if (!seed) {
                     setCustomBioError(
-                      "Add an about blurb in Business Profile or enter a custom bio below.",
+                      t("rgeNeighborhood.bioRequired"),
                     );
                     return;
                   }
@@ -447,12 +456,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
 
             {data.agentPageUseCustomBio && (
               <div className="space-y-2">
-                <Label htmlFor="agent-page-bio">Custom bio</Label>
+                <Label htmlFor="agent-page-bio">{t("rgeAgent.bio")}</Label>
                 <Textarea
                   id="agent-page-bio"
                   rows={4}
                   value={customBioDraft}
-                  placeholder="Optional override for your public agent page…"
+                  placeholder={t("rgeAgent.bioExample")}
                   onChange={(e) => {
                     setCustomBioDraft(e.target.value);
                     if (customBioError) setCustomBioError(null);
@@ -468,7 +477,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="agent-page-market">Market / service area</Label>
+              <Label htmlFor="agent-page-market">{t("rgeAgent.market")}</Label>
               <AgentPageMarketAreaChips
                 value={data.agentPageMarketArea}
                 disabled={saveMutation.isPending}
@@ -482,28 +491,28 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           </div>
         </details>
         <details className="border-t border-slate-200 px-4 py-3 sm:px-6">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Contact and lead capture</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">{t("rgeAgent.contact")}</summary>
           <div className="mt-4 space-y-4">
             <div className="space-y-2" data-testid="agent-page-primary-contact-button">
-              <Label>Primary contact button</Label>
+              <Label>{t("rgeAgent.primaryButton")}</Label>
               <Select value={leadCaptureValue} onValueChange={handleLeadCaptureChange}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="webchat">Web chat</SelectItem>
-                  <SelectItem value="email">Contact form</SelectItem>
-                  <SelectItem value="phone">Phone call</SelectItem>
+                  <SelectItem value="webchat">{t("rgeAgent.webChat")}</SelectItem>
+                  <SelectItem value="email">{t("rgeAgent.form")}</SelectItem>
+                  <SelectItem value="phone">{t("rgeAgent.call")}</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground leading-snug">
-                Web chat and forms create CRM leads in your Inbox. Phone opens the visitor&apos;s dialer and may not be tracked.
+                {t("rgeAgent.contactHelp")}
               </p>
             </div>
 
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="agent-page-home-worth" className="text-sm font-medium">
-                Show Home Value CTA
+                {t("rgeAgent.homeValue")}
               </Label>
               <Switch
                 id="agent-page-home-worth"
@@ -518,17 +527,16 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           </div>
         </details>
         <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-publish-status">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Listing visibility</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">{t("rgeAgent.listingVisibility")}</summary>
           <div className="mt-4 space-y-4">
               <div
                 className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/80 p-3"
                 data-testid="publish-listings-publicly-toggle"
               >
                 <div className="space-y-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Publish listings publicly</p>
+                  <p className="text-sm font-medium text-gray-900">{t("rgeAgent.publishListings")}</p>
                   <p className="text-xs text-muted-foreground leading-snug">
-                    Show individually published, MLS-eligible listings on your Agent Page and include them
-                    in property search discovery.
+                    {t("rgeAgent.publishHelp")}
                   </p>
                 </div>
                 <Switch
@@ -538,28 +546,20 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                     if (checked === data.publishListingsPublicly) return;
                     saveMutation.mutate({ publishListingsPublicly: checked });
                   }}
-                  aria-label="Publish listings publicly"
+                  aria-label={t("rgeAgent.publishListings")}
                 />
               </div>
               {data.publishListingsPublicly && pageIsPublic && (
                 <div className="space-y-2 pt-1" data-testid="agent-page-listing-publish">
                   <p className="text-xs text-muted-foreground leading-snug">
-                    <span className="font-medium text-gray-800 tabular-nums">
-                      {data.publishedOnAgentPage.toLocaleString()}
-                    </span>{" "}
-                    listings on your Agent Page
-                    {data.eligibleToPublish > 0 ? (
-                      <>
-                        {" "}
-                        ·{" "}
-                        <span className="tabular-nums">{data.eligibleToPublish.toLocaleString()}</span> eligible
-                        to publish
-                      </>
-                    ) : null}
+                    {t("rgeNeighborhood.listingsTotal", { total: formatCount(data.publishedOnAgentPage) })}
+                    {data.eligibleToPublish > 0 && (
+                      <> · {t("rgeNeighborhood.listingsEligible", { total: formatCount(data.eligibleToPublish) })}</>
+                    )}
                   </p>
                   {data.publishedOnAgentPage === 0 && data.eligibleToPublish > 0 && (
                     <p className="text-xs text-amber-700 leading-snug">
-                      Synced listings are not shown on your Agent Page until they are published.
+                      {t("rgeAgent.notPublished")}
                     </p>
                   )}
                   {data.eligibleToPublish > 0 && (
@@ -575,10 +575,10 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                       {bulkPublishMutation.isPending ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Publishing…
+                          {t("rgeAgent.publishing")}
                         </>
                       ) : (
-                        `Publish ${data.eligibleToPublish.toLocaleString()} eligible listings`
+                        t("rgeNeighborhood.publishEligible", { total: formatCount(data.eligibleToPublish) })
                       )}
                     </Button>
                   )}
@@ -587,16 +587,16 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           </div>
         </details>
             <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-social-links">
-              <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">Website &amp; social links</summary>
+              <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">{t("rgeAgent.social")}</summary>
               <div className="mt-3 space-y-3">
-                <p className="text-xs text-muted-foreground leading-snug">Optional. Icons appear on your public page when a link is set.</p>
+                <p className="text-xs text-muted-foreground leading-snug">{t("rgeAgent.socialHelp")}</p>
               <div className="space-y-2">
-                <Label htmlFor="agent-page-website">Website URL</Label>
+                <Label htmlFor="agent-page-website">{t("rgeAgent.website")}</Label>
                 <Input
                   id="agent-page-website"
                   type="url"
                   inputMode="url"
-                  placeholder="https://yourwebsite.com"
+                  dir="ltr" placeholder="https://yourwebsite.com"
                   value={publicWebsiteDraft}
                   disabled={saveMutation.isPending}
                   onChange={(e) => setPublicWebsiteDraft(e.target.value)}
@@ -604,12 +604,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="agent-page-facebook">Facebook URL</Label>
+                <Label htmlFor="agent-page-facebook">{t("rgeAgent.facebook")}</Label>
                 <Input
                   id="agent-page-facebook"
                   type="url"
                   inputMode="url"
-                  placeholder="https://facebook.com/..."
+                  dir="ltr" placeholder="https://facebook.com/..."
                   value={facebookUrlDraft}
                   disabled={saveMutation.isPending}
                   onChange={(e) => setFacebookUrlDraft(e.target.value)}
@@ -617,12 +617,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="agent-page-instagram">Instagram URL</Label>
+                <Label htmlFor="agent-page-instagram">{t("rgeAgent.instagram")}</Label>
                 <Input
                   id="agent-page-instagram"
                   type="url"
                   inputMode="url"
-                  placeholder="https://instagram.com/..."
+                  dir="ltr" placeholder="https://instagram.com/..."
                   value={instagramUrlDraft}
                   disabled={saveMutation.isPending}
                   onChange={(e) => setInstagramUrlDraft(e.target.value)}
@@ -630,12 +630,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="agent-page-linkedin">LinkedIn URL</Label>
+                <Label htmlFor="agent-page-linkedin">{t("rgeAgent.linkedin")}</Label>
                 <Input
                   id="agent-page-linkedin"
                   type="url"
                   inputMode="url"
-                  placeholder="https://linkedin.com/in/..."
+                  dir="ltr" placeholder="https://linkedin.com/in/..."
                   value={linkedinUrlDraft}
                   disabled={saveMutation.isPending}
                   onChange={(e) => setLinkedinUrlDraft(e.target.value)}
@@ -643,12 +643,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="agent-page-youtube">YouTube URL</Label>
+                <Label htmlFor="agent-page-youtube">{t("rgeAgent.youtube")}</Label>
                 <Input
                   id="agent-page-youtube"
                   type="url"
                   inputMode="url"
-                  placeholder="https://youtube.com/@..."
+                  dir="ltr" placeholder="https://youtube.com/@..."
                   value={youtubeUrlDraft}
                   disabled={saveMutation.isPending}
                   onChange={(e) => setYoutubeUrlDraft(e.target.value)}
@@ -664,14 +664,27 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 />
               ) : null}
         <details className="border-t border-slate-200 px-4 py-3 sm:px-6">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Advanced settings</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">{t("rgeAgent.advanced")}</summary>
           <div className="mt-4 space-y-4">
-            <Label htmlFor="agent-page-slug">Agent URL path</Label>
+            <div className="mb-3 max-w-xs">
+              <Label htmlFor="agent-page-public-language">{t("rgeNeighborhood.publicLanguage")}</Label>
+              <select id="agent-page-public-language" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={data.agentPageLanguage ?? "en"} disabled={saveMutation.isPending}
+                onChange={(event) => {
+                  const language = event.target.value;
+                  if (language === "en" || language === "he" || language === "es") saveMutation.mutate({ agentPageLanguage: language });
+                }}>
+                <option value="en" lang="en">{t("language.english")}</option>
+                <option value="he" lang="he">{t("language.hebrew")}</option>
+                <option value="es" lang="es">{t("language.spanish")}</option>
+              </select>
+            </div>
+            <Label htmlFor="agent-page-slug">{t("rgeAgent.path")}</Label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   id="agent-page-slug"
                   value={slugDraft}
-                  placeholder="jane-smith-a1b2c3d4"
+                  dir="ltr" placeholder="jane-smith-a1b2c3d4"
                   aria-invalid={slugError ? true : undefined}
                   className={cn(slugError && "border-destructive focus-visible:ring-destructive")}
                   onChange={(e) => {
@@ -694,16 +707,15 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                         setSlugError(null);
                         saveMutation.mutate({ agentPageSlug: result.slug });
                       }
-                    } catch (e) {
+                    } catch {
                       toast({
-                        title: "Could not generate slug",
-                        description: e instanceof Error ? e.message : undefined,
+                        title: t("rgeAgent.slugError"),
                         variant: "destructive",
                       });
                     }
                   }}
                 >
-                  Suggest slug
+                  {t("rgeAgent.suggestSlug")}
                 </Button>
               </div>
               {slugError ? (
@@ -711,7 +723,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   {slugError}
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">URL path: /agents/your-slug</p>
+                <p className="text-xs text-muted-foreground">{t("rgeAgent.pathExample")}</p>
               )}
           </div>
         </details>

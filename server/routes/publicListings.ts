@@ -1,3 +1,4 @@
+import { getAgentPageSettingsRow } from "../agentPage/agentPageDb";
 import type { Express, Request, Response } from "express";
 import { rateLimit } from "express-rate-limit";
 import QRCode from "qrcode";
@@ -37,6 +38,7 @@ export function registerPublicListingRoutes(app: Express): void {
     const identifier = req.params.identifier?.trim() ?? "";
     const appOrigin = getRequestOrigin(req);
     const startedAt = Date.now();
+    let publicLanguage: string | undefined;
     // URL and rendered address eligibility can change on the next MLS sync.
     res.setHeader("Cache-Control", "no-store");
 
@@ -98,7 +100,9 @@ export function registerPublicListingRoutes(app: Express): void {
       });
       const inquiryEnabled = await hasAgentPagePublicationAccess(flyerData.listing.userId).catch(() => false);
 
+      publicLanguage = (await getAgentPageSettingsRow(flyerData.listing.userId).catch(() => null))?.agentPageLanguage;
       const html = buildPublicListingFlyerHtml({
+        publicLanguage,
         listing: inventoryRowToFlyerListing(flyerData.listing),
         agent: flyerData.agent,
         shareUrl: flyerData.shareUrl,
@@ -126,7 +130,7 @@ export function registerPublicListingRoutes(app: Express): void {
           stack: error instanceof Error ? error.stack : undefined,
         }),
       );
-      res.status(500).type("html").send(buildPublicListingLoadErrorHtml());
+      res.status(500).type("html").send(buildPublicListingLoadErrorHtml(publicLanguage));
     }
   });
 

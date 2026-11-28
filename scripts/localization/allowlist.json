@@ -2,6 +2,46 @@
   "intentionalText": ["AI", "AI Brain", "AI Copilot", "Chatbot Builder", "CRM", "CSV", "Email", "Facebook", "Gmail", "GoHighLevel", "HubSpot", "Instagram", "Meta", "Messenger", "MLS", "PayPal", "Pro", "Prospect AI", "QR", "Realtor® Growth Engine", "Salesforce", "Shopify", "SMS", "Stripe", "Telegram", "TikTok", "Twilio", "URL", "WhatsApp", "WhachatCRM"],
   "legacyDictionaryKeys": ["nav.followUps", "nav.automation", "rge.footer.gettingStarted", "rge.footer.helpCenter", "pricingPage.compare.aiAssistBasicIncluded", "pricingPage.compare.aiAssistEnhancedIncluded", "pricingPage.compare.integrationsWebhooks"],
   "dynamicKeys": {
+    "client/src/components/agentPage/NeighborhoodBoundaryEditor.tsx": {
+      "status": [
+        "rgeMap.enterLocation",
+        "rgeMap.locationUnavailable",
+        "rgeMap.locatedApproximate",
+        "rgeMap.located",
+        "rgeMap.locationFailed",
+        "rgeMap.coordsInvalid",
+        "rgeMap.zoomRequired",
+        "rgeMap.editUnavailable",
+        "rgeMap.tooMany",
+        "rgeNeighborhoodErrors.locationInvalid",
+        "rgeNeighborhoodErrors.mapUnavailable",
+        "rgeNeighborhoodErrors.mapRetry",
+        "rgeNeighborhoodErrors.mapLimit",
+        "rgeNeighborhoodErrors.mapProvider",
+        "rgeNeighborhoodErrors.mapNotFound"
+      ]
+    },
+    "client/src/components/agentPage/NeighborhoodPageSettings.tsx": {
+      "error.message": [
+        "rgeNeighborhood.photoFailed",
+        "rgeNeighborhood.saveFailed",
+        "rgeNeighborhoodErrors.imageSize",
+        "rgeNeighborhoodErrors.imageType",
+        "rgeNeighborhoodErrors.invalidPage",
+        "rgeNeighborhoodErrors.ownPhotos",
+        "rgeNeighborhoodErrors.saveFirst",
+        "rgeNeighborhoodErrors.publishDisabled",
+        "rgeNeighborhoodErrors.publishIncomplete",
+        "rgeNeighborhoodErrors.editConflict",
+        "rgeNeighborhoodErrors.deleteConflict",
+        "rgeNeighborhoodErrors.imageLimit",
+        "rgeNeighborhoodErrors.imageProcessing",
+        "rgeNeighborhoodErrors.imageStorage",
+        "rgeNeighborhoodErrors.imageVerification",
+        "rgeNeighborhoodErrors.duplicateUrl",
+        "rgeNeighborhoodErrors.updateFailed"
+      ]
+    },
     "client/src/components/InboxWorkspaceSelector.tsx": {
       "`teamInvite.${w.role}`": ["teamInvite.owner", "teamInvite.admin", "teamInvite.member"]
     },

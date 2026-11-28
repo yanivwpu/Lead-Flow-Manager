@@ -20,3 +20,4 @@ jobs:
       - run: npm ci
       - run: node --import tsx scripts/localization/check.mjs
       - run: node --import tsx --test tests/{localization-foundation,localization-crm-controls,localization-outreach,contact-details-render,inbox-localization,inbox-reply-language,authenticated-locale,user-language-preference,marketing-locale-navigation,phase2-locale-seo,pricing-rtl-layout,chatbot-builder-locale-dir,webchat-widget-locale,webchat-page-rule-locale-sync}.test.ts
+      - run: node --import tsx --test tests/public-real-estate-locale-parity.test.ts

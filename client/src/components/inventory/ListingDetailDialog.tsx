@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Home, Link2, Loader2, Sparkles } from "lucide-react";
@@ -26,7 +27,7 @@ import {
   getShareListingButtonState,
   shouldShowPreviewFlyerButton,
 } from "@shared/inventory/listingDetailDialogActions";
-import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
+import { formatInventoryBedsBaths, formatInventoryPrice, localizedInventoryMatchExplanation } from "./inventoryMatchRecommendation";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 /** Replace stale UUID share links in API draft text when a slug is available. */
@@ -60,34 +61,13 @@ function toPriceListingSummary(
     state: "state" in listing ? listing.state ?? null : null,
     addressLine1: listing.addressLine1 ?? null,
     priceCents: listing.priceCents ?? null,
+    currency: listing.currency,
     beds,
     baths,
     propertyType: listing.propertyType ?? null,
     listingUrl: listing.listingUrl ?? null,
     thumbnailUrl: "thumbnailUrl" in listing ? listing.thumbnailUrl ?? null : null,
   };
-}
-
-function formatPrice(cents: number | null, listing?: InventoryMatchListingSummary | ListingDetail["listing"] | null): string {
-  const summary = toPriceListingSummary(listing);
-  return formatListingPriceDisplay(
-    cents,
-    summary
-      ? {
-          propertyType: summary.propertyType,
-          description: null,
-          features: [],
-          priceCents: summary.priceCents,
-        }
-      : null,
-  );
-}
-
-function formatBedsBaths(beds: number | null, baths: number | null): string | null {
-  const parts: string[] = [];
-  if (beds != null) parts.push(`${beds % 1 === 0 ? beds : beds.toFixed(1)} bd`);
-  if (baths != null) parts.push(`${baths % 1 === 0 ? baths : baths.toFixed(1)} ba`);
-  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 type ListingDetail = {
@@ -97,6 +77,7 @@ type ListingDetail = {
     state: string | null;
     addressLine1: string | null;
     priceCents: number | null;
+    currency?: string | null;
     beds: string | number | null;
     baths: string | number | null;
     propertyType: string | null;
@@ -137,6 +118,7 @@ export function ListingDetailDialog({
   onInsertComposerDraft,
   contactFirstName,
 }: ListingDetailDialogProps) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const draftKey = open && listingId ? `${contactId}:${listingId}:${matchReasons.join("|")}:${opportunityType ?? ""}` : "";
 
@@ -294,12 +276,12 @@ export function ListingDetailDialog({
         preserveAiMode: true,
       }) ?? false;
     if (inserted) {
-      toast({ title: "Draft inserted into composer", duration: 2000 });
+      toast({ title: t("rgeMatching.inserted"), duration: 2000 });
       onOpenChange(false);
     } else {
       toast({
-        title: "Could not insert draft",
-        description: "Open the inbox composer for this contact and try again.",
+        title: t("rgeMatching.insertError"),
+        description: t("rgeMatching.insertHelp"),
         variant: "destructive",
         duration: 3000,
       });
@@ -325,19 +307,20 @@ export function ListingDetailDialog({
       const res = await apiRequest("POST", `/api/inventory/listings/${listingId}/share-link`);
       const data = (await res.json()) as { shareUrl?: string; error?: string };
       if (!res.ok || !data.shareUrl) {
-        throw new Error(data.error ?? "Share link unavailable");
+        throw new Error(data.error ?? t("rgeMatching.shareUnavailable"));
       }
       await navigator.clipboard.writeText(data.shareUrl);
-      toast({ title: "Share link copied", duration: 2000 });
+      toast({ title: t("rgeMatching.copied"), duration: 2000 });
     } catch (error) {
       toast({
-        title: "Share link unavailable",
-        description: "This listing cannot be shared publicly yet.",
+        title: t("rgeMatching.shareUnavailable"),
+        description: t("rgeMatching.shareHelp"),
         duration: 3000,
       });
     }
   }, [listingId, toast]);
 
+  const attributes = formatInventoryBedsBaths(beds ?? null, baths ?? null, t, i18n.language);
   const composerPreview = resolveComposerDraft();
   const matchBullets = draftData?.matchBullets ?? matchReasons;
   const showDraftContent = !draftLoading && !!composerPreview?.text;
@@ -358,27 +341,27 @@ export function ListingDetailDialog({
             )}
           </div>
           <div className="p-4 space-y-3">
-            <DialogHeader className="space-y-1 text-left">
+            <DialogHeader className="space-y-1 text-start">
               <DialogTitle className="text-base">
-                {[city, state].filter(Boolean).join(", ") || "Listing"}
+                {[city, state].filter(Boolean).join(", ") || t("rgeMatching.listing")}
               </DialogTitle>
               <DialogDescription className="text-sm font-medium text-gray-900">
-                {formatPrice(priceCents, listing ?? fallback)}
+                {formatInventoryPrice(priceCents, toPriceListingSummary(listing ?? fallback) ?? undefined, undefined, { t, language: i18n.language })}
               </DialogDescription>
             </DialogHeader>
-            {formatBedsBaths(beds ?? null, baths ?? null) && (
-              <p className="text-xs text-gray-600">{formatBedsBaths(beds ?? null, baths ?? null)}</p>
+            {attributes && (
+              <p className="text-xs text-gray-600">{attributes}</p>
             )}
             {(listing?.addressLine1 ?? fallback?.addressLine1) && (
               <p className="text-xs text-gray-500">{listing?.addressLine1 ?? fallback?.addressLine1}</p>
             )}
             {listingLoading && !listing && (
               <p className="text-xs text-gray-400 flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" /> Loading details…
+                <Loader2 className="h-3 w-3 animate-spin" /> {t("rgeMatching.detailsLoading")}
               </p>
             )}
             {listing?.description && (
-              <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
+              <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed" dir="auto">{listing.description}</p>
             )}
 
             {(showPreviewFlyer || shareButton.show) && (
@@ -392,8 +375,8 @@ export function ListingDetailDialog({
                     onClick={handlePreviewFlyer}
                     data-testid="button-preview-flyer"
                   >
-                    <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
-                    Preview Flyer
+                    <ExternalLink className="me-1 h-3 w-3" aria-hidden />
+                    {t("rgeMatching.previewFlyer")}
                   </Button>
                 )}
                 {shareButton.show && (
@@ -405,8 +388,8 @@ export function ListingDetailDialog({
                     onClick={() => void handleShareListing()}
                     data-testid="button-share-listing"
                   >
-                    <Link2 className="mr-1 h-3 w-3" aria-hidden />
-                    Share Listing
+                    <Link2 className="me-1 h-3 w-3" aria-hidden />
+                    {t("rgeMatching.shareListing")}
                   </Button>
                 )}
               </div>
@@ -420,22 +403,22 @@ export function ListingDetailDialog({
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" aria-hidden />
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">
-                    AI Recommendation
+                    {t("rgeMatching.recommendation")}
                   </p>
                 </div>
 
                 {draftLoading && (
                   <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    Preparing outreach draft…
+                    {t("rgeMatching.draftLoading")}
                   </div>
                 )}
 
                 {showDraftRetry && (
                   <div className="space-y-2">
-                    <p className="text-[11px] text-gray-500">Could not generate a draft right now.</p>
+                    <p className="text-[11px] text-gray-500">{t("rgeMatching.draftError")}</p>
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void refetchDraft()}>
-                      Retry
+                      {t("rgeMatching.retry")}
                     </Button>
                   </div>
                 )}
@@ -444,13 +427,13 @@ export function ListingDetailDialog({
                   <>
                     {usingTemplateFallback && (
                       <p className="text-[10px] text-gray-500">
-                        Using a template draft — AI was unavailable.
+                        {t("rgeMatching.templateFallback")}
                       </p>
                     )}
                     {matchBullets.length > 0 && (
                       <div>
                         <p className="text-[10px] font-medium text-gray-600 mb-1">
-                          Why this is a strong match
+                          {t("rgeMatching.whyMatch")}
                         </p>
                         <ul className="space-y-0.5">
                           {matchBullets.map((bullet) => (
@@ -459,7 +442,7 @@ export function ListingDetailDialog({
                               className="text-[11px] text-gray-700 leading-snug flex gap-1.5"
                             >
                               <span className="text-violet-400 shrink-0">•</span>
-                              <span>{bullet}</span>
+                              <span dir="auto">{localizedInventoryMatchExplanation(bullet, t)}</span>
                             </li>
                           ))}
                         </ul>
@@ -468,15 +451,14 @@ export function ListingDetailDialog({
 
                     <div>
                       <p className="text-[10px] font-medium text-gray-600 mb-1">
-                        Message that will be sent
+                        {t("rgeMatching.messagePreview")}
                       </p>
-                      <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap rounded-md bg-white/80 border border-violet-100/80 p-2.5">
+                      <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap rounded-md bg-white/80 border border-violet-100/80 p-2.5" dir="auto">
                         {composerPreview.text}
                       </p>
                       {primaryPhotoUrl && (
                         <p className="text-[10px] text-gray-500 mt-1.5 leading-snug">
-                          Photo: included as a separate attachment after this text on Messenger and
-                          Facebook. WhatsApp sends the photo with this text as the caption.
+                          {t("rgeMatching.photoHelp")}
                         </p>
                       )}
                     </div>
@@ -487,7 +469,7 @@ export function ListingDetailDialog({
                       onClick={handleInsertDraft}
                       data-testid="button-insert-listing-draft"
                     >
-                      Insert into Composer
+                      {t("rgeMatching.insert")}
                     </Button>
                   </>
                 )}

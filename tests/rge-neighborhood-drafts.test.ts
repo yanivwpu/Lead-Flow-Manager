@@ -51,13 +51,13 @@ test("RGE Agent Page controls use labeled compact icons without changing destina
   const ui = readFileSync(join(process.cwd(), "client/src/components/agentPage/NeighborhoodPageSettings.tsx"), "utf8");
   const main = readFileSync(join(process.cwd(), "client/src/components/agentPage/PublicAgentPageSettingsCard.tsx"), "utf8");
 
-  assert(ui.includes('aria-label={item.publicUrl ? "View live neighborhood page" : "Preview neighborhood draft"}'));
+  assert(ui.includes('aria-label={item.publicUrl ? t("rgeNeighborhood.live") : t("rgeNeighborhood.previewDraft")}'));
   assert(ui.includes("encodeURIComponent(item.id)}/preview"), "draft preview reuses authenticated endpoint");
-  assert(ui.includes('aria-label="Copy neighborhood page URL"'), "published rows retain a Copy action");
-  assert(ui.includes('aria-label={`Edit ${neighborhoodTitle(item)}`}'), "Edit remains independently accessible");
+  assert(ui.includes('aria-label={t("rgeNeighborhood.copyUrl")}'), "published rows retain a Copy action");
+  assert(ui.includes('aria-label={t("rgeNeighborhood.editNamed", { name: neighborhoodTitle(item) })}'), "Edit remains independently accessible");
   assert(ui.includes('<Pencil className="h-4 w-4"'), "neighborhood Edit uses a compact pencil icon");
-  assert(main.includes('aria-label="View Agent Page"'), "Agent Page has a direct accessible View action");
-  assert(main.includes('aria-label="Copy Agent Page link"'), "Agent Page retains link copying");
+  assert(main.includes('aria-label={t("rgeAgent.view")}'), "Agent Page has a direct accessible View action");
+  assert(main.includes('aria-label={t("rgeAgent.copyLink")}'), "Agent Page retains link copying");
   assert(main.includes('href={agentDisplayUrl}'), "Agent Page View opens the existing public URL");
 });
 

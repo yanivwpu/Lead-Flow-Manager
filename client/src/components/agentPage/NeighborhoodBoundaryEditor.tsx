@@ -1,3 +1,4 @@
+import { neighborhoodApiErrorKey } from "@/lib/agentPageApi";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Ellipsis, Maximize2, Minimize2, Minus, Plus, Undo2 } from "lucide-react";
@@ -197,7 +198,7 @@ export function NeighborhoodBoundaryEditor({
 
   async function locate() {
     if (!name.trim() || !city.trim() || !state.trim() || !/^[a-zA-Z]{2}$/.test(country)) {
-      setStatus(t("rgeMap.enterLocation"));
+      setStatus("rgeMap.enterLocation");
       return;
     }
     setLocating(true);
@@ -207,13 +208,14 @@ export function NeighborhoodBoundaryEditor({
       const response = await fetch(`/api/agent-page/neighborhoods/map-center?${query.toString()}`, { credentials: "include" });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
-        throw new Error(result.error || t("rgeMap.locationUnavailable"));
+        setStatus(neighborhoodApiErrorKey(result) ?? "rgeMap.locationUnavailable");
+        return;
       }
       moveTo({ lat: result.latitude, lon: result.longitude }, 14);
       setOpen(true);
-      setStatus(result.precision === "city" ? t("rgeMap.locatedApproximate") : t("rgeMap.located"));
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : t("rgeMap.locationFailed"));
+      setStatus(result.precision === "city" ? "rgeMap.locatedApproximate" : "rgeMap.located");
+    } catch {
+      setStatus("rgeMap.locationFailed");
     } finally { setLocating(false); }
   }
 
@@ -241,7 +243,7 @@ export function NeighborhoodBoundaryEditor({
     const lat = latInput.trim() ? Number(latInput) : NaN;
     const lon = lonInput.trim() ? Number(lonInput) : NaN;
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 85 || Math.abs(lon) > 180) {
-      setStatus(t("rgeMap.coordsInvalid"));
+      setStatus("rgeMap.coordsInvalid");
       return;
     }
     moveTo({ lat, lon }, 14);
@@ -287,10 +289,10 @@ export function NeighborhoodBoundaryEditor({
 
   function addCornerAt(clientX: number, clientY: number, element: SVGSVGElement) {
     if (disabled || zoom < 10) {
-      setStatus(zoom < 10 ? t("rgeMap.zoomRequired") : t("rgeMap.editUnavailable"));
+      setStatus(zoom < 10 ? "rgeMap.zoomRequired" : "rgeMap.editUnavailable");
       return;
     }
-    if (vertices.length >= 128) { setStatus(t("rgeMap.tooMany")); return; }
+    if (vertices.length >= 128) { setStatus("rgeMap.tooMany"); return; }
     const rect = element.getBoundingClientRect();
     const x = centerX + clientX - rect.left - rect.width / 2;
     const y = centerY + clientY - rect.top - rect.height / 2;
@@ -479,7 +481,9 @@ export function NeighborhoodBoundaryEditor({
                   moreRef.current?.focus();
                 }}>{t("rgeMap.undoRemoval")}</Button>}
             </div>
-            {status && <p role="status" className="mt-1 text-sm text-slate-700">{status}</p>}
+            {status && <p role="status" className="mt-1 text-sm text-slate-700">{status.startsWith("rgeNeighborhoodErrors.")
+                ? t(status, { defaultValue: t("rgeMap.locationUnavailable") })
+                : t(status)}</p>}
             {shape && !safeShape && <p role="alert" className="mt-1 text-xs text-amber-700">{t("rgeMap.invalid")}</p>}
           </div>
           <div ref={mapRef} className="relative min-h-0 w-full flex-1 overflow-hidden bg-slate-100"

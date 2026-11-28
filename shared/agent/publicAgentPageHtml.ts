@@ -1,3 +1,4 @@
+import { publicRealEstateLanguage, publicRealEstateLocale, publicRealEstateText, type publicRealEstateCopy } from "./publicRealEstateLocale";
 import { agentPageNavigationCss, agentPageNavigationScript } from "./publicAgentPageNavigation";
 import { neighborhoodTitle } from "./neighborhoodPages";
 import { neighborhoodGuidePhotoId, parseNeighborhoodPhotoMarker } from "./neighborhoodGuideBlocks";
@@ -19,8 +20,8 @@ const EMBED_CHIP_BG = "#faf7f2";
 const LISTING_SHARE_ICON_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
 
-function renderListingShareButton(card: AgentPageListingCard): string {
-  return `<button type="button" class="card-share-btn icon-btn" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}" aria-label="Share listing" title="Share listing">${LISTING_SHARE_ICON_SVG}</button>`;
+function renderListingShareButton(card: AgentPageListingCard, text: PublicText): string {
+  return `<button type="button" class="card-share-btn icon-btn" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}" aria-label="${text("Share listing")}" title="${text("Share listing")}">${LISTING_SHARE_ICON_SVG}</button>`;
 }
 
 function escapeHtml(value: string): string {
@@ -85,7 +86,7 @@ function renderProfileColumn(data: PublicAgentPageRenderInput): string {
   return `<div class="agent-profile-col">${renderAvatar(data)}${renderBrokerageBlock(data)}${renderSocialLinks(data)}</div>`;
 }
 
-function renderMarketArea(data: PublicAgentPageRenderInput): string {
+function renderMarketArea(data: PublicAgentPageRenderInput, text: PublicText): string {
   if (!data.marketArea?.trim()) return "";
   const areas = data.marketArea
     .split(/[,;]+/)
@@ -95,45 +96,58 @@ function renderMarketArea(data: PublicAgentPageRenderInput): string {
   const chips = areas
     .map((area) => `<span class="market-chip">${escapeHtml(area)}</span>`)
     .join("");
-  return `<div class="agent-market"><span class="agent-market-label">Market area</span><div class="agent-market-chips">${chips}</div></div>`;
+  return `<div class="agent-market"><span class="agent-market-label">${text("Market area")}</span><div class="agent-market-chips">${chips}</div></div>`;
 }
 
-function listingCardHtml(card: AgentPageListingCard, index: number, embedMode = false): string {
+function listingCardHtml(card: AgentPageListingCard, index: number, embedMode: boolean, language: unknown): string {
+  const text = realEstateText(language);
   const addressLine = card.street
-    ? `<p class="card-address">${escapeHtml(card.street)}</p>`
+    ? `<p class="card-address" dir="auto">${escapeHtml(card.street)}</p>`
     : "";
-  const meta = [card.beds, card.baths, card.sqft].filter(Boolean).join(" · ");
+  const locale = publicRealEstateLocale(language);
+  const number = new Intl.NumberFormat(locale);
+  const currency = card.currency && /^[A-Z]{3}$/.test(card.currency) ? card.currency : "USD";
+  const price = card.priceCents == null ? text("Price on request")
+    : language === "en" && currency === "USD" ? card.price
+    : new Intl.NumberFormat(locale, { style: "currency", currency }).format(card.priceCents / 100);
+  const displayPrice = card.listingLabel === "FOR RENT" && card.priceCents != null && (language !== "en" || currency !== "USD")
+    ? text("{price}/mo", { price }) : price;
+  const meta = language === "en" ? [card.beds, card.baths, card.sqft].filter(Boolean).join(" · ") : [
+    card.bedsNum == null ? card.beds : text("{count} Beds", { count: number.format(card.bedsNum) }),
+    card.bathsNum == null ? card.baths : text("{count} Baths", { count: number.format(card.bathsNum) }),
+    card.sqftNum == null ? card.sqft : text("{amount} Sq Ft", { amount: number.format(card.sqftNum) }),
+  ].filter(Boolean).join(" · ");
   const img = card.imageUrl
     ? `<img src="${escapeHtml(card.imageUrl)}" alt="" loading="lazy" />`
-    : `<div class="card-img-placeholder">No photo</div>`;
+    : `<div class="card-img-placeholder">${text("No photo")}</div>`;
   const propertyType = normalizePropertyTypeForFilter(card.propertyType, card.propertySubtype);
 
   const scheduleBtn = embedMode
     ? ""
-    : `<button type="button" class="btn btn-sm btn-outline" data-action="schedule" data-listing-id="${escapeHtml(card.id)}">Schedule Showing</button>`;
+    : `<button type="button" class="btn btn-sm btn-outline" data-action="schedule" data-listing-id="${escapeHtml(card.id)}">${text("Schedule Showing")}</button>`;
 
   const cardActions = embedMode
     ? `<div class="card-actions card-actions-embed">
-        <a class="btn btn-sm btn-primary btn-embed-action" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
-        <button type="button" class="btn btn-sm btn-outline btn-embed-action" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
-        ${renderListingShareButton(card)}
+        <a class="btn btn-sm btn-primary btn-embed-action" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">${text("View Listing")}</a>
+        <button type="button" class="btn btn-sm btn-outline btn-embed-action" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">${text("Ask About This")}</button>
+        ${renderListingShareButton(card, text)}
       </div>`
     : `<div class="card-actions">
-        <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
-        <button type="button" class="btn btn-sm btn-outline" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
+        <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">${text("View Listing")}</a>
+        <button type="button" class="btn btn-sm btn-outline" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">${text("Ask About This")}</button>
         ${scheduleBtn}
-        ${renderListingShareButton(card)}
+        ${renderListingShareButton(card, text)}
       </div>`;
 
-  return `<article class="listing-card${embedMode ? " listing-card-embed" : ""}" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(card.metaSummary)}">
+  return `<article class="listing-card${embedMode ? " listing-card-embed" : ""}" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(language === "en" && currency === "USD" ? card.metaSummary : [displayPrice, meta].filter(Boolean).join(" · "))}">
     <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">${img}</a>
     <div class="card-body">
       <div class="card-top">
-        <span class="card-price">${escapeHtml(card.price)}</span>
-        <span class="card-status">${escapeHtml(card.status)}</span>
+        <span class="card-price">${escapeHtml(displayPrice)}</span>
+        <span class="card-status">${escapeHtml(card.status === "Active" || card.status === "Coming Soon" ? text(card.status) : card.status)}</span>
       </div>
       ${addressLine}
-      <p class="card-city">${escapeHtml(card.cityState)}</p>
+      <p class="card-city" dir="auto">${escapeHtml(card.cityState)}</p>
       ${meta ? `<p class="card-meta">${escapeHtml(meta)}</p>` : ""}
       ${cardActions}
     </div>
@@ -142,6 +156,7 @@ function listingCardHtml(card: AgentPageListingCard, index: number, embedMode = 
 
 export type AgentPageListingCardRenderOptions = {
   embedMode?: boolean;
+  publicLanguage?: string;
 };
 
 export function renderAgentPageListingCards(
@@ -150,7 +165,7 @@ export function renderAgentPageListingCards(
   options: AgentPageListingCardRenderOptions = {},
 ): string {
   const embedMode = options.embedMode === true;
-  return cards.map((card, index) => listingCardHtml(card, startIndex + index, embedMode)).join("");
+  return cards.map((card, index) => listingCardHtml(card, startIndex + index, embedMode, publicRealEstateLanguage(options.publicLanguage))).join("");
 }
 
 /**
@@ -158,7 +173,8 @@ export function renderAgentPageListingCards(
  * but only after an exact official polygon match. Historical samples are owner-
  * preview only, never silently represented as current MLS availability.
  */
-function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string {
+function renderNeighborhoodProperties(data: PublicAgentPageRenderInput, language: string): string {
+  const text = realEstateText(language);
   const neighborhood = data.neighborhood;
   if (!neighborhood) return "";
   const listings = data.neighborhoodListings;
@@ -172,43 +188,43 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
   const title = escapeHtml(neighborhood.name);
   const statusText = !listings || !matched
     ? listings?.boundaryStatus === "unavailable"
-      ? "The verified neighborhood map is temporarily unavailable. Local properties cannot be shown right now."
-      : "Neighborhood property matching requires a verified local boundary. Contact the agent for available properties."
+      ? text("The verified neighborhood map is temporarily unavailable. Local properties cannot be shown right now.")
+      : text("Neighborhood property matching requires a verified local boundary. Contact the agent for available properties.")
     : listings.hasOlderMatchingInventory && publicMode
-      ? "Some previously synced properties are not shown because their current MLS availability cannot be verified."
+      ? text("Some previously synced properties are not shown because their current MLS availability cannot be verified.")
       : !publicMode && listings.hasOlderMatchingInventory
-        ? "Private test: these are previously synced listings, not verified current availability. Do not share as active properties."
+        ? text("Private test: these are previously synced listings, not verified current availability. Do not share as active properties.")
         : customArea
-          ? "Properties are matched to an agent-defined custom area, not an official neighborhood boundary, and checked against MLS display permissions."
-          : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
-  const filtersHtml = matched && publicMode ? `<form id="neighborhood-filters" class="neighborhood-filters" aria-label="Filter neighborhood homes">
-      <label>Property type
-        <select name="propertyType"><option value="">All types</option><option value="house">House</option><option value="condo">Condo</option><option value="townhouse">Townhouse</option><option value="multi_family">Multi-family</option><option value="land">Land</option><option value="other">Other</option></select>
+          ? text("Properties are matched to an agent-defined custom area, not an official neighborhood boundary, and checked against MLS display permissions.")
+          : text("Properties are matched by verified neighborhood boundaries and MLS display permissions.");
+  const filtersHtml = matched && publicMode ? `<form id="neighborhood-filters" class="neighborhood-filters" aria-label="${text("Filter neighborhood homes")}">
+      <label>${text("Property type")}
+        <select name="propertyType"><option value="">${text("All types")}</option><option value="house">${text("House")}</option><option value="condo">${text("Condo")}</option><option value="townhouse">${text("Townhouse")}</option><option value="multi_family">${text("Multi-family")}</option><option value="land">${text("Land")}</option><option value="other">${text("Other")}</option></select>
       </label>
-      <label>Bedrooms
-        <select name="minBeds"><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option><option value="5">5+</option></select>
+      <label>${text("Bedrooms")}
+        <select name="minBeds"><option value="">${text("Any")}</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option><option value="5">5+</option></select>
       </label>
-      <label>Bathrooms
-        <select name="minBaths"><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select>
+      <label>${text("Bathrooms")}
+        <select name="minBaths"><option value="">${text("Any")}</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select>
       </label>
-      <label>Min price
-        <input type="number" name="minPrice" min="0" step="100" placeholder="Any" inputmode="numeric" />
+      <label>${text("Min price")}
+        <input type="number" name="minPrice" min="0" step="100" placeholder="${text("Any")}" inputmode="numeric" />
       </label>
-      <label>Max price
-        <input type="number" name="maxPrice" min="0" step="100" placeholder="Any" inputmode="numeric" />
+      <label>${text("Max price")}
+        <input type="number" name="maxPrice" min="0" step="100" placeholder="${text("Any")}" inputmode="numeric" />
       </label>
-      <label>Sort by
-        <select name="sort"><option value="newest">Newest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></select>
+      <label>${text("Sort by")}
+        <select name="sort"><option value="newest">${text("Newest")}</option><option value="price_asc">${text("Price: low to high")}</option><option value="price_desc">${text("Price: high to low")}</option></select>
       </label>
       <div class="neighborhood-filter-actions">
-        <button type="submit" class="btn btn-sm btn-primary">Apply filters</button>
-        <button type="button" id="neighborhood-filters-reset" class="btn btn-sm btn-outline">Reset</button>
+        <button type="submit" class="btn btn-sm btn-primary">${text("Apply filters")}</button>
+        <button type="button" id="neighborhood-filters-reset" class="btn btn-sm btn-outline">${text("Reset")}</button>
       </div>
     </form>` : "";
   const group = (groupTitle: string, category: "sale" | "rent", cards: AgentPageListingCard[]) => {
     const total = category === "sale" ? listings?.totalSale ?? cards.length : listings?.totalRent ?? cards.length;
     const more = category === "sale" ? listings?.hasMoreSale : listings?.hasMoreRent;
-    const summary = total > 0 ? formatBrowseResultsSummary(cards.length, total) : "0 listings";
+    const summary = total > 0 ? formatBrowseResultsSummary(cards.length, total, language) : text("0 listings");
     return `<section class="neighborhood-property-group" id="homes-${category}" aria-labelledby="neighborhood-${category}-heading"
         data-loaded="${cards.length}" data-total="${total}">
       <div class="neighborhood-property-group-header">
@@ -216,32 +232,33 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
         <span class="neighborhood-property-number" id="neighborhood-${category}-count" aria-live="polite">${escapeHtml(summary)}</span>
       </div>
       <div class="listings-grid neighborhood-property-grid" id="neighborhood-${category}-grid">
-        ${cards.length ? renderAgentPageListingCards(cards) :
-          `<div class="neighborhood-property-empty">No verified ${category === "sale" ? "for-sale" : "rental"} listings are available to show. Ask the agent about the latest options.</div>`}
+        ${cards.length ? renderAgentPageListingCards(cards, 0, { publicLanguage: language }) :
+          `<div class="neighborhood-property-empty">${category === "sale" ? text("No verified for-sale listings are available to show. Ask the agent about the latest options.") : text("No verified rental listings are available to show. Ask the agent about the latest options.")}</div>`}
       </div>
-      ${matched && publicMode ? `<button type="button" class="btn btn-sm btn-outline neighborhood-load-more" id="neighborhood-${category}-more"${more ? "" : " hidden"}>Load more ${category === "sale" ? "homes for sale" : "rentals"}</button>` : ""}
+      ${matched && publicMode ? `<button type="button" class="btn btn-sm btn-outline neighborhood-load-more" id="neighborhood-${category}-more"${more ? "" : " hidden"}>${category === "sale" ? text("Load more homes for sale") : text("Load more rentals")}</button>` : ""}
     </section>`;
   };
   return `<section id="neighborhood-properties" class="neighborhood-properties" aria-labelledby="neighborhood-property-title">
-    <div class="neighborhood-guide-section-label">EXPLORE THE NEIGHBORHOOD</div>
-    <h2 id="neighborhood-property-title">Homes in ${title}</h2>
+    <div class="neighborhood-guide-section-label">${text("EXPLORE THE NEIGHBORHOOD")}</div>
+    <h2 id="neighborhood-property-title">${text("Homes in {name}", { name: title })}</h2>
     <div class="neighborhood-property-jump">
-      <a href="#homes-sale">Homes for Sale</a>
-      <a href="#homes-rent">Homes for Rent</a>
+      <a href="#homes-sale">${text("Homes for Sale")}</a>
+      <a href="#homes-rent">${text("Homes for Rent")}</a>
     </div>
     <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
-    ${customArea ? '<p class="neighborhood-property-status">Area drawn by this agent; it is not an official municipal neighborhood boundary.</p>' : ""}
+    ${customArea ? `<p class="neighborhood-property-status">${text("Area drawn by this agent; it is not an official municipal neighborhood boundary.")}</p>` : ""}
     ${filtersHtml}
-    ${listings?.candidateLimitReached ? '<p class="neighborhood-property-cap-note">Search results are limited to currently scanned inventory; counts may be incomplete. Ask the agent for more options.</p>' : ""}
+    ${listings?.candidateLimitReached ? `<p class="neighborhood-property-cap-note">${text("Search results are limited to currently scanned inventory; counts may be incomplete. Ask the agent for more options.")}</p>` : ""}
     <div id="listings-grid" class="neighborhood-property-sections"${neighborhood.preview ? " inert" : ""}>
-      ${group("Homes for Sale", "sale", sales)}
-      ${group("Homes for Rent", "rent", rentals)}
+      ${group(text("Homes for Sale"), "sale", sales)}
+      ${group(text("Homes for Rent"), "rent", rentals)}
     </div>
   </section>`;
 }
 
 export function buildPublicAgentPageNotFoundHtml(): string {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="robots" content="noindex, nofollow" /><title>Agent not found</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>Page not found</h1><p>This agent page is not available.</p></body></html>`;
+  const text = realEstateText("en");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="robots" content="noindex, nofollow" /><title>${text("Agent not found")}</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>${text("Page not found")}</h1><p>${text("This agent page is not available.")}</p></body></html>`;
 }
 
 /** Matches SiteFooter / Sidebar: green rounded square with white W. */
@@ -249,71 +266,81 @@ function renderWhachatLogoMark(): string {
   return `<span class="whachat-logo-mark" aria-hidden="true">W</span>`;
 }
 
-export function formatBrowseResultsSummary(loaded: number, total: number): string {
+export function formatBrowseResultsSummary(loaded: number, total: number, language?: string): string {
   if (total <= 0) return "";
-  if (loaded < total) return `Showing ${loaded} of ${total} listings`;
-  return `${total} listing${total === 1 ? "" : "s"} found`;
+  const text = realEstateText(language);
+  const number = new Intl.NumberFormat(publicRealEstateLocale(language));
+  if (loaded < total) return text("Showing {loaded} of {total} listings", { loaded: number.format(loaded), total: number.format(total) });
+  return total === 1 ? text("1 listing found") : text("{total} listings found", { total: number.format(total) });
 }
 
-function renderAgentNavigation(data: PublicAgentPageRenderInput): string {
+function renderAgentNavigation(data: PublicAgentPageRenderInput, text: PublicText): string {
   if (!data.agentPageUrl || data.embedMode || data.neighborhood?.preview) return "";
   const home = escapeHtml(data.agentPageUrl);
   const neighborhoodLinks = data.neighborhoodLinks ?? [];
   const currentNeighborhood = neighborhoodLinks.some(({ url }) => url === data.canonicalUrl);
   const items = `<ul class="agent-nav-items">
-    <li><a href="${home}"${data.neighborhood ? "" : ' aria-current="page"'}>Home</a></li>
-    <li><a href="${data.neighborhood ? "#neighborhood-properties" : "#agent-properties"}">Properties</a></li>
+    <li><a href="${home}"${data.neighborhood ? "" : ' aria-current="page"'}>${text("Home")}</a></li>
+    <li><a href="${data.neighborhood ? "#neighborhood-properties" : "#agent-properties"}">${text("Properties")}</a></li>
     ${neighborhoodLinks.length ? `<li><details class="agent-nav-disclosure"${currentNeighborhood ? " data-current-section" : ""}>
-      <summary>Neighborhoods</summary>
+      <summary>${text("Neighborhoods")}</summary>
       <ul class="agent-nav-submenu">${neighborhoodLinks.map(({ url, title }) =>
         `<li><a href="${escapeHtml(url)}"${url === data.canonicalUrl ? ' aria-current="page"' : ""}>${escapeHtml(title)}</a></li>`
       ).join("")}</ul>
     </details></li>` : ""}
-    <li><a href="#agent-contact" data-agent-nav-contact>Contact</a></li>
+    <li><a href="#agent-contact" data-agent-nav-contact>${text("Contact")}</a></li>
   </ul>`;
 
   return `<div class="agent-site-nav" id="agent-site-nav">
-    <nav class="agent-nav-inline" aria-label="Agent navigation">${items}</nav>
+    <nav class="agent-nav-inline" aria-label="${text("Agent navigation")}">${items}</nav>
     <button type="button" class="agent-menu-toggle" id="agent-menu-toggle" aria-controls="agent-menu-drawer" aria-expanded="false">
       <span class="agent-menu-icon" aria-hidden="true"></span> Menu
     </button>
     <dialog class="agent-menu-drawer" id="agent-menu-drawer" aria-labelledby="agent-menu-title">
       <div class="agent-menu-drawer-body">
         <div class="agent-drawer-heading">
-          <strong id="agent-menu-title">Navigation</strong>
-          <button type="button" id="agent-menu-close" autofocus>Close menu</button>
+          <strong id="agent-menu-title">${text("Navigation")}</strong>
+          <button type="button" id="agent-menu-close" autofocus>${text("Close menu")}</button>
         </div>
-        <nav aria-label="Agent navigation">${items}</nav>
+        <nav aria-label="${text("Agent navigation")}">${items}</nav>
       </div>
     </dialog>
   </div>`;
 }
 
+type PublicText = (key: keyof typeof publicRealEstateCopy, values?: Record<string, string | number>) => string;
+
+function realEstateText(language: unknown): PublicText {
+  return (key, values) => publicRealEstateText(language, key, values);
+}
+
 export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): string {
+  const language = publicRealEstateLanguage(data.neighborhood ? data.neighborhood.publicLanguage : data.publicLanguage);
+  const text = realEstateText(language);
   const slug = data.agentPageSlug || "";
   const bioHtml = data.bio
     ? `<p class="agent-bio">${escapeHtml(data.bio)}</p>`
     : "";
-  const marketHtml = renderMarketArea(data);
+  const marketHtml = renderMarketArea(data, text);
   const homeWorthBtn = data.showHomeValueCta
-    ? `<button type="button" class="btn btn-outline" id="btn-home-worth">What's My Home Worth?</button>`
+    ? `<button type="button" class="btn btn-outline" id="btn-home-worth">${text("What's My Home Worth?")}</button>`
     : "";
 
   const phoneHref = publicAgentPhoneHref(data.publicPhone);
   const contactMode = data.neighborhood ? "form"
     : data.preferredLeadCapture === "phone" && phoneHref ? "phone"
     : data.preferredLeadCapture === "webchat" && data.widgetEnabled ? "chat" : "form";
-  const primaryContactLabel = contactMode === "phone" ? "Call agent"
-    : contactMode === "chat" ? "Let's Chat"
-    : data.neighborhood || data.preferredLeadCapture === "email" ? "Contact Agent" : "Send a message";
+  const primaryContactLabel = contactMode === "phone" ? text("Call agent")
+    : contactMode === "chat" ? text("Let's Chat")
+    : data.neighborhood || data.preferredLeadCapture === "email" ? text("Contact Agent") : text("Send a message");
   const phoneLink = phoneHref
     ? `<a class="agent-heading-phone" href="${escapeHtml(phoneHref)}">${escapeHtml(data.publicPhone)}</a>` : "";
 
   const embedMode = data.embedMode === true;
   const hideChat = embedMode && data.hideChat === true;
-  const cards = renderAgentPageListingCards(data.listings, 0, { embedMode });
+  const cards = renderAgentPageListingCards(data.listings, 0, { embedMode, publicLanguage: language });
   const showEmptyInventory = data.browseTotal === 0;
-  const browseResultsSummary = formatBrowseResultsSummary(data.listings.length, data.browseTotal);
+  const browseResultsSummary = formatBrowseResultsSummary(data.listings.length, data.browseTotal, language);
   const browseRemaining = data.browseHasMore ? Math.max(0, data.browseTotal - data.listings.length) : 0;
   const chatWidgetClass =
     !hideChat && data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
@@ -359,7 +386,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     if (/^\[\[photo:/i.test(text)) return "";
     return text.startsWith("## ") && text.length <= 84
       ? `<h3 class="neighborhood-guide-subheading">${guideInlineHtml(text.slice(3).trim())}</h3>`
-      : `<p>${guideInlineHtml(text)}</p>`;
+      : `<p dir="auto">${guideInlineHtml(text)}</p>`;
   }).join("");
   const galleryGuidePhotos = guidePhotos.slice(1).filter((photo) =>
     !inlineGuidePhotoMarkers.has(neighborhoodGuidePhotoId(photo.url) ?? ""));
@@ -369,33 +396,33 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       ${guideHero ? `<img class="neighborhood-guide-cover" src="${escapeHtml(guideHero.url)}"
         alt="${escapeHtml(guideHero.alt)}" loading="eager" fetchpriority="high" decoding="async" />` : ""}
       <div class="neighborhood-guide-hero-inner">
-        <span class="neighborhood-guide-eyebrow">NEIGHBORHOOD LOCAL GUIDE</span>
-        <h1 id="local-guide-title">Discover ${guideTitle}</h1>
+        <span class="neighborhood-guide-eyebrow">${text("NEIGHBORHOOD LOCAL GUIDE")}</span>
+        <h1 id="local-guide-title">${text("Discover {name}", { name: guideTitle })}</h1>
         <p>${guideSubtitle}</p>
       </div>
     </div>
     <div class="neighborhood-guide-content">
       <div class="neighborhood-guide-main">
       <div class="neighborhood-guide-editorial">
-        <div class="neighborhood-guide-section-label">GET TO KNOW THE AREA</div>
-        <h2>Living in ${guideTitle}</h2>
+        <div class="neighborhood-guide-section-label">${text("GET TO KNOW THE AREA")}</div>
+        <h2>${text("Living in {name}", { name: guideTitle })}</h2>
         ${guideParagraphs.length ? guideEditorialHtml :
-          neighborhood.preview ? '<p>Add your own neighborhood insights to see how the guide will appear.</p>' : ""}
+          neighborhood.preview ? `<p>${text("Add your own neighborhood insights to see how the guide will appear.")}</p>` : ""}
       </div>
       ${galleryGuidePhotos.length > 0 ? `<section class="neighborhood-guide-gallery" aria-labelledby="guide-gallery-title">
-        <div class="neighborhood-guide-section-label">PICTURE THE NEIGHBORHOOD</div>
-        <h3 id="guide-gallery-title">Around ${guideTitle}</h3>
+        <div class="neighborhood-guide-section-label">${text("PICTURE THE NEIGHBORHOOD")}</div>
+        <h3 id="guide-gallery-title">${text("Around {name}", { name: guideTitle })}</h3>
         <div class="neighborhood-gallery-grid">${galleryGuidePhotos.map((photo) =>
           `<figure><img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.alt)}" loading="lazy" decoding="async" />
           <figcaption>${escapeHtml(photo.alt)}</figcaption></figure>`).join("")}</div>
       </section>` : ""}
 
-      ${renderNeighborhoodProperties(data)}
-      ${neighborhood.parentUrl ? `<p class="neighborhood-guide-back"><a href="${escapeHtml(neighborhood.parentUrl)}">← Back to the Agent Page</a></p>` : ""}
+      ${renderNeighborhoodProperties(data, language)}
+      ${neighborhood.parentUrl ? `<p class="neighborhood-guide-back"><a href="${escapeHtml(neighborhood.parentUrl)}">${text("← Back to the Agent Page")}</a></p>` : ""}
       </div>
-      <aside class="neighborhood-agent-sidebar" id="agent-contact" aria-label="Contact the local real estate agent">
+      <aside class="neighborhood-agent-sidebar" id="agent-contact" aria-label="${text("Contact the local real estate agent")}">
         <div class="neighborhood-agent-card">
-          <div class="neighborhood-guide-section-label">YOUR LOCAL REAL ESTATE AGENT</div>
+          <div class="neighborhood-guide-section-label">${text("YOUR LOCAL REAL ESTATE AGENT")}</div>
           <div class="neighborhood-agent-person">
             ${renderAvatar(data)}
             <div class="neighborhood-agent-person-info">
@@ -405,12 +432,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
             </div>
           </div>
           ${data.companyLogo ? `<div class="neighborhood-agent-logo">${renderLogo(data)}</div>` : ""}
-          <p class="neighborhood-agent-intro">Questions about buying, selling, or exploring ${guideTitle}?</p>
+          <p class="neighborhood-agent-intro">${text("Questions about buying, selling, or exploring {name}?", { name: guideTitle })}</p>
           <div class="cta-row neighborhood-agent-actions"${neighborhood.preview ? " inert" : ""}>
-            <button type="button" class="btn btn-primary" id="btn-message">Contact Agent</button>
-            <button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>
-            ${!neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Choose a time</a>` : ""}
-            ${homeWorthBtn || `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>`}
+            <button type="button" class="btn btn-primary" id="btn-message">${text("Contact Agent")}</button>
+            <button type="button" class="btn btn-outline" id="btn-schedule-header">${text("Schedule Showing")}</button>
+            ${!neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">${text("Choose a time")}</a>` : ""}
+            ${homeWorthBtn || `<button type="button" class="btn btn-outline" id="btn-home-worth">${text("Request a home valuation")}</button>`}
           </div>
           ${renderSocialLinks(data)}
         </div>
@@ -418,12 +445,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     </div>
   </article>` : "";
   const pageTitle = neighborhood ? `${neighborhoodTitle(neighborhood)} | ${data.displayName}` : embedMode
-    ? "Property Listings"
-    : `${data.displayName} | Real Estate Agent${primaryMarket ? ` in ${primaryMarket}` : ""}`;
+    ? text("Property Listings")
+    : `${data.displayName} | ${primaryMarket ? text("Real Estate Agent in {area}", { area: primaryMarket }) : text("Real Estate Agent")}`;
   const profileSummary = [
-    `Meet ${data.displayName}${data.brokerageName ? ` at ${data.brokerageName}` : ""}.`,
-    primaryMarket ? `Serving ${data.marketArea}.` : "",
-    data.bio || "Contact the agent for help buying or selling a home.",
+    data.brokerageName ? text("Meet {name} at {brokerage}.", { name: data.displayName, brokerage: data.brokerageName }) : text("Meet {name}.", { name: data.displayName }),
+    primaryMarket ? text("Serving {area}.", { area: data.marketArea }) : "",
+    data.bio || text("Contact the agent for help buying or selling a home."),
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   const summary = neighborhood ? neighborhood.content.trim().replace(/\[\[photo:[a-f0-9-]{36}(?:\|\d{2,3})?\]\]/gi, " ").replace(/(^|\n)##\s+/g, "$1").replace(/\*+/g, "").replace(/\s+/g, " ").trim() : profileSummary;
   const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
@@ -434,7 +461,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .filter(Boolean)
     .join(" ");
 
-  const navigationHtml = renderAgentNavigation(data);
+  const navigationHtml = renderAgentNavigation(data, text);
   const agentHeaderHtml = embedMode
     ? ""
     : `<header class="agent-header">
@@ -450,15 +477,15 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         ${marketHtml}
         <div class="cta-row"${navigationHtml ? ' id="agent-contact"' : ""}${neighborhood?.preview ? " inert" : ""}>
           ${contactMode === "phone" ? `<a class="btn btn-primary" id="btn-message" href="${escapeHtml(phoneHref!)}">${primaryContactLabel}</a>` : `<button type="button" class="btn btn-primary" id="btn-message">${primaryContactLabel}</button>`}
-          ${data.schedulingUrl && !neighborhood ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
-          ${neighborhood && !neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Choose a time</a>` : ""}
-          ${neighborhood && !homeWorthBtn ? `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>` : homeWorthBtn}
+          ${data.schedulingUrl && !neighborhood ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">${text("Schedule Showing")}</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">${text("Schedule Showing")}</button>`}
+          ${neighborhood && !neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">${text("Choose a time")}</a>` : ""}
+          ${neighborhood && !homeWorthBtn ? `<button type="button" class="btn btn-outline" id="btn-home-worth">${text("Request a home valuation")}</button>` : homeWorthBtn}
         </div>
       </div>
     </header>`;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${language}" dir="${language === "he" ? "rtl" : "ltr"}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -486,12 +513,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .agent-name { margin: 0 0 4px; font-size: 1.75rem; font-weight: 800; }
     .agent-heading { margin-bottom: 10px; overflow-wrap: anywhere; }
     .agent-byline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-weight: 600; }
-    .agent-heading-phone { color: var(--brand-dark); font-size: 0.9375rem; font-weight: 600; text-underline-offset: 3px; }
+    .agent-heading-phone { direction: ltr; unicode-bidi: isolate; color: var(--brand-dark); font-size: 0.9375rem; font-weight: 600; text-underline-offset: 3px; }
     .agent-heading-brokerage { color: var(--muted); margin: 2px 0 0; }
     .agent-bio { margin: 0 0 10px; color: #334155; font-size: 0.9375rem; }
-    .agent-market { margin: 4px 0 12px; display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
+    .agent-market { margin: 4px 0 12px; display: flex; flex-direction: column; gap: 8px; padding-inline-start: 4px; }
     .agent-market-label { font-size: 0.8125rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .agent-market-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; padding-left: 2px; }
+    .agent-market-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; padding-inline-start: 2px; }
     .market-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: #f1f5f9; border: 1px solid var(--border); font-size: 0.8125rem; color: #334155; line-height: 1.3; }
     .agent-social { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 2px; }
     @media (min-width: 640px) { .agent-social { justify-content: flex-start; } }
@@ -607,22 +634,22 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .chat-widget-scrim { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.08); pointer-events: auto; }
     .chat-widget.open:not(.minimized) .chat-panel { pointer-events: auto; }
     .chat-widget.enabled .chat-bubble { pointer-events: auto; }
-    .chat-panel { position: fixed; bottom: 24px; right: 24px; z-index: 112; background: #fff; border-radius: 12px; width: min(400px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: 600px; box-shadow: 0 12px 40px rgba(15,23,42,0.18); border: 1px solid var(--border); display: none; flex-direction: column; overflow: hidden; }
+    .chat-panel { position: fixed; bottom: 24px; inset-inline-end: 24px; z-index: 112; background: #fff; border-radius: 12px; width: min(400px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: 600px; box-shadow: 0 12px 40px rgba(15,23,42,0.18); border: 1px solid var(--border); display: none; flex-direction: column; overflow: hidden; }
     .chat-widget.open:not(.minimized) .chat-panel { display: flex; }
     .chat-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9375rem; background: #fff; flex-shrink: 0; }
     .chat-panel-header-actions { display: flex; align-items: center; gap: 2px; }
     .chat-panel-btn { border: none; background: transparent; font-size: 1.125rem; line-height: 1; cursor: pointer; color: var(--muted); padding: 6px 8px; border-radius: 6px; min-width: 32px; }
     .chat-panel-btn:hover { background: #f1f5f9; color: var(--ink); }
     .chat-panel iframe { flex: 1; width: 100%; border: none; min-height: 0; display: block; }
-    .chat-bubble { position: fixed; bottom: 24px; right: 24px; z-index: 112; border: none; background: var(--brand); color: #fff; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 12px 18px; border-radius: 999px; font: inherit; font-size: 0.875rem; font-weight: 600; box-shadow: 0 6px 20px rgba(5,150,105,0.35); transition: transform 0.15s, box-shadow 0.15s; }
+    .chat-bubble { position: fixed; bottom: 24px; inset-inline-end: 24px; z-index: 112; border: none; background: var(--brand); color: #fff; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 12px 18px; border-radius: 999px; font: inherit; font-size: 0.875rem; font-weight: 600; box-shadow: 0 6px 20px rgba(5,150,105,0.35); transition: transform 0.15s, box-shadow 0.15s; }
     .chat-bubble:hover { transform: scale(1.02); box-shadow: 0 8px 24px rgba(5,150,105,0.4); }
     .chat-widget.enabled:not(.open) .chat-bubble,
     .chat-widget.enabled.minimized .chat-bubble { display: flex; }
     .chat-widget.open:not(.minimized) .chat-bubble { display: none; }
     @media (max-width: 639px) {
       .chat-widget.open:not(.minimized) .chat-widget-scrim { display: block; }
-      .chat-widget.open:not(.minimized) .chat-panel { bottom: 0; right: 0; left: 0; width: 100%; max-width: none; height: min(92vh, 600px); max-height: none; border-radius: 16px 16px 0 0; border-bottom: none; }
-      .chat-bubble { bottom: 20px; right: 20px; }
+      .chat-widget.open:not(.minimized) .chat-panel { bottom: 0; inset-inline: 0; width: 100%; max-width: none; height: min(92vh, 600px); max-height: none; border-radius: 16px 16px 0 0; border-bottom: none; }
+      .chat-bubble { bottom: 20px; inset-inline-end: 20px; }
     }
     .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200; }
     .toast.show { opacity: 1; }
@@ -846,8 +873,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 <body class="${bodyClass}">
   <div class="wrap">
     ${neighborhood?.preview ? `<aside class="agent-preview-banner" role="status">
-      <strong>Private preview — not published</strong>
-      This page is visible only to its owner while previewing. ${neighborhood.parentUrl ? `Public URL after publication: ${escapeHtml(`${neighborhood.parentUrl}/${neighborhood.slug}`)}` : "A public link will be available when your Agent Page is enabled and this neighborhood is published."}
+      <strong>${text("Private preview — not published")}</strong>
+      ${text("This page is visible only to its owner while previewing.")} ${neighborhood.parentUrl ? `${text("Public URL after publication:")} ${escapeHtml(`${neighborhood.parentUrl}/${neighborhood.slug}`)}` : text("A public link will be available when your Agent Page is enabled and this neighborhood is published.")}
     </aside>` : ""}
     ${navigationHtml}
     ${neighborhood ? "" : agentHeaderHtml}
@@ -856,37 +883,37 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       <div class="browse-wrap" id="browse-wrap">
         <div class="browse-head">
           <div class="listing-type-row">
-            <button type="button" class="${listingTypeChipClass("all", initialListingType)}" data-filter="all">All</button>
-            <button type="button" class="${listingTypeChipClass("sale", initialListingType)}" data-filter="sale">For Sale</button>
-            <button type="button" class="${listingTypeChipClass("rent", initialListingType)}" data-filter="rent">For Rent</button>
-            <button type="button" class="${listingTypeChipClass("coming_soon", initialListingType)}" data-filter="coming_soon">Coming Soon</button>
+            <button type="button" class="${listingTypeChipClass("all", initialListingType)}" data-filter="all">${text("All")}</button>
+            <button type="button" class="${listingTypeChipClass("sale", initialListingType)}" data-filter="sale">${text("For Sale")}</button>
+            <button type="button" class="${listingTypeChipClass("rent", initialListingType)}" data-filter="rent">${text("For Rent")}</button>
+            <button type="button" class="${listingTypeChipClass("coming_soon", initialListingType)}" data-filter="coming_soon">${text("Coming Soon")}</button>
           </div>
           <button type="button" class="btn btn-sm btn-outline browse-toggle-btn" id="btn-toggle-filters" aria-expanded="false" aria-controls="browse-panel">
-            <span class="toggle-label-desktop">More Filters</span>
-            <span class="toggle-label-mobile">Filters</span>
+            <span class="toggle-label-desktop">${text("More Filters")}</span>
+            <span class="toggle-label-mobile">${text("Filters")}</span>
           </button>
         </div>
         <p class="browse-results-count" id="browse-results-count">${browseResultsSummary}</p>
       </div>
       <div class="browse-panel-backdrop" id="browse-panel-backdrop" aria-hidden="true"></div>
       <div class="browse-panel" id="browse-panel" hidden>
-        <p class="browse-panel-title">Filters</p>
+        <p class="browse-panel-title">${text("Filters")}</p>
         <div class="browse-panel-body">
           <div class="browse-panel-location">
-            <label>Location
-              <input type="text" id="filter-location" placeholder="City, state, or ZIP" autocomplete="off" />
+            <label>${text("Location")}
+              <input type="text" id="filter-location" placeholder="${text("City, state, or ZIP")}" autocomplete="off" />
             </label>
           </div>
           <div class="browse-panel-advanced">
-            <label>Min price ($)
-              <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+            <label>${text("Min price")} ($)
+              <input type="number" id="filter-min-price" min="0" step="1000" placeholder="${text("Any")}" inputmode="numeric" />
             </label>
-            <label>Max price ($)
-              <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+            <label>${text("Max price")} ($)
+              <input type="number" id="filter-max-price" min="0" step="1000" placeholder="${text("Any")}" inputmode="numeric" />
             </label>
-            <label>Beds
+            <label>${text("Beds")}
               <select id="filter-beds">
-                <option value="">Any</option>
+                <option value="">${text("Any")}</option>
                 <option value="1">1+</option>
                 <option value="2">2+</option>
                 <option value="3">3+</option>
@@ -894,64 +921,64 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
                 <option value="5">5+</option>
               </select>
             </label>
-            <label>Baths
+            <label>${text("Baths")}
               <select id="filter-baths">
-                <option value="">Any</option>
+                <option value="">${text("Any")}</option>
                 <option value="1">1+</option>
                 <option value="2">2+</option>
                 <option value="3">3+</option>
                 <option value="4">4+</option>
               </select>
             </label>
-            <label>Property type
+            <label>${text("Property type")}
               <select id="filter-property-type">
-                <option value="">All types</option>
-                <option value="house">House</option>
-                <option value="condo">Condo</option>
-                <option value="townhouse">Townhouse</option>
-                <option value="multi_family">Multi-family</option>
-                <option value="land">Land</option>
-                <option value="other">Other</option>
+                <option value="">${text("All types")}</option>
+                <option value="house">${text("House")}</option>
+                <option value="condo">${text("Condo")}</option>
+                <option value="townhouse">${text("Townhouse")}</option>
+                <option value="multi_family">${text("Multi-family")}</option>
+                <option value="land">${text("Land")}</option>
+                <option value="other">${text("Other")}</option>
               </select>
             </label>
-            <label>Min sq ft
-              <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="Any" inputmode="numeric" />
+            <label>${text("Min sq ft")}
+              <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="${text("Any")}" inputmode="numeric" />
             </label>
-            <label>Sort
+            <label>${text("Sort")}
               <select id="filter-sort">
-                <option value="newest">Newest</option>
-                <option value="price_desc">Price: high to low</option>
-                <option value="price_asc">Price: low to high</option>
+                <option value="newest">${text("Newest")}</option>
+                <option value="price_desc">${text("Price: high to low")}</option>
+                <option value="price_asc">${text("Price: low to high")}</option>
               </select>
             </label>
           </div>
         </div>
         <div class="browse-panel-actions">
-          <button type="button" class="btn btn-sm btn-outline" id="btn-filters-clear">Clear</button>
-          <button type="button" class="btn btn-sm btn-primary" id="btn-filters-apply">Apply</button>
+          <button type="button" class="btn btn-sm btn-outline" id="btn-filters-clear">${text("Clear")}</button>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-filters-apply">${text("Apply")}</button>
         </div>
       </div>
-      <div class="browse-empty" id="browse-empty" hidden>No listings match your filters.</div>
+      <div class="browse-empty" id="browse-empty" hidden>${text("No listings match your filters.")}</div>
       <div class="listings-grid" id="listings-grid">
-        ${showEmptyInventory ? '<div class="empty-listings">No published listings yet.</div>' : cards}
+        ${showEmptyInventory ? `<div class="empty-listings">${text("No published listings yet.")}</div>` : cards}
       </div>
       <div class="browse-load-more-wrap" id="browse-load-more-wrap" ${data.browseHasMore ? "" : "hidden"}>
-        <button type="button" class="btn btn-outline" id="btn-browse-load-more">Load ${data.browsePageSize} more listings</button>
-        <p class="browse-remaining-count" id="browse-remaining-count">${browseRemaining > 0 ? `${browseRemaining} remaining` : ""}</p>
-        <a href="#" class="browse-back-to-top" id="browse-back-to-top" hidden>Back to top</a>
+        <button type="button" class="btn btn-outline" id="btn-browse-load-more">${text("Load {count} more listings", { count: data.browsePageSize })}</button>
+        <p class="browse-remaining-count" id="browse-remaining-count">${browseRemaining > 0 ? text("{count} remaining", { count: browseRemaining }) : ""}</p>
+        <a href="#" class="browse-back-to-top" id="browse-back-to-top" hidden>${text("Back to top")}</a>
       </div>
     </section>`}
     <footer class="site-footer">
-      <span class="site-footer-brand"><span>Powered by</span>${renderWhachatLogoMark()}<span>WhachatCRM</span></span>
+      <span class="site-footer-brand"><span>${text("Powered by")}</span>${renderWhachatLogoMark()}<span>WhachatCRM</span></span>
     </footer>
   </div>
 
   <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true">
-      <h2 id="modal-title">Contact</h2>
+      <h2 id="modal-title">${text("Contact")}</h2>
       <p id="modal-subtitle" class="modal-subtitle" hidden></p>
       <div id="modal-listing-context" class="modal-listing-context" hidden>
-        <p class="modal-listing-label">Property</p>
+        <p class="modal-listing-label">${text("Property")}</p>
         <p class="modal-listing-address" id="modal-listing-address"></p>
         <p class="modal-listing-meta" id="modal-listing-meta"></p>
       </div>
@@ -961,16 +988,16 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         <input type="hidden" name="listingUrl" id="form-listing-url" value="" disabled />
         <input type="hidden" name="source" id="form-source" value="" disabled />
         <input type="hidden" name="propertyAddress" id="form-listing-property-address" value="" disabled />
-        ${publicAgentContactFieldsHtml}
-        <div id="message-field"><label>Message<textarea name="message"></textarea></label></div>
+        ${publicAgentContactFieldsHtml(language)}
+        <div id="message-field"><label>${text("Message")}<textarea name="message"></textarea></label></div>
         <div id="home-worth-fields" hidden>
-          <label>Property address<input name="propertyAddress" id="home-worth-property-address" disabled /></label>
-          <label>Timeline<input name="timeline" placeholder="e.g. 30–60 days" /></label>
-          <label>Reason for selling<textarea name="reasonForSelling"></textarea></label>
+          <label>${text("Property address")}<input name="propertyAddress" id="home-worth-property-address" disabled /></label>
+          <label>${text("Timeline")}<input name="timeline" placeholder="${text("e.g. 30–60 days")}" /></label>
+          <label>${text("Reason for selling")}<textarea name="reasonForSelling"></textarea></label>
         </div>
         <div class="modal-actions">
-          <button type="button" class="btn btn-outline" id="modal-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">Submit</button>
+          <button type="button" class="btn btn-outline" id="modal-cancel">${text("Cancel")}</button>
+          <button type="submit" class="btn btn-primary">${text("Submit")}</button>
         </div>
       </form>
     </div>
@@ -979,28 +1006,28 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ? ""
     : `<div class="${chatWidgetClass}" id="chat-widget" aria-hidden="true">
     <div class="chat-widget-scrim" id="chat-widget-scrim" aria-hidden="true"></div>
-    <button type="button" class="chat-bubble" id="chat-bubble" aria-label="Let's Chat">
-      <span class="chat-bubble-label">Let's Chat</span>
+    <button type="button" class="chat-bubble" id="chat-bubble" aria-label="${text("Let's Chat")}">
+      <span class="chat-bubble-label">${text("Let's Chat")}</span>
     </button>
-    <div class="chat-panel" id="chat-panel" role="dialog" aria-modal="false" aria-label="Web chat">
+    <div class="chat-panel" id="chat-panel" role="dialog" aria-modal="false" aria-label="${text("Web chat")}">
       <div class="chat-panel-header">
-        <span>Chat</span>
+        <span>${text("Chat")}</span>
         <div class="chat-panel-header-actions">
-          <button type="button" class="chat-panel-btn" id="chat-minimize" aria-label="Minimize chat">−</button>
-          <button type="button" class="chat-panel-btn" id="chat-close" aria-label="Close chat">×</button>
+          <button type="button" class="chat-panel-btn" id="chat-minimize" aria-label="${text("Minimize chat")}">−</button>
+          <button type="button" class="chat-panel-btn" id="chat-close" aria-label="${text("Close chat")}">×</button>
         </div>
       </div>
-      <iframe id="chat-iframe" title="Web chat"></iframe>
+      <iframe id="chat-iframe" title="${text("Web chat")}"></iframe>
     </div>
   </div>`}
   <div class="share-url-backdrop" id="share-url-backdrop" aria-hidden="true">
     <div class="share-url-dialog" role="dialog" aria-modal="true" aria-labelledby="share-url-title">
-      <h2 id="share-url-title">Copy listing link</h2>
-      <p>Select the link below and copy it to share this property.</p>
-      <input type="text" id="share-url-input" readonly aria-label="Listing share URL" />
+      <h2 id="share-url-title">${text("Copy listing link")}</h2>
+      <p>${text("Select the link below and copy it to share this property.")}</p>
+      <input type="text" id="share-url-input" dir="ltr" readonly aria-label="${text("Listing share URL")}" />
       <div class="share-url-dialog-actions">
-        <button type="button" class="btn btn-outline" id="share-url-close">Close</button>
-        <button type="button" class="btn btn-primary" id="share-url-copy">Copy link</button>
+        <button type="button" class="btn btn-outline" id="share-url-close">${text("Close")}</button>
+        <button type="button" class="btn btn-primary" id="share-url-copy">${text("Copy link")}</button>
       </div>
     </div>
   </div>
@@ -1031,6 +1058,19 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var backdrop = document.getElementById("modal-backdrop");
       var form = document.getElementById("lead-form");
       var toast = document.getElementById("toast");
+      var displayNumber = new Intl.NumberFormat(${JSON.stringify(publicRealEstateLocale(language))});
+      function formatCopy(template, numbers) {
+        return template.replace(/\\{(\\w+)\\}/g, function (token, key) {
+          return numbers[key] == null ? token : displayNumber.format(numbers[key]);
+        });
+      }
+      function resultsCopy(loaded, total) {
+        return loaded < total
+          ? formatCopy(${JSON.stringify(text("Showing {loaded} of {total} listings"))}, { loaded: loaded, total: total })
+          : total === 1 ? ${JSON.stringify(text("1 listing found"))}
+          : formatCopy(${JSON.stringify(text("{total} listings found"))}, { total: total });
+      }
+
       function showToast(msg) {
         toast.textContent = msg;
         toast.classList.add("show");
@@ -1041,7 +1081,6 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         if (!filterForm || !config.neighborhood) return;
         var sequence = 0;
         var pageSize = 9;
-        var categoryNames = { sale: "for-sale", rent: "rental" };
         function formValue(name) {
           var control = filterForm.elements.namedItem(name);
           return control ? String(control.value || "").trim() : "";
@@ -1076,11 +1115,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
             gridEl.innerHTML = "";
             var msg = document.createElement("div");
             msg.className = "neighborhood-property-empty";
-            msg.textContent = "Neighborhood area boundaries are temporarily unavailable. Contact the agent for current options.";
+            msg.textContent = ${JSON.stringify(text("Neighborhood area boundaries are temporarily unavailable. Contact the agent for current options."))};
             gridEl.appendChild(msg);
             group.dataset.loaded = "0";
             group.dataset.total = "0";
-            if (countEl) countEl.textContent = "Listings unavailable";
+            if (countEl) countEl.textContent = ${JSON.stringify(text("Listings unavailable"))};
             if (button) button.hidden = true;
             return;
           }
@@ -1098,20 +1137,20 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           if (!loaded) {
             var empty = document.createElement("div");
             empty.className = "neighborhood-property-empty";
-            empty.textContent = "No verified " + categoryNames[kind] + " homes match these filters. Ask the agent for other options.";
+            empty.textContent = kind === "rent"
+              ? ${JSON.stringify(text("No verified rental homes match these filters. Ask the agent for other options."))}
+              : ${JSON.stringify(text("No verified for-sale homes match these filters. Ask the agent for other options."))};
             gridEl.appendChild(empty);
           }
           if (countEl) {
             countEl.textContent = data.candidateLimitReached
-              ? "Showing " + loaded + " of at least " + total + " scanned matches"
-              : total === 0 ? "0 listings" : loaded < total
-                ? "Showing " + loaded + " of " + total + " listings"
-                : total + (total === 1 ? " listing" : " listings") + " found";
+              ? formatCopy(${JSON.stringify(text("Showing {loaded} of at least {total} scanned matches"))}, { loaded: loaded, total: total })
+              : total === 0 ? ${JSON.stringify(text("0 listings"))} : resultsCopy(loaded, total);
           }
           if (button) button.hidden = !data.hasMore || data.candidateLimitReached && loaded >= total;
           var notice = document.querySelector(".neighborhood-property-status");
           if (notice && data.hasOlderMatchingInventory) {
-            notice.textContent = "Older MLS inventory is excluded until the feed is refreshed. Ask the agent for current options.";
+            notice.textContent = ${JSON.stringify(text("Older MLS inventory is excluded until the feed is refreshed. Ask the agent for current options."))};
           }
         }
         function request(kind, append) {
@@ -1131,7 +1170,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           var min = formValue("minPrice");
           var max = formValue("maxPrice");
           if (min && max && Number(min) > Number(max)) {
-            showToast("Minimum price must not exceed maximum price");
+            showToast(${JSON.stringify(text("Minimum price must not exceed maximum price"))});
             return;
           }
           var seq = ++sequence;
@@ -1147,7 +1186,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
               });
             })
             .catch(function (error) {
-              if (seq === sequence) showToast(error.message || "Neighborhood listings unavailable");
+              if (seq === sequence) showToast(${language === "en" ? "error.message || " : ""}${JSON.stringify(text("Neighborhood listings unavailable"))});
             })
             .finally(function () {
               if (seq === sequence) categories.forEach(function (kind) { setBusy(kind, false); });
@@ -1227,12 +1266,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       function openModal(intent, listingId) {
         document.getElementById("form-intent").value = intent;
         document.getElementById("form-listing-id").value = listingId || "";
-        var title = { message: "Message Me", ask_about: "Ask About This Listing", schedule_showing: "Schedule Showing", home_worth: "Thinking of Selling?" };
-        document.getElementById("modal-title").textContent = title[intent] || "Contact";
+        var title = { message: ${JSON.stringify(text("Message Me"))}, ask_about: ${JSON.stringify(text("Ask About This Listing"))}, schedule_showing: ${JSON.stringify(text("Schedule Showing"))}, home_worth: ${JSON.stringify(text("Thinking of Selling?"))} };
+        document.getElementById("modal-title").textContent = title[intent] || ${JSON.stringify(text("Contact"))};
         var subtitleEl = document.getElementById("modal-subtitle");
         if (subtitleEl) {
           if (intent === "home_worth") {
-            subtitleEl.textContent = "Get a free home valuation and personalized selling strategy.";
+            subtitleEl.textContent = ${JSON.stringify(text("Get a free home valuation and personalized selling strategy."))};
             subtitleEl.hidden = false;
           } else {
             subtitleEl.textContent = "";
@@ -1461,16 +1500,14 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         if (wrap) wrap.hidden = !hasMore || browseTotal === 0;
         if (countEl) {
           countEl.textContent = browseTotal > 0
-            ? (browseLoaded < browseTotal
-              ? "Showing " + browseLoaded + " of " + browseTotal + " listings"
-              : browseTotal + (browseTotal === 1 ? " listing" : " listings") + " found")
+            ? resultsCopy(browseLoaded, browseTotal)
             : "";
         }
         if (loadBtn && hasMore) {
-          loadBtn.textContent = "Load " + browsePageSize + " more listings";
+          loadBtn.textContent = formatCopy(${JSON.stringify(text("Load {count} more listings"))}, { count: browsePageSize });
         }
         if (remainingEl) {
-          remainingEl.textContent = hasMore ? (browseTotal - browseLoaded) + " remaining" : "";
+          remainingEl.textContent = hasMore ? formatCopy(${JSON.stringify(text("{count} remaining"))}, { count: browseTotal - browseLoaded }) : "";
         }
         updateBackToTopVisibility();
         if (emptyMsg) emptyMsg.hidden = browseTotal !== 0;
@@ -1527,7 +1564,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         return fetch(url)
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
-            if (!res.ok) throw new Error(res.j.error || "Failed to load listings");
+            if (!res.ok) throw new Error(res.j.error || ${JSON.stringify(text("Failed to load listings"))});
             if (append) {
               if (res.j.html) grid.insertAdjacentHTML("beforeend", res.j.html);
             } else {
@@ -1540,7 +1577,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
               console.log("[Agent Page browse]", { browseLoaded: browseLoaded, browseTotal: browseTotal, append: append });
             }
           })
-          .catch(function (err) { showToast(err.message || "Failed to load listings"); })
+          .catch(function (err) { showToast(${language === "en" ? "err.message || " : ""}${JSON.stringify(text("Failed to load listings"))}); })
           .finally(function () { setBrowseLoading(false); });
       }
 
@@ -1624,7 +1661,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
       function openShareUrlPrompt(url) {
         if (!shareUrlBackdrop || !shareUrlInput) {
-          showToast("Could not copy link");
+          showToast(${JSON.stringify(text("Could not copy link"))});
           return;
         }
         shareUrlInput.value = url;
@@ -1663,11 +1700,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       function copyListingUrl(url, triggerEl) {
         var resolved = resolveShareUrl(url, triggerEl);
         if (!resolved) {
-          showToast("No link to share");
+          showToast(${JSON.stringify(text("No link to share"))});
           return Promise.resolve(false);
         }
         function onCopied() {
-          showToast("Link copied");
+          showToast(${JSON.stringify(text("Link copied"))});
           return true;
         }
         function tryExecCopy() {
@@ -1686,13 +1723,13 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       function shareListing(url, triggerEl) {
         var resolved = resolveShareUrl(url, triggerEl);
         if (!resolved) {
-          showToast("No link to share");
+          showToast(${JSON.stringify(text("No link to share"))});
           return;
         }
         var title = resolveShareTitle(triggerEl);
         if (navigator.share && typeof navigator.share === "function") {
           navigator.share({ url: resolved, title: title }).then(function () {
-            showToast("Shared");
+            showToast(${JSON.stringify(text("Shared"))});
           }).catch(function (err) {
             if (err && err.name === "AbortError") return;
             copyListingUrl(resolved, triggerEl);
@@ -1727,7 +1764,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         e.preventDefault();
         var fd = new FormData(form);
         if (!String(fd.get("email") || "").trim() && !String(fd.get("phone") || "").trim()) {
-          showToast("Enter an email address or phone number.");
+          showToast(${JSON.stringify(text("Enter an email address or phone number."))});
           return;
         }
         var body = {
@@ -1752,15 +1789,18 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
             if (!res.ok) {
-              if (res.j.field === "phone") form.elements.phone.focus();
-              throw new Error(res.j.error || "Submit failed");
+              if (res.j.field === "phone") {
+                form.elements.phone.focus();
+                throw new Error(${JSON.stringify(text("Enter a valid phone number."))});
+              }
+              throw new Error(${language === "en" ? "res.j.error || " : ""}${JSON.stringify(text("Submit failed"))});
             }
             var bookingLink = document.getElementById("neighborhood-booking-link");
             if (body.intent === "schedule_showing" && bookingLink) bookingLink.style.removeProperty("display");
             closeModal();
-            showToast("Thanks — we'll be in touch soon.");
+            showToast(${JSON.stringify(text("Thanks — we'll be in touch soon."))});
           })
-          .catch(function (err) { showToast(err.message || "Submit failed"); });
+          .catch(function (err) { showToast(err.message || ${JSON.stringify(text("Submit failed"))}); });
       });
     })();
   </script>

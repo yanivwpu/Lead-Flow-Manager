@@ -1746,6 +1746,7 @@ export type InboxItem = {
 
 // AI Business Knowledge - per-account business context for AI
 export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
+  publicLanguage: text("public_language").notNull().default("en"),
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   slug: text("slug").notNull(),
@@ -1814,6 +1815,7 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   agentPageSlug: text("agent_page_slug"),
   agentPageDisplayName: text("agent_page_display_name"),
   agentPageBio: text("agent_page_bio"),
+  agentPageLanguage: text("agent_page_language").notNull().default("en"),
   agentPageUseCustomBio: boolean("agent_page_use_custom_bio").notNull().default(false),
   agentPageMarketArea: text("agent_page_market_area"),
   agentPagePreferredLeadCapture: text("agent_page_preferred_lead_capture").notNull().default("webchat"),

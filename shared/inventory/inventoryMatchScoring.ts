@@ -74,6 +74,7 @@ export type MatchListingInput = {
   providerListingId: string;
   status: string;
   priceCents: number | null;
+  currency?: string | null;
   city: string | null;
   state: string | null;
   addressLine1: string | null;

@@ -16,7 +16,7 @@ import { neighborhoodGuidePhotoId, neighborhoodPhotoToken, parseNeighborhoodPhot
 
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
-import { parseAgentPageApiError } from "@/lib/agentPageApi";
+import { neighborhoodApiErrorKey } from "@/lib/agentPageApi";
 import {
   EMPTY_NEIGHBORHOOD, NEW_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts,
   mergeNeighborhoodDraftsPreservingActive, sameNeighborhoodContent, writeNeighborhoodDrafts, type NeighborhoodDrafts,
@@ -91,7 +91,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     queryFn: async (): Promise<Manager | null> => {
       const response = await fetch(endpoint, { credentials: "include" });
       if (response.status === 403) return null;
-      if (!response.ok) throw new Error("Unable to load neighborhood pages.");
+      if (!response.ok) throw new Error(t("rgeNeighborhood.loadFailed"));
       return response.json();
     },
   });
@@ -101,12 +101,12 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const stale = Boolean(active && active !== NEW_NEIGHBORHOOD && (!page || (draft && draft.baseVersion !== page.updatedAt)));
   const values = draft?.values ?? page ?? EMPTY_NEIGHBORHOOD;
   const dirty = Boolean(draft);
-  function editField(field: "name" | "city" | "state" | "country" | "content", value: string) {
+  function editField(field: "name" | "city" | "state" | "country" | "content" | "publicLanguage", value: string) {
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const { name, city, state, country, customBoundary, content, photos } = prior?.values ?? values;
-      const next = { name, city, state, country: country ?? "US", customBoundary: customBoundary ?? null,
+      const { name, city, state, country, publicLanguage, customBoundary, content, photos } = prior?.values ?? values;
+      const next = { name, city, state, publicLanguage, country: country ?? "US", customBoundary: customBoundary ?? null,
         content, photos: photos ?? [], [field]: value };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
@@ -161,10 +161,10 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       return;
     }
     if (file.size > NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES) {
-      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return;
+      toast({ title: t("rgeNeighborhood.photoSize"), variant: "destructive" }); return;
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return;
+      toast({ title: t("rgeNeighborhood.photoFormat"), variant: "destructive" }); return;
     }
     if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return;
     photoUploadInProgress.current = true;
@@ -188,7 +188,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || typeof result.url !== "string") {
-        throw new Error(result.error || "Photo upload failed.");
+        throw new Error(neighborhoodApiErrorKey(result) ?? "rgeNeighborhood.photoFailed");
       }
       const current = draftRef.current.entries[target.id]?.values ?? target;
       const photo: NeighborhoodPhoto = {
@@ -221,11 +221,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
         }
       }
       if (!placement || inserted) {
-        toast({ title: placement ? t("rgeNeighborhoodUpload.inlineInserted") : "Photo uploaded",
+        toast({ title: placement ? t("rgeNeighborhoodUpload.inlineInserted") : t("rgeNeighborhood.photoUploaded"),
           description: t("rgeNeighborhoodUpload.keepPhoto") });
       }
     } catch (error) {
-      toast({ title: "Photo upload failed", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+      toast({ title: t("rgeNeighborhood.photoFailed"), description: error instanceof Error ? t(error.message, { defaultValue: "" }) : undefined, variant: "destructive" });
       return;
     } finally {
       photoUploadInProgress.current = false;
@@ -245,7 +245,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
         body: request.values ? JSON.stringify({ ...request.values, published: request.published, expectedUpdatedAt: request.page?.updatedAt }) : undefined,
       });
       const result = response.status === 204 ? null : await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(parseAgentPageApiError(result));
+      if (!response.ok) throw new Error(neighborhoodApiErrorKey(result) ?? "rgeNeighborhood.saveFailed");
       return result as NeighborhoodPageSettings | null;
     },
     onSuccess: (page, request) => {
@@ -282,11 +282,11 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
         }
         return { active: page?.id ?? null, entries };
       });
-      toast({ title: page ? "Neighborhood page saved" : "Neighborhood page deleted" });
+      toast({ title: page ? t("rgeNeighborhood.saved") : t("rgeNeighborhood.deleted") });
     },
     onError: (error: Error) => {
       void client.invalidateQueries({ queryKey: [endpoint, userId] });
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      toast({ title: t("rgeNeighborhood.saveFailed"), description: t(error.message, { defaultValue: "" }), variant: "destructive" });
     },
   });
 
@@ -303,7 +303,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   return (
     <section className="space-y-4 border-t border-gray-100 px-4 py-4 sm:px-6" aria-labelledby="neighborhood-pages-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="neighborhood-pages-heading" className="text-sm font-semibold">Neighborhood Pages</h3>
+        <h3 id="neighborhood-pages-heading" className="text-sm font-semibold">{t("rgeNeighborhood.title")}</h3>
         <Button type="button" size="sm" variant="outline" disabled={!data || editingBusy}
           onClick={() => {
             setOfferUploadDraft(false);
@@ -315,39 +315,42 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               setMapEditorRevision((revision) => revision + 1);
             }
             updateDrafts((current) => ({ ...current, active: NEW_NEIGHBORHOOD }));
-          }}>{drafts.entries[NEW_NEIGHBORHOOD] ? "Resume draft" : "+ Add"}</Button>
+          }}>{drafts.entries[NEW_NEIGHBORHOOD] ? t("rgeNeighborhood.resume") : t("rgeNeighborhood.add")}</Button>
       </div>
-      {isPending && <p className="text-sm text-muted-foreground">Loading neighborhood pages…</p>}
-      {isError && <p role="alert" className="text-sm text-destructive">Unable to load neighborhood pages.</p>}
+      {isPending && <p className="text-sm text-muted-foreground">{t("rgeNeighborhood.loading")}</p>}
+      {isError && <p role="alert" className="text-sm text-destructive">{t("rgeNeighborhood.loadFailed")}</p>}
+      {data === null && <p className="text-sm text-muted-foreground">{t("rgeNeighborhood.unavailable")}</p>}
+      {data?.pages.length === 0 && !active &&
+        <p className="text-sm text-muted-foreground">{t("rgeNeighborhood.empty")}</p>}
       {data?.pages.map((item) => (
         <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
           <div className="min-w-0">
             <p className="break-words text-sm font-medium">{neighborhoodTitle(item)}</p>
-            <p className="text-xs text-muted-foreground">{item.publicUrl ? "Published" : item.published ? "Published · Agent Page offline" : "Draft"}{drafts.entries[item.id] ? " · Unsaved edits" : ""}</p>
+            <p className="text-xs text-muted-foreground">{item.publicUrl ? t("rgeNeighborhood.published") : item.published ? t("rgeNeighborhood.offline") : t("rgeNeighborhood.draft")}{drafts.entries[item.id] ? ` · ${t("rgeNeighborhood.unsaved")}` : ""}</p>
           </div>
-          <div className="flex items-center gap-1" role="group" aria-label={`${neighborhoodTitle(item)} actions`}>
+          <div className="flex items-center gap-1" role="group" aria-label={t("rgeNeighborhood.actions", { name: neighborhoodTitle(item) })}>
             <Button asChild type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
               <a href={item.publicUrl ?? `${endpoint}/${encodeURIComponent(item.id)}/preview`}
                  target="_blank" rel="noopener noreferrer"
-                 aria-label={item.publicUrl ? "View live neighborhood page" : "Preview neighborhood draft"}
-                 title={item.publicUrl ? "View live neighborhood page" : "Preview neighborhood draft"}>
+                 aria-label={item.publicUrl ? t("rgeNeighborhood.live") : t("rgeNeighborhood.previewDraft")}
+                 title={item.publicUrl ? t("rgeNeighborhood.live") : t("rgeNeighborhood.previewDraft")}>
                 <Eye className="h-4 w-4" aria-hidden="true" />
               </a>
             </Button>
             {item.publicUrl && <Button type="button" size="icon" variant="ghost"
               className="h-9 w-9 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              aria-label="Copy neighborhood page URL" title="Copy neighborhood page URL"
+              aria-label={t("rgeNeighborhood.copyUrl")} title={t("rgeNeighborhood.copyUrl")}
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(item.publicUrl!);
-                  toast({ title: "Link copied" });
+                  toast({ title: t("rgeNeighborhood.copied") });
                 } catch {
-                  toast({ title: "Could not copy the URL", description: item.publicUrl ?? undefined });
+                  toast({ title: t("rgeNeighborhood.copyFailed"), description: item.publicUrl ?? undefined });
                 }
               }}><Copy className="h-4 w-4" aria-hidden="true" /></Button>}
             <Button type="button" size="icon" variant="ghost"
               className="h-9 w-9 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              aria-label={`Edit ${neighborhoodTitle(item)}`} title="Edit neighborhood"
+              aria-label={t("rgeNeighborhood.editNamed", { name: neighborhoodTitle(item) })} title={t("rgeNeighborhood.edit")}
               disabled={editingBusy}
               onClick={() => {
                 setOfferUploadDraft(false);
@@ -361,17 +364,17 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       {active && data && (
         <div data-rge-neighborhood-editor="true" className="space-y-4 rounded-lg bg-slate-50/70 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold">{active === NEW_NEIGHBORHOOD ? "New neighborhood" : "Edit neighborhood"}</h4>
+            <h4 className="text-sm font-semibold">{active === NEW_NEIGHBORHOOD ? t("rgeNeighborhood.create") : t("rgeNeighborhood.edit")}</h4>
             {dirty && <span role="status" className="text-sm text-slate-700">
-              {storageAvailable.current ? "Draft preserved on this browser" : "Unsaved changes"}
+              {storageAvailable.current ? t("rgeNeighborhood.localDraft") : t("rgeNeighborhood.unsavedChanges")}
             </span>}
           </div>
           {stale && <p role="alert" className="text-sm text-amber-900">
-            This page changed or was deleted elsewhere. Copy any text you want to keep, then discard these edits to return to the latest saved version.
+            {t("rgeNeighborhood.stale")}
           </p>}
           <div className="grid gap-3 sm:grid-cols-4">
-            {([{ field: "name", label: "Neighborhood", max: 80 }, { field: "city", label: "City", max: 80 },
-              { field: "state", label: "State", max: 60 }] as const).map(({ field, label, max }) => (
+            {([{ field: "name", label: t("rgeNeighborhood.name"), max: 80 }, { field: "city", label: t("rgeNeighborhood.city"), max: 80 },
+              { field: "state", label: t("rgeNeighborhood.state"), max: 60 }] as const).map(({ field, label, max }) => (
               <div key={field}>
                 <Label htmlFor={`neighborhood-${field}`}>{label}</Label>
                 <Input id={`neighborhood-${field}`} value={values[field]} maxLength={max} disabled={editingBusy} readOnly={stale}
@@ -385,6 +388,16 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               disabled={editingBusy} readOnly={stale} placeholder={defaultCountryCode} dir="ltr"
               onChange={(event) => editField("country", event.target.value.toUpperCase())} />
             <p className="mt-1 text-xs text-slate-500">{t("inboxUi.neighborhoodCountryExamples")}</p>
+          </div>
+          <div className="max-w-xs">
+            <Label htmlFor="neighborhood-public-language">{t("rgeNeighborhood.publicLanguage")}</Label>
+            <select id="neighborhood-public-language" className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              disabled={editingBusy || stale} value={values.publicLanguage ?? "en"}
+              onChange={(event) => editField("publicLanguage", event.target.value)}>
+              <option value="en" lang="en">{t("language.english")}</option>
+              <option value="he" lang="he">{t("language.hebrew")}</option>
+              <option value="es" lang="es">{t("language.spanish")}</option>
+            </select>
           </div>
           <NeighborhoodBoundaryEditor key={active + ":" + mapEditorRevision} boundary={values.customBoundary} persistedBoundary={page?.customBoundary ?? null}
             persistedVersion={page?.updatedAt ?? null} stale={stale}
@@ -401,14 +414,13 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             onPhotoAltChange={(url, alt) => editPhotos((values.photos ?? []).map((photo) =>
               photo.url === url ? { ...photo, alt } : photo))}
             onUploadPhoto={(file, placement) => uploadPhoto(file, { placement })} />
-          <p className="text-xs text-slate-600">Write 240+ characters of useful local information across two distinct paragraphs, or one detailed paragraph with a section heading.
-            Changing the neighborhood name may change its URL.</p>
+          <p className="text-xs text-slate-600">{t("rgeNeighborhood.guideHelp")}</p>
 
 
           <details className="rounded-lg border border-slate-200 bg-white p-3">
             <summary className="cursor-pointer text-sm font-medium text-slate-700">
-              Cover photo &amp; media library ({(values.photos ?? []).length} of {NEIGHBORHOOD_GUIDE_MAX_PHOTOS})
-              <span className="ml-2 text-xs font-normal text-slate-500">Manage photos and descriptions</span>
+              {t("rgeNeighborhood.library", { count: (values.photos ?? []).length, max: NEIGHBORHOOD_GUIDE_MAX_PHOTOS })}
+              <span className="ms-2 text-xs font-normal text-slate-500">{t("rgeNeighborhood.managePhotos")}</span>
             </summary>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button type="button" size="sm" variant="outline" disabled={stale || editingBusy ||
@@ -416,16 +428,16 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                 aria-expanded={page ? undefined : offerUploadDraft}
                 aria-controls={!page && offerUploadDraft ? "neighborhood-upload-draft-offer" : undefined}
                 onClick={() => page ? photoInput.current?.click() : setOfferUploadDraft(!offerUploadDraft)}>
-                <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />{photoUploading ? "Uploading…" : "Upload to library"}
+                <ImagePlus className="me-1.5 h-4 w-4" aria-hidden="true" />{photoUploading ? t("rgeNeighborhood.uploading") : t("rgeNeighborhood.uploadLibrary")}
               </Button>
               <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
-                aria-label="Upload neighborhood photo" disabled={editingBusy}
+                aria-label={t("rgeNeighborhood.uploadPhoto")} disabled={editingBusy}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
                   void uploadPhoto(file, { createDraft: offerUploadDraft });
                 }} />
-              <span className="text-xs text-slate-500">JPG, PNG, WebP · up to 5 MB each</span>
+              <span className="text-xs text-slate-500">{t("rgeNeighborhood.fileTypes")}</span>
             </div>
             {!page && offerUploadDraft && (
               <div id="neighborhood-upload-draft-offer" className="mt-3 space-y-2 rounded-md border bg-slate-50 p-3">
@@ -449,30 +461,30 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                 <div key={photo.url} className="min-w-0 rounded-lg border border-slate-200 p-2">
                   <img src={photo.url} alt={photo.alt} loading="lazy" className="h-32 w-full rounded object-cover" />
                   <div className="mt-2 flex items-center justify-between gap-1">
-                    <span className="text-xs font-medium text-slate-600">{index === 0 ? "Cover photo" : "Library photo"}</span>
+                    <span className="text-xs font-medium text-slate-600">{index === 0 ? t("rgeNeighborhood.cover") : t("rgeNeighborhood.libraryPhoto")}</span>
                     <div className="flex gap-1">
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
-                        disabled={index === 0 || stale || editingBusy} aria-label="Move photo earlier"
+                        disabled={index === 0 || stale || editingBusy} aria-label={t("rgeNeighborhood.earlier")}
                         onClick={() => {
                           const next = [...(values.photos ?? [])];
                           [next[index - 1], next[index]] = [next[index], next[index - 1]];
                           editPhotos(next);
-                        }}><ArrowLeft className="h-4 w-4" /></Button>
+                        }}><ArrowLeft className="h-4 w-4 rtl:-scale-x-100" /></Button>
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
                         disabled={index === (values.photos?.length ?? 0) - 1 || stale || editingBusy}
-                        aria-label="Move photo later" onClick={() => {
+                        aria-label={t("rgeNeighborhood.later")} onClick={() => {
                           const next = [...(values.photos ?? [])];
                           [next[index + 1], next[index]] = [next[index], next[index + 1]];
                           editPhotos(next);
-                        }}><ArrowRight className="h-4 w-4" /></Button>
+                        }}><ArrowRight className="h-4 w-4 rtl:-scale-x-100" /></Button>
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-red-600"
-                        disabled={stale || editingBusy} aria-label="Remove photo from library"
+                        disabled={stale || editingBusy} aria-label={t("rgeNeighborhood.removePhoto")}
                         onClick={() => editPhotos((values.photos ?? []).filter((_, i) => i !== index))}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
-                  <Label htmlFor={`guide-photo-alt-${index}`} className="text-xs">Image description</Label>
+                  <Label htmlFor={`guide-photo-alt-${index}`} className="text-xs">{t("rgeNeighborhood.description")}</Label>
                   <Input id={`guide-photo-alt-${index}`} value={photo.alt} maxLength={140}
                     disabled={stale || editingBusy}
                     onChange={(event) => editPhotos((values.photos ?? []).map((item, i) => i === index ? { ...item, alt: event.target.value } : item))} />
@@ -480,29 +492,27 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               ))}
             </div>
           </details>
-          {data && !data.canPublish && <p className="text-xs text-muted-foreground">Enable your public Agent Page before publishing.</p>}
+          {data && !data.canPublish && <p className="text-xs text-muted-foreground">{t("rgeNeighborhood.enablePage")}</p>}
           {dirty && !canPublish && data?.canPublish && canSave && !neighborhoodContentComplete(values.content) && (
             <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Add more guide text before updating: use two informative paragraphs (240+ characters total),
-              or one detailed paragraph (240+ characters) followed by a section heading.
-              Your browser keeps these edits until you publish or discard them.
+              {t("rgeNeighborhood.guideIncomplete")}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             {!page?.published && <Button type="button" size="sm" variant="outline" disabled={!dirty || !canSave || editingBusy}
-              onClick={() => save.mutate({ page, values, published: false })}>Save draft</Button>}
+              onClick={() => save.mutate({ page, values, published: false })}>{t("rgeNeighborhood.saveDraft")}</Button>}
             {page && !dirty && <Button asChild size="sm" variant="outline">
-              <a href={`${endpoint}/${encodeURIComponent(page.id)}/preview`} target="_blank" rel="noopener noreferrer">Preview saved page</a>
+              <a href={`${endpoint}/${encodeURIComponent(page.id)}/preview`} target="_blank" rel="noopener noreferrer">{t("rgeNeighborhood.previewSaved")}</a>
             </Button>}
             {page && <Button type="button" size="sm" disabled={!canPublish || (page.published && !dirty) || editingBusy}
-              onClick={() => save.mutate({ page, values, published: true })}>{page.published ? "Update published page" : "Publish"}</Button>}
+              onClick={() => save.mutate({ page, values, published: true })}>{page.published ? t("rgeNeighborhood.update") : t("rgeNeighborhood.publish")}</Button>}
             {page?.published && <Button type="button" size="sm" variant="outline" disabled={editingBusy || stale}
-              onClick={() => save.mutate({ page, values: page, published: false, preserveDraft: true })}>Unpublish</Button>}
+              onClick={() => save.mutate({ page, values: page, published: false, preserveDraft: true })}>{t("rgeNeighborhood.unpublish")}</Button>}
             {page && <Button type="button" size="sm" variant="ghost" className="text-destructive" disabled={editingBusy || stale}
-              onClick={() => { if (window.confirm(`Delete the neighborhood page for ${page.name}?`)) save.mutate({ page }); }}>Delete</Button>}
-            <Button type="button" size="sm" variant="ghost" disabled={editingBusy} onClick={() => updateDrafts((current) => ({ ...current, active: null }))}>Close</Button>
+              onClick={() => { if (window.confirm(t("rgeNeighborhood.deleteConfirm", { name: page.name }))) save.mutate({ page }); }}>{t("rgeNeighborhood.delete")}</Button>}
+            <Button type="button" size="sm" variant="ghost" disabled={editingBusy} onClick={() => updateDrafts((current) => ({ ...current, active: null }))}>{t("rgeNeighborhood.close")}</Button>
             {dirty && <Button type="button" size="sm" variant="ghost" disabled={editingBusy} onClick={() => {
-              if (!window.confirm("Discard your unsaved changes?")) return;
+              if (!window.confirm(t("rgeNeighborhood.discardConfirm"))) return;
               try {
                 clearNeighborhoodMapSession(window.sessionStorage,
                   neighborhoodMapSessionKey(userId, active));
@@ -513,7 +523,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
                 delete entries[active];
                 return { active: page ? active : null, entries };
               });
-            }}>Discard changes</Button>}
+            }}>{t("rgeNeighborhood.discard")}</Button>}
           </div>
         </div>
       )}

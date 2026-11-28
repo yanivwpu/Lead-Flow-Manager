@@ -1,6 +1,8 @@
+import type { TFunction } from "i18next";
+import { formatRegionalNumber } from "@/lib/regionalFormatting";
 import { useTranslation } from "react-i18next";
 import { hasVerifiedContactEligibilityResponse } from "@shared/inventoryContactEligibility";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import { Pencil, RefreshCw, Loader2 } from "lucide-react";
@@ -53,8 +55,61 @@ function chipsFromRaw(raw: unknown): BuyerPreferenceChip[] {
   return buildBuyerPreferenceSearchChips(raw);
 }
 
+function buyerChipDisplay(chip: BuyerPreferenceChip, t: TFunction, language: string) {
+  const labels: Record<string, string> = {
+    Intent: t("rgeMatching.intent"), Area: t("rgeMatching.area"), Location: t("rgeMatching.location"),
+    Budget: t("rgeMatching.budget"), Type: t("rgeMatching.type"), Beds: t("rgeMatching.bedrooms"),
+    Baths: t("rgeMatching.bathrooms"), "Must-have": t("rgeMatching.mustHave"),
+    Pool: t("rgeMatching.pool"), Waterfront: t("rgeMatching.waterfront"), Modern: t("rgeMatching.featureModern"),
+    Gated: t("rgeMatching.featureGated"), Parking: t("rgeMatching.featureParking"),
+    "Pet-friendly": t("rgeMatching.featurePets"), "Low HOA": t("rgeMatching.lowHoa"),
+    Walkable: t("rgeMatching.featureWalkable"), Schools: t("rgeMatching.featureSchools"),
+    STR: t("rgeMatching.featureSTR"), Investor: t("rgeMatching.featureInvestor"),
+  };
+  const label = labels[chip.label] ?? chip.label;
+  let value = chip.value;
+  if (chip.id === "transactionIntent") {
+    value = value === "Rent" ? t("rgeMatching.rent") : t("rgeMatching.buy");
+  } else if (chip.id === "propertyTypes") {
+    const types: Record<string, string> = {
+      Condo: t("inboxUi.condo"), House: t("inboxUi.house"), Townhouse: t("inboxUi.townhouse"),
+      "Multi-family": t("inboxUi.multiFamily"), Land: t("inboxUi.land"),
+    };
+    value = value.split(", ").map(type => types[type] ?? type).join(", ");
+  } else if (chip.id === "beds" || chip.id === "baths") {
+    const number = value.replace(/ (?:bed|bath)$/, "").split("–").map(
+      part => formatRegionalNumber(Number(part), language, { maximumFractionDigits: 1 }),
+    ).join("–");
+    value = chip.id === "beds" ? t("rgeMatching.beds", { number }) : t("rgeMatching.baths", { number });
+  } else if (chip.id === "budget") {
+    const price = value.replace(/^(Up to |From )|\/mo$/g, "").replace(/\$([\d.]+)([kM])?/g, (_, amount, scale) =>
+      formatRegionalNumber(Number(amount) * (scale === "M" ? 1_000_000 : scale === "k" ? 1_000 : 1), language, {
+        style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1,
+      }),
+    );
+    const withPeriod = value.endsWith("/mo") ? t("rgeMatching.priceMonthly", { price }) : price;
+    value = value.startsWith("Up to ") ? t("rgeMatching.upTo", { price: withPeriod })
+      : value.startsWith("From ") ? t("rgeMatching.from", { price: withPeriod }) : withPeriod;
+  } else if (chip.id === "timeline") {
+    const timelines: Record<string, string> = {
+      ASAP: t("inboxUi.asap"), "30 days": t("inboxUi.label30Days"),
+      "60–90 days": t("inboxUi.label6090Days"), Browsing: t("inboxUi.browsing"),
+    };
+    value = timelines[value] ?? value;
+  } else if (chip.id === "financing") {
+    const financing: Record<string, string> = {
+      Cash: t("inboxUi.cash"), "Pre-approved": t("inboxUi.preApproved"), Exploring: t("inboxUi.exploring"),
+    };
+    value = financing[value] ?? value;
+  } else if (value === chip.label) {
+    value = label;
+  }
+  return { label, value };
+}
+
 function ChipBadge({ chip, valueOnly }: { chip: BuyerPreferenceChip; valueOnly?: boolean }) {
-  const { t: inboxText } = useTranslation();
+  const { t: inboxText, i18n } = useTranslation();
+  const display = buyerChipDisplay(chip, inboxText, i18n.language);
   return (
     <span
       className={cn(
@@ -66,11 +121,11 @@ function ChipBadge({ chip, valueOnly }: { chip: BuyerPreferenceChip; valueOnly?:
       title={chip.source === "inferred" ? inboxText("inboxUi.inferredFromConversation") : inboxText("inboxUi.savedExplicitly")}
     >
       {valueOnly ? (
-        <span className="truncate">{chip.value}</span>
+        <span className="truncate" dir="auto">{display.value}</span>
       ) : (
         <>
-          <span className="text-gray-500 shrink-0">{chip.label}:</span>
-          <span className="truncate">{chip.value}</span>
+          <span className="text-gray-500 shrink-0">{display.label}:</span>
+          <span className="truncate" dir="auto">{display.value}</span>
         </>
       )}
     </span>
@@ -86,6 +141,7 @@ export function BuyerPreferencesPanel({
   manualSetupOnly = false,
 }: BuyerPreferencesPanelProps) {
   const { t: inboxText } = useTranslation();
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [areas, setAreas] = useState("");
@@ -289,34 +345,35 @@ export function BuyerPreferencesPanel({
         </p>
       ) : !isFetched ? (
         <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>{inboxText("inboxUi.loading")}</p>
-      ) : null}
+      ) : <p className="text-xs text-gray-400">{inboxText("rgeMatching.buyerEmpty")}</p>}
 
+      {extractMutation.isError && <p role="alert" className="text-xs text-red-600">{inboxText("rgeMatching.buyerRefreshError")}</p>}
       </>}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-[calc(100%_-_2rem)] max-w-sm max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm">{manualSetupOnly ? inboxText("inboxUi.setUpPropertyMatching2") : inboxText("inboxUi.editBuyerPreferences")}</DialogTitle>
             <p className="text-xs text-gray-500">{inboxText("inboxUi.savingConfirmsThisContactIsSeekingRealEstate")}</p>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div>
-              <Label className="text-xs">{inboxText("inboxUi.areasCommaSeparated")}</Label>
-              <Input className="h-8 text-xs mt-1" value={areas} onChange={(e) => setAreas(e.target.value)} />
+              <Label htmlFor={`${fieldId}-areas`} className="text-xs">{inboxText("inboxUi.areasCommaSeparated")}</Label>
+              <Input id={`${fieldId}-areas`} className="h-8 text-xs mt-1" value={areas} onChange={(e) => setAreas(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">{inboxText("inboxUi.budgetMax")}</Label>
-              <Input className="h-8 text-xs mt-1" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
+              <Label htmlFor={`${fieldId}-budget`} className="text-xs">{inboxText("inboxUi.budgetMax")}</Label>
+              <Input id={`${fieldId}-budget`} className="h-8 text-xs mt-1" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">{inboxText("inboxUi.bedsMin")}</Label>
-                <Input className="h-8 text-xs mt-1" value={beds} onChange={(e) => setBeds(e.target.value)} />
+                <Label htmlFor={`${fieldId}-beds`} className="text-xs">{inboxText("inboxUi.bedsMin")}</Label>
+                <Input id={`${fieldId}-beds`} className="h-8 text-xs mt-1" value={beds} onChange={(e) => setBeds(e.target.value)} />
               </div>
               <div>
-                <Label className="text-xs">{inboxText("inboxUi.propertyType")}</Label>
+                <Label htmlFor={`${fieldId}-type`} className="text-xs">{inboxText("inboxUi.propertyType")}</Label>
                 <Select value={propertyType || "_"} onValueChange={(v) => setPropertyType(v === "_" ? "" : v)}>
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger id={`${fieldId}-type`} className="h-8 text-xs mt-1">
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
@@ -332,9 +389,9 @@ export function BuyerPreferencesPanel({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">{inboxText("inboxUi.timeline")}</Label>
+                <Label htmlFor={`${fieldId}-timeline`} className="text-xs">{inboxText("inboxUi.timeline")}</Label>
                 <Select value={timeline || "_"} onValueChange={(v) => setTimeline(v === "_" ? "" : v)}>
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger id={`${fieldId}-timeline`} className="h-8 text-xs mt-1">
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
@@ -347,9 +404,9 @@ export function BuyerPreferencesPanel({
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">{inboxText("inboxUi.financing")}</Label>
+                <Label htmlFor={`${fieldId}-financing`} className="text-xs">{inboxText("inboxUi.financing")}</Label>
                 <Select value={financing || "_"} onValueChange={(v) => setFinancing(v === "_" ? "" : v)}>
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger id={`${fieldId}-financing`} className="h-8 text-xs mt-1">
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
@@ -362,11 +419,11 @@ export function BuyerPreferencesPanel({
               </div>
             </div>
             <div>
-              <Label className="text-xs">{inboxText("inboxUi.mustHavesCommaSeparated")}</Label>
-              <Input className="h-8 text-xs mt-1" value={mustHaves} onChange={(e) => setMustHaves(e.target.value)} />
+              <Label htmlFor={`${fieldId}-requirements`} className="text-xs">{inboxText("inboxUi.mustHavesCommaSeparated")}</Label>
+              <Input id={`${fieldId}-requirements`} className="h-8 text-xs mt-1" value={mustHaves} onChange={(e) => setMustHaves(e.target.value)} />
             </div>
           </div>
-          {saveMutation.error && <p role="alert" className="text-xs text-red-600">{saveMutation.error.message}</p>}
+          {saveMutation.error && <p role="alert" className="text-xs text-red-600">{inboxText("rgeMatching.buyerSaveError")}</p>}
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>
               {inboxText("inboxUi.cancel")}

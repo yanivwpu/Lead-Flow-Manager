@@ -94,7 +94,7 @@ export async function getSavedListingMatchesForContact(
   const matches: InventoryMatchResult[] = [];
   // Bound the DB work for large shortlists while retaining saved order.
   for (let offset = 0; offset < rows.length; offset += 10) {
-    const batch = await Promise.all(rows.slice(offset, offset + 10).map(async (saved) => {
+    const batch = await Promise.all(rows.slice(offset, offset + 10).map(async (saved): Promise<InventoryMatchResult | null> => {
       const listing = await getInventoryListing(userId, saved.listingId);
       if (!listing) return null;
       const compliance = normalizeListingCompliance(listing.listingCompliance);
@@ -116,6 +116,7 @@ export async function getSavedListingMatchesForContact(
           state: listing.state,
           addressLine1: canShowPublicStreetAddress(compliance) ? listing.addressLine1 : null,
           priceCents: listing.priceCents,
+          currency: listing.currency,
           beds: l.beds,
           baths: l.baths,
           propertyType: listing.propertyType,

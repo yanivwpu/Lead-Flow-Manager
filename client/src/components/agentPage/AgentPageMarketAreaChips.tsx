@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ type Props = {
 };
 
 export function AgentPageMarketAreaChips({ value, disabled, onSave, className }: Props) {
+  const { t } = useTranslation();
   const [areas, setAreas] = useState<string[]>(() => parseAgentPageMarketAreas(value));
   const [draft, setDraft] = useState("");
 
@@ -60,14 +62,14 @@ export function AgentPageMarketAreaChips({ value, disabled, onSave, className }:
             <Badge
               key={area}
               variant="secondary"
-              className="text-xs font-normal gap-1 pr-1 max-w-full"
+              className="text-xs font-normal gap-1 pe-1 max-w-full"
             >
               <span className="truncate">{area}</span>
               {!disabled ? (
                 <button
                   type="button"
                   className="rounded-sm hover:bg-gray-300/60 p-0.5"
-                  aria-label={`Remove ${area}`}
+                  aria-label={t("rgeNeighborhood.removeArea", { name: area })}
                   onClick={() => commitAreas(areas.filter((a) => a !== area))}
                 >
                   <X className="h-3 w-3" />
@@ -77,13 +79,13 @@ export function AgentPageMarketAreaChips({ value, disabled, onSave, className }:
           ))}
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">Add cities or neighborhoods you serve.</p>
+        <p className="text-xs text-muted-foreground">{t("rgeNeighborhood.marketHelp")}</p>
       )}
       <Input
         id="agent-page-market"
         value={draft}
         disabled={disabled}
-        placeholder="e.g. Fort Lauderdale — press Enter to add"
+        placeholder={t("rgeNeighborhood.marketExample")}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === ",") {
