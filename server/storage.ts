@@ -2697,7 +2697,7 @@ export class DbStorage implements IStorage {
                  'pipelineManuallyAdded', ${contacts.sourceDetails}->'pipelineManuallyAdded',
                  'pipelineManuallyRemoved', ${contacts.sourceDetails}->'pipelineManuallyRemoved',
                  'emailPipelineSalesEvidence', ${contacts.sourceDetails}->'emailPipelineSalesEvidence'))
-          ELSE ${JSON.stringify(updates.sourceDetails ?? null)}::jsonb END`,
+          ELSE nullif(${JSON.stringify(updates.sourceDetails ?? null)}::jsonb, 'null'::jsonb) END`,
       } : {}),
       updatedAt: new Date(),
     };
