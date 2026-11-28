@@ -1216,16 +1216,16 @@ export function getLocalizedRgeLanding<T extends Record<string, unknown>>(
 export const RGE_GROWTH_COPY = {
   "en": {
     "headline": "From Local Search to Closed Deals.",
-    "support": "An AI-powered real estate growth system with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, MLS property matching where supported, and showing booking links. Connect your tools, activate your engine and focus on clients.",
+    "support": "Attract local buyers, qualify inquiries with AI and turn conversations into showing opportunities — all in one connected real estate growth system.",
     "pillars": [
       "Generate",
       "Automate",
       "Convert"
     ],
     "pillarDetails": [
-      "Local SEO & branded pages",
-      "8 ready-made workflows",
-      "AI matching & showing bookings"
+      "Get discovered locally",
+      "Reduce repetitive work",
+      "Move buyers toward appointments"
     ],
     "automationTitle": "Built for real estate. Ready out of the box.",
     "automationBody": "Activate eight preconfigured real estate workflows (W1–W8), with guided setup, CRM fields, tags, pipeline stages and templates. No need to design every workflow from scratch.",
@@ -1272,21 +1272,18 @@ export const RGE_GROWTH_COPY = {
     "networkBody": "Opt-in directory of real estate agents using WhachatCRM. Find an agent in another market and send a referral opportunity request directly.",
     "comingSoon": "Coming soon",
     "networkSteps": [
-      "Search agents by market",
-      "Send referral opportunity requests",
-      "Build cross-market relationships"
+      "Search by market",
+      "Send a referral request",
+      "Connect directly if accepted"
     ],
     "networkNote": "Referral agreements and commissions are handled independently by the respective brokers.",
     "globalTitle": "Grow your business with or without MLS access.",
-    "globalBody": "Agent Pages, Neighborhood Pages, lead capture, CRM and messaging tools are available without a US MLS feed. Connected inventory and AI property matching require a supported provider.",
+    "globalBody": "No US MLS feed? You can still use the core growth system. Connect supported inventory when available to enable listing-based tools.",
     "pricingTitle": "Simple pricing. Everything in one platform.",
-    "pricingNote": "Realtor Growth Engine and AI Brain are included with an active Pro plan. No separate activation fee.",
+    "pricingNote": "No separate activation fee.",
     "pricingItems": [
-      "8 preconfigured real estate workflows",
-      "Agent & Neighborhood Pages",
-      "AI buyer qualification and matching where supported",
-      "Showing booking links",
-      "Unified Inbox, CRM & follow-ups"
+      "AI Brain and Realtor Growth Engine included",
+      "Guided activation and setup support"
     ],
     "seoDescription": "AI real estate CRM with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, buyer qualification, supported MLS property matching and showing booking links.",
     "seoKeywords": "real estate lead generation, neighborhood pages for real estate agents, local SEO for Realtors, agent websites, real estate CRM, MLS property matching, showing booking links",
@@ -1323,35 +1320,37 @@ export const RGE_GROWTH_COPY = {
     ],
     "globalLists": [
       [
-        "Branded Agent Pages",
-        "SEO-ready Neighborhood Pages",
-        "Lead capture & CRM",
-        "Unified Inbox & automated follow-ups"
+        "Website publishing and lead generation",
+        "CRM, messaging and automation"
       ],
       [
-        "Everything available without MLS",
-        "AI property matching",
-        "Connected listing inventory",
-        "Property flyers and listing experiences"
+        "All core features",
+        "Connected inventory, AI matching and listing tools"
       ]
     ],
     "heroPhotoAlt": "Real estate agent handing keys to home buyers outside a house",
     "neighborhoodPhotoAlt": "Sunny residential neighborhood with homes and blue sky",
     "showingPhotoAlt": "Real estate agent discussing a home with prospective buyers",
-    "networkPhotoAlt": "Professionals meeting outdoors"
+    "networkPhotoAlt": "Professionals meeting outdoors",
+    "agentTitle": "Your own branded real estate presence.",
+    "agentBody": "Create a public profile with your bio, brokerage branding, market areas, custom URL and direct inquiries. Show available listings when connected.",
+    "matchingTitle": "Understand the buyer. Find the right property.",
+    "matchingBody": "AI captures buyer preferences and helps prioritize serious leads. With a supported MLS feed, match listings to location, budget and property criteria, then share personalized property flyers.",
+    "inboxTitle": "Every conversation, one workspace.",
+    "inboxBody": "Manage WhatsApp and other supported channels in the Unified Inbox. Keep contact history, pipeline stages, lead scores and AI Copilot recommendations together."
   },
   "es": {
     "headline": "De la búsqueda local al cierre de operaciones.",
-    "support": "Una plataforma inmobiliaria con IA, páginas de agentes y barrios optimizadas para SEO, ocho flujos preconfigurados, búsqueda de propiedades con MLS cuando esté disponible y enlaces para reservar visitas. Conecta tus herramientas y enfócate en tus clientes.",
+    "support": "Atrae compradores locales, califica consultas con IA y convierte conversaciones en oportunidades de visita, todo en una plataforma inmobiliaria conectada.",
     "pillars": [
       "Genera",
       "Automatiza",
       "Convierte"
     ],
     "pillarDetails": [
-      "SEO local y páginas de marca",
-      "8 flujos listos para configurar",
-      "Coincidencias y reservas de visitas"
+      "Gana visibilidad local",
+      "Reduce tareas repetitivas",
+      "Avanza hacia las citas"
     ],
     "automationTitle": "Diseñado para agentes. Listo para empezar.",
     "automationBody": "Activa ocho flujos inmobiliarios preconfigurados (W1–W8), con configuración guiada, campos del CRM, etiquetas, etapas y plantillas. No necesitas diseñar cada flujo desde cero.",
@@ -1398,21 +1397,18 @@ export const RGE_GROWTH_COPY = {
     "networkBody": "Directorio voluntario de agentes inmobiliarios que usan WhachatCRM. Encuentra un agente en otro mercado y envíale directamente una solicitud de referencia.",
     "comingSoon": "Próximamente",
     "networkSteps": [
-      "Busca agentes por mercado",
-      "Envía solicitudes de referencia",
-      "Crea relaciones en otros mercados"
+      "Busca por mercado",
+      "Envía una solicitud de referencia",
+      "Conecta directamente si la acepta"
     ],
     "networkNote": "Los acuerdos y las comisiones de referencia se gestionan de forma independiente entre los corredores correspondientes.",
     "globalTitle": "Haz crecer tu negocio con o sin acceso a MLS.",
-    "globalBody": "Las páginas de agentes y barrios, la captación, el CRM y las herramientas de mensajería funcionan sin un MLS de EE. UU. El inventario conectado y las coincidencias con IA requieren un proveedor compatible.",
+    "globalBody": "¿Sin MLS de EE. UU.? Puedes utilizar el sistema principal. Conecta inventario compatible cuando esté disponible para habilitar herramientas de propiedades.",
     "pricingTitle": "Precios simples. Todo en una plataforma.",
-    "pricingNote": "Realtor Growth Engine y AI Brain están incluidos en un plan Pro activo. Sin cargo de activación independiente.",
+    "pricingNote": "Sin cargo de activación independiente.",
     "pricingItems": [
-      "8 flujos inmobiliarios preconfigurados",
-      "Páginas de agentes y barrios",
-      "Calificación con IA y coincidencias donde estén disponibles",
-      "Enlaces para reservar visitas",
-      "Bandeja unificada, CRM y seguimiento"
+      "AI Brain y Realtor Growth Engine incluidos",
+      "Activación guiada y ayuda con la configuración"
     ],
     "seoDescription": "CRM inmobiliario con IA, páginas de agentes y barrios para SEO, ocho flujos preconfigurados, calificación, coincidencias MLS compatibles y enlaces para reservar visitas.",
     "seoKeywords": "captación inmobiliaria, páginas de barrios, SEO local para agentes inmobiliarios, sitios web de agentes, CRM inmobiliario, coincidencias MLS, reservas de visitas",
@@ -1449,35 +1445,37 @@ export const RGE_GROWTH_COPY = {
     ],
     "globalLists": [
       [
-        "Páginas de agentes con tu marca",
-        "Páginas de barrios para SEO",
-        "Captación y CRM",
-        "Bandeja unificada y seguimiento automático"
+        "Publicación web y captación",
+        "CRM, mensajería y automatización"
       ],
       [
-        "Todo lo disponible sin MLS",
-        "Coincidencias de propiedades con IA",
-        "Inventario conectado",
-        "Folletos y experiencias de propiedades"
+        "Todas las funciones principales",
+        "Inventario conectado, coincidencias con IA y herramientas de propiedades"
       ]
     ],
     "heroPhotoAlt": "Agente inmobiliario entregando llaves a compradores frente a una casa",
     "neighborhoodPhotoAlt": "Barrio residencial soleado con casas y cielo azul",
     "showingPhotoAlt": "Agente inmobiliario conversando con compradores de una vivienda",
-    "networkPhotoAlt": "Profesionales reunidos al aire libre"
+    "networkPhotoAlt": "Profesionales reunidos al aire libre",
+    "agentTitle": "Tu propia presencia inmobiliaria de marca.",
+    "agentBody": "Crea un perfil público con tu biografía, marca de la agencia, zonas, URL personalizada y consultas directas. Muestra propiedades disponibles cuando estén conectadas.",
+    "matchingTitle": "Entiende al comprador. Encuentra la propiedad adecuada.",
+    "matchingBody": "La IA captura preferencias y ayuda a priorizar leads. Con un MLS compatible, encuentra propiedades por ubicación, presupuesto y criterios, y comparte folletos personalizados.",
+    "inboxTitle": "Todas las conversaciones, un solo espacio.",
+    "inboxBody": "Gestiona WhatsApp y otros canales compatibles en la bandeja unificada. Reúne el historial, las etapas del CRM, las puntuaciones y las recomendaciones de AI Copilot."
   },
   "he": {
     "headline": "מחיפוש מקומי ועד לסגירת עסקה.",
-    "support": "מערכת צמיחה למתווכי נדל״ן עם AI, דפי סוכן ושכונה מותאמים ל-SEO, שמונה תהליכי אוטומציה מוכנים, התאמת נכסים ממאגר MLS כאשר נתמך וקישורים לתיאום סיורים. חברו את הכלים שלכם והתמקדו בלקוחות.",
+    "support": "משכו קונים מקומיים, סננו פניות בעזרת AI והפכו שיחות להזדמנויות לתיאום סיורים — במערכת צמיחה אחת לנדל״ן.",
     "pillars": [
       "יצירת לידים",
       "אוטומציה",
       "המרה"
     ],
     "pillarDetails": [
-      "SEO מקומי ודפים ממותגים",
-      "8 תהליכים מוכנים",
-      "התאמת נכסים ותיאום סיורים"
+      "הגדילו חשיפה מקומית",
+      "צמצמו עבודה חוזרת",
+      "קדמו קונים לתיאום פגישות"
     ],
     "automationTitle": "נבנה למתווכי נדל״ן. מוכן להפעלה.",
     "automationBody": "הפעילו שמונה תהליכי אוטומציה מוכנים מראש (W1–W8), עם הדרכה בהגדרה, שדות CRM, תגיות, שלבי מכירה ותבניות. אין צורך לבנות כל תהליך מאפס.",
@@ -1524,21 +1522,18 @@ export const RGE_GROWTH_COPY = {
     "networkBody": "מדריך מתווכים בהצטרפות מרצון למשתמשי WhachatCRM. חפשו מתווך באזור אחר ושלחו לו בקשה להפניית לקוח באופן ישיר.",
     "comingSoon": "בקרוב",
     "networkSteps": [
-      "חיפוש מתווכים לפי אזור",
-      "שליחת בקשות להפניה",
-      "יצירת קשרים מקצועיים באזורים נוספים"
+      "חיפוש לפי אזור",
+      "שליחת בקשת הפניה",
+      "יצירת קשר ישיר לאחר אישור"
     ],
     "networkNote": "הסכמי הפניה ועמלות מוסדרים באופן עצמאי בין משרדי התיווך הרלוונטיים.",
     "globalTitle": "הצמיחו את העסק עם או בלי גישה ל-MLS.",
-    "globalBody": "דפי סוכן ושכונה, קליטת לידים, CRM וכלי תקשורת זמינים ללא מאגר MLS אמריקאי. מלאי מחובר והתאמת נכסים עם AI דורשים ספק נתמך.",
+    "globalBody": "אין לכם מאגר MLS אמריקאי? עדיין תוכלו להשתמש במערכת הצמיחה. חברו מלאי נתמך כאשר הוא זמין כדי להפעיל כלי נכסים.",
     "pricingTitle": "תמחור פשוט. הכול במערכת אחת.",
-    "pricingNote": "Realtor Growth Engine ו-AI Brain כלולים במנוי Pro פעיל. ללא דמי הפעלה נפרדים.",
+    "pricingNote": "ללא דמי הפעלה נפרדים.",
     "pricingItems": [
-      "8 תהליכי אוטומציה מוכנים לנדל״ן",
-      "דפי סוכן ושכונה",
-      "סינון קונים עם AI והתאמת נכסים כשנתמך",
-      "קישורים לתיאום סיורים",
-      "תיבת שיחות מאוחדת, CRM ומעקבים"
+      "AI Brain ו-Realtor Growth Engine כלולים",
+      "הפעלה מודרכת וסיוע בהגדרה"
     ],
     "seoDescription": "CRM נדל״ן עם AI, דפי סוכן ושכונה לקידום אורגני, שמונה תהליכי אוטומציה מוכנים, סינון קונים, התאמת נכסים ממאגר MLS נתמך וקישורים לתיאום סיורים.",
     "seoKeywords": "יצירת לידים בנדל״ן, דפי שכונה, קידום אורגני למתווכים, אתר למתווך, CRM נדל״ן, התאמת נכסים MLS, תיאום סיורים",
@@ -1575,21 +1570,23 @@ export const RGE_GROWTH_COPY = {
     ],
     "globalLists": [
       [
-        "דפי סוכן ממותגים",
-        "דפי שכונה מותאמים ל-SEO",
-        "קליטת לידים ו-CRM",
-        "תיבת שיחות מאוחדת ומעקב אוטומטי"
+        "פרסום דפים ויצירת לידים",
+        "CRM, תקשורת ואוטומציה"
       ],
       [
-        "כל מה שזמין ללא MLS",
-        "התאמת נכסים עם AI",
-        "מלאי נכסים מחובר",
-        "פליירים ודפי נכסים"
+        "כל תכונות הליבה",
+        "מלאי מחובר, התאמת נכסים עם AI וכלי נכסים"
       ]
     ],
     "heroPhotoAlt": "מתווך מוסר מפתחות לרוכשי בית מחוץ לבית",
     "neighborhoodPhotoAlt": "שכונת מגורים שטופת שמש עם בתים ושמיים כחולים",
     "showingPhotoAlt": "מתווך משוחח עם רוכשים פוטנציאליים בבית",
-    "networkPhotoAlt": "אנשי מקצוע נפגשים בחוץ"
+    "networkPhotoAlt": "אנשי מקצוע נפגשים בחוץ",
+    "agentTitle": "נוכחות נדל״ן ממותגת משלכם.",
+    "agentBody": "צרו פרופיל ציבורי עם ביוגרפיה, מיתוג משרד התיווך, אזורי פעילות, כתובת מותאמת ופניות ישירות. הציגו נכסים זמינים כאשר המלאי מחובר.",
+    "matchingTitle": "הכירו את הקונה. מצאו את הנכס המתאים.",
+    "matchingBody": "AI מזהה העדפות ועוזר לתעדף לידים רציניים. עם מאגר MLS נתמך ניתן להתאים נכסים לפי אזור, תקציב ודרישות ולשתף פליירים מותאמים.",
+    "inboxTitle": "כל השיחות במקום אחד.",
+    "inboxBody": "נהלו WhatsApp וערוצים נתמכים נוספים בתיבת שיחות מאוחדת. רכזו היסטוריית לקוח, שלבי מכירה, דירוג לידים והמלצות AI Copilot."
   }
 } as const;
