@@ -32,6 +32,8 @@ let explicitSessionLanguage: UserLanguage | null = null;
 let explicitGeneration = 0;
 let selectionPending = false;
 let loginSelection: UserLanguage | null = null;
+const MARKETING_LANGUAGE_KEY = "whachatcrm_marketing_language_choice";
+const MARKETING_LANGUAGE_MAX_AGE = 15 * 60 * 1000;
 const LOGIN_LANGUAGE_KEY = "whachatcrm_login_language";
 
 type LoginLanguage = { accountId: string; language: UserLanguage; pending: boolean };
@@ -61,17 +63,41 @@ export function clearLoginLanguage() {
   try { sessionStorage.removeItem(LOGIN_LANGUAGE_KEY); } catch { /* optional browser storage */ }
 }
 
-/** Bind a signed-out choice only after the server confirms which account signed in. */
-export function bindLoginLanguage(accountId: string, saved: unknown) {
-  clearLoginLanguage();
-  if (!loginSelection) return;
-  writeLoginLanguage({ accountId, language: loginSelection, pending: loginSelection !== normalizeUserLanguage(saved) });
+/** Only the signed-out language selector records intent. Marketing URL sync never writes it. */
+export function getSignInLanguageSelection(): UserLanguage | null {
+  if (loginSelection) return loginSelection;
+  try {
+    const choice = JSON.parse(sessionStorage.getItem(MARKETING_LANGUAGE_KEY) || "null");
+    if (typeof choice?.chosenAt === "number" && Date.now() - choice.chosenAt < MARKETING_LANGUAGE_MAX_AGE) {
+      return normalizeUserLanguage(choice.language);
+    }
+  } catch { /* optional browser storage */ }
+  return null;
 }
 
-export function restoreLoginLanguage(accountId: string) {
+export function clearSignInLanguageSelection() {
+  try { sessionStorage.removeItem(MARKETING_LANGUAGE_KEY); } catch { /* optional browser storage */ }
+}
+
+/** Bind a signed-out choice only after the server confirms which account signed in. */
+export function bindLoginLanguage(accountId: string, saved: unknown, choice = getSignInLanguageSelection()) {
+  clearSignInLanguageSelection();
+  clearLoginLanguage();
+  if (!choice) return;
+  writeLoginLanguage({ accountId, language: choice, pending: choice !== normalizeUserLanguage(saved) });
+}
+
+export function restoreLoginLanguage(accountId: string, sessionLanguage: unknown) {
   const selection = readLoginLanguage();
-  if (selection?.accountId === accountId) explicitSessionLanguage = selection.language;
-  else clearLoginLanguage();
+  const fromSession = normalizeUserLanguage(sessionLanguage);
+  if (fromSession && (selection?.accountId !== accountId || selection.language !== fromSession)) {
+    writeLoginLanguage({ accountId, language: fromSession, pending: true });
+    explicitSessionLanguage = fromSession;
+  } else if (selection?.accountId === accountId) {
+    explicitSessionLanguage = selection.language;
+  } else {
+    clearLoginLanguage();
+  }
 }
 
 export async function saveLoginLanguage(accountId: string): Promise<boolean> {
@@ -144,7 +170,12 @@ export function finishExplicitLanguageSelection(
   if (applied) {
     explicitSessionLanguage = lang;
     if (source === "login") loginSelection = lang;
-    if (source === "browser") markTrustedLanguageSource(lang);
+    if (source === "browser") {
+      markTrustedLanguageSource(lang);
+      try {
+        sessionStorage.setItem(MARKETING_LANGUAGE_KEY, JSON.stringify({ language: lang, chosenAt: Date.now() }));
+      } catch { /* optional browser storage */ }
+    }
     if (source === "account" && accountId) writeLoginLanguage({ accountId, language: lang, pending: false });
   }
   return true;

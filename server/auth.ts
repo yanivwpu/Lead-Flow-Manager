@@ -12,7 +12,7 @@ import { storage } from './storage';
 import type { User } from '@shared/schema';
 import { toClientUser } from '@shared/userClientDto';
 import { isDisposableEmail } from '@shared/disposableEmail';
-import { normalizeUserLanguage } from '@shared/userLanguage';
+import { isSupportedUserLanguage, normalizeUserLanguage, type UserLanguage } from '@shared/userLanguage';
 import {
   AUTH_RATE_LIMIT_MESSAGE,
   LOGIN_RATE_LIMIT_MESSAGE,
@@ -158,6 +158,12 @@ export async function authenticatePresenceRequest(incoming: IncomingMessage) {
   const access = await resolveInboxWorkspace(req);
   if (!access) throw new Error('Workspace access revoked');
   return { ...access, userName: req.user.name };
+}
+
+declare module "express-session" {
+  interface SessionData {
+    loginLanguage?: { accountId: string; language: UserLanguage };
+  }
 }
 
 export function setupAuth(app: Express, options: { store?: session.Store } = {}) {
@@ -894,6 +900,12 @@ export function registerAuthRoutes(app: Express) {
             return res.status(500).json({ error: 'Failed to log in' });
           }
 
+          // Passport has established the account's session on the application origin.
+          const loginLanguage = req.body.loginLanguage;
+          if (isSupportedUserLanguage(loginLanguage) && loginLanguage !== normalizeUserLanguage(user.language)) {
+            req.session.loginLanguage = { accountId: user.id, language: loginLanguage };
+          }
+
           // Extend session if remember me is checked (30 days vs 7 days default)
           if (rememberMe && req.session.cookie) {
             req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -921,7 +933,12 @@ export function registerAuthRoutes(app: Express) {
   app.get('/api/auth/me', (req, res) => {
     if (req.isAuthenticated()) {
       res.set('Cache-Control', 'no-store, private');
-      res.json(toClientUser(req.user as User));
+      const user = req.user as User;
+      const selection = req.session.loginLanguage;
+      res.json({
+        ...toClientUser(user),
+        ...(selection?.accountId === user.id ? { loginLanguage: selection.language } : {}),
+      });
     } else {
       res.set('Cache-Control', 'no-store');
       res.status(401).json({ error: 'Not authenticated' });
