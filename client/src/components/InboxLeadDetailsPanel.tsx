@@ -110,7 +110,10 @@ import { isProspectAiAttributedContact } from "@shared/prospectAI";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { formatRegionalDate, formattingLocale } from "@/lib/regionalFormatting";
 import { format, parseISO } from "date-fns";
-import { TAG_COLORS, pipelineStageOptions } from "@/lib/data";
+import { TAG_COLORS, inboxPipelineChoices, pipelineStageOptions } from "@/lib/data";
+import { usePipelineLayout } from "@/lib/usePipelineLayout";
+import { defaultPipelineLayout, pipelineStageDisplayLabel } from "@shared/pipelineLayout";
+import { canManuallyAdmitToPipeline, isSalesOpportunity } from "@shared/followUpTasks";
 import { CONVERSATION_STATUS_ROWS, conversationStatusLabel, getConversationStatusRow } from "@/lib/conversationStatusUi";
 import {
   analyzeConversation,
@@ -153,6 +156,8 @@ import { hasPropertyShowingIntent } from "@shared/aiDomainEligibility";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 import { isCrmListedContact } from "@shared/contactCrmVisibility";
 
+const DEFAULT_PIPELINE_LAYOUT = defaultPipelineLayout();
+
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'email';
 
 interface Contact {
@@ -165,6 +170,7 @@ interface Contact {
   primaryChannelOverride?: Channel;
   tag: string;
   pipelineStage: string;
+  pipelineCustomStageId?: string | null;
   notes?: string;
   followUp?: string | null;
   followUpDate?: string | null;
@@ -315,6 +321,7 @@ interface InboxLeadDetailsPanelProps {
   /** Human-readable reason (e.g. "Customer requested: \"human\"") */
   handoffMessage?: string;
   onUpdateContact: (fields: Record<string, unknown>) => void;
+  contactUpdatePending?: boolean;
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
   onDeleteContact: () => void;
@@ -888,6 +895,7 @@ export function InboxLeadDetailsPanel({
   handoffEventId = null,
   handoffMessage,
   onUpdateContact,
+  contactUpdatePending,
   onUpdateConversationStatus,
   onEditContact,
   onDeleteContact,
@@ -901,7 +909,11 @@ export function InboxLeadDetailsPanel({
 }: InboxLeadDetailsPanelProps) {
   const { t: inboxText, i18n: locale } = useTranslation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, sessionAligned } = useAuth();
+  const { query: pipelineLayoutQuery } = usePipelineLayout(user?.id, sessionAligned && Boolean(primaryConversation));
+  const pipelineConfig = sessionAligned && pipelineLayoutQuery.data?.workspaceId === contact.userId
+    ? pipelineLayoutQuery.data
+    : undefined;
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const { data: subscription } = useSubscription();
   const shopHint = useShopifyShopHint();
@@ -1614,6 +1626,39 @@ export function InboxLeadDetailsPanel({
     queryFn: fetchInventoryStatus,
     staleTime: 60_000,
   });
+
+  const pipelineStages = pipelineConfig?.stages ?? DEFAULT_PIPELINE_LAYOUT;
+  const pipelineChoices = inboxPipelineChoices(
+    pipelineStages,
+    contact.pipelineStage,
+    contact.pipelineCustomStageId,
+    !hideGrowthEngine && (
+      workspaceIntelligence?.growthEngines?.rgeInstalled === true || inventoryStatus?.rgeInstalled === true
+    ),
+  );
+  const canAdmit = canManuallyAdmitToPipeline(contact);
+  const isOpportunity = isSalesOpportunity(contact);
+  const canAddCurrentStage = canAdmit && !isOpportunity &&
+    pipelineStages.some(stage => stage.id === pipelineChoices.value);
+  const updatePipelineChoice = (columnId: string, admitCurrentStage = false) => {
+    if (!pipelineConfig || pipelineLayoutQuery.isError || contactUpdatePending ||
+        (columnId === pipelineChoices.value && !admitCurrentStage)) return;
+    const column = pipelineStages.find(stage => stage.id === columnId);
+    if (column) {
+      const canonicalStage = column.canonicalStage ?? column.id;
+      const admit = canAdmit && (!isOpportunity || !isSalesOpportunity({ ...contact, pipelineStage: canonicalStage }));
+      onUpdateContact({
+        pipelineLayoutMove: {
+          workspaceId: pipelineConfig.workspaceId,
+          revision: pipelineConfig.revision,
+          columnId,
+          ...(admit ? { admit: true } : {}),
+        },
+      });
+    } else {
+      onUpdateContact({ pipelineStage: columnId });
+    }
+  };
 
   const {
     data: inventorySources,
@@ -3057,10 +3102,22 @@ export function InboxLeadDetailsPanel({
                   className={cn("font-medium", conversationStatusRow.textClass)}
                 />
                 <InboxDetailChoice
-                  value={contact.pipelineStage}
-                  label={inboxText("inboxUi.stage")}
-                  options={contactPipelineStageOptions.map(stage => ({ value: stage, label: crmStageLabel(inboxText, stage) }))}
-                  onChange={stage => onUpdateContact({ pipelineStage: stage })}
+                  value={pipelineChoices.value}
+                  label={pipelineLayoutQuery.isError ? inboxText("followups.layoutLoadFailed") : inboxText("inboxUi.stage")}
+                  options={(pipelineLayoutQuery.isError ? [] : pipelineChoices.stageIds).map(stage => {
+                    const label = pipelineStageDisplayLabel(pipelineStages, stage, locale.language);
+                    return { value: stage, label: label === stage ? crmStageLabel(inboxText, stage) : label };
+                  })}
+                  onChange={columnId => updatePipelineChoice(columnId)}
+                  disabled={!sessionAligned || contactUpdatePending ||
+                    (!pipelineConfig && !pipelineLayoutQuery.isError)}
+                  action={pipelineLayoutQuery.isError ? {
+                    label: inboxText("common.tryAgain"),
+                    onSelect: () => void pipelineLayoutQuery.refetch(),
+                  } : canAddCurrentStage ? {
+                    label: inboxText("inboxUi.addToPipeline"),
+                    onSelect: () => updatePipelineChoice(pipelineChoices.value, true),
+                  } : undefined}
                   dir={locale.dir()}
                   testId="select-pipeline"
                 />

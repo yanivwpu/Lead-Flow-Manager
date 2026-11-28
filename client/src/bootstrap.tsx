@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { syncDocumentLanguage } from "./lib/documentLanguage";
+import { getLoginTransitionLanguage } from "./lib/userLanguagePreference";
 import i18n, { changeLanguage } from "./lib/i18n";
 import { parseLocalizedPath, hasLocalizedVersion } from "@shared/localeRoutes";
 import {
@@ -30,15 +32,19 @@ async function mount() {
     overwriteUntrustedLanguageCache(localStorage);
   }
 
-  // Mount immediately — do not block first paint / LCP on locale JSON.
-  // Homepage above-fold copy uses sync shared homepage locales; below-fold
-  // sections update when the locale bundle finishes loading.
+  const isAppPath = parsed.englishPath === "/app" || parsed.englishPath.startsWith("/app/");
+  const loginLocale = isAppPath ? getLoginTransitionLanguage() : null;
+  if (loginLocale) syncDocumentLanguage(document, window.location.pathname, loginLocale);
+  if (loginLocale || (parsed.englishPath === "/auth" && (lang === "he" || lang === "es"))) {
+    await changeLanguage(loginLocale ?? (lang === "he" ? "he" : "es"));
+  }
+
+  // Public pages mount immediately. AuthProvider restores the account language before publishing its session.
   createRoot(document.getElementById("root")!).render(<App />);
 
-  if (lang === "he" || lang === "es") {
+  if (!isAppPath && (lang === "he" || lang === "es") && i18n.language !== lang) {
     await changeLanguage(lang);
-  } else if (lang === "en" && i18n.language !== "en") {
-    // Clear stale non-English i18n (LanguageDetector / localStorage).
+  } else if (!isAppPath && lang === "en" && i18n.language !== "en") {
     await changeLanguage("en");
   }
 }

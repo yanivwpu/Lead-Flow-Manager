@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeUserLanguage } from "./userLanguage";
 
 // Stable CRM identifiers. These are used by lead scoring, integrations and automations.
 // Additional board columns have stable separate IDs and map to one of these CRM values.
@@ -7,10 +8,16 @@ export type PipelineStageId = typeof PIPELINE_STAGE_IDS[number];
 
 const customIdSchema = z.string().regex(/^custom:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 export const isCustomPipelineStageId = (value: string): boolean => customIdSchema.safeParse(value).success;
+const stageLabelSchema = z.string().trim().min(1).max(60).refine(value => !/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(value));
 const stageLayoutSchema = z.object({
   id: z.union([z.enum(PIPELINE_STAGE_IDS), customIdSchema]),
   canonicalStage: z.enum(PIPELINE_STAGE_IDS).optional(),
-  label: z.string().trim().min(1).max(60).refine(value => !/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(value)),
+  label: stageLabelSchema,
+  localizedLabels: z.object({
+    en: stageLabelSchema.optional(),
+    he: stageLabelSchema.optional(),
+    es: stageLabelSchema.optional(),
+  }).strict().optional(),
 }).strict();
 
 export const MAX_PIPELINE_COLUMNS = 15;
@@ -21,6 +28,9 @@ export const pipelineLayoutSchema = z.array(stageLayoutSchema).min(PIPELINE_STAG
   }
   if (stages.some(stage => isCustomPipelineStageId(stage.id) !== Boolean(stage.canonicalStage))) {
     ctx.addIssue({ code: "custom", message: "Custom columns require a standard CRM stage; standard columns cannot be remapped" });
+  }
+  if (stages.some(stage => stage.localizedLabels && !isCustomPipelineStageId(stage.id))) {
+    ctx.addIssue({ code: "custom", message: "Localized labels are only supported for custom columns" });
   }
   if (new Set(stages.map(stage => stage.label.normalize('NFKC').toLowerCase())).size !== stages.length) {
     ctx.addIssue({ code: 'custom', message: 'Stage labels must be unique' });
@@ -50,14 +60,17 @@ export function orderedPipelineStages(layout: readonly PipelineStageLayout[], ob
   return [...new Set<string>([...layout.map(stage => stage.id), ...observed])];
 }
 
-export function pipelineStageDisplayLabel(layout: readonly PipelineStageLayout[], id: string): string {
-  return layout.find(stage => stage.id === id)?.label ?? id;
+export function pipelineStageDisplayLabel(layout: readonly PipelineStageLayout[], id: string, locale?: string): string {
+  const stage = layout.find(column => column.id === id);
+  const language = normalizeUserLanguage(locale);
+  return (language && stage?.localizedLabels?.[language]) || stage?.label || id;
 }
 
 export const pipelineLayoutMoveSchema = z.object({
   workspaceId: z.string().min(1).max(128),
-  revision: z.number().int().min(1).max(2147483646),
-  columnId: customIdSchema,
+  revision: z.number().int().min(0).max(2147483646),
+  columnId: stageLayoutSchema.shape.id,
+  admit: z.literal(true).optional(),
 }).strict();
 export type PipelineLayoutMove = z.infer<typeof pipelineLayoutMoveSchema>;
 

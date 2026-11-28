@@ -1,8 +1,8 @@
 import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inboxSendCoordination";
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
-import { pipelineLayoutSchema, isCustomPipelineStageId } from "@shared/pipelineLayout";
-import { isSalesOpportunity, isPassiveEmailIdentity } from "@shared/followUpTasks";
+import { defaultPipelineLayout, pipelineLayoutSchema, isCustomPipelineStageId } from "@shared/pipelineLayout";
+import { canManuallyAdmitToPipeline, isSalesOpportunity, isPassiveEmailIdentity } from "@shared/followUpTasks";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
@@ -652,13 +652,19 @@ export function registerContactRoutes(app: Express): void {
       const { pipelineLayoutMove, ...contactFields } = parsedPatch.data;
       const body: Record<string, any> = { ...contactFields };
       if (pipelineLayoutMove) {
-        if (!isSalesOpportunity(contact)) return res.status(409).json({ error: "Contact is not an existing sales opportunity" });
+        if (!req.is("application/json")) return res.status(400).json({ error: "JSON pipeline move required" });
         if (Object.keys(body).length || pipelineLayoutMove.workspaceId !== inboxWorkspaceId(req)) return res.status(409).json({ error: "Workspace or pipeline changed" });
         const [layout] = await db.select().from(workspacePipelineLayouts).where(eq(workspacePipelineLayouts.workspaceId, inboxWorkspaceId(req))).limit(1);
-        const column = layout && layout.revision === pipelineLayoutMove.revision && pipelineLayoutSchema.parse(layout.stages).find(stage => stage.id === pipelineLayoutMove.columnId);
-        if (!column || !column.canonicalStage) return res.status(409).json({ error: "Pipeline changed; refresh before moving" });
-        body.pipelineStage = column.canonicalStage;
-        body.pipelineCustomStageId = column.id;
+        const stages = layout ? pipelineLayoutSchema.parse(layout.stages) : defaultPipelineLayout();
+        const column = (layout?.revision ?? 0) === pipelineLayoutMove.revision
+          ? stages.find(stage => stage.id === pipelineLayoutMove.columnId)
+          : undefined;
+        if (!column) return res.status(409).json({ error: "Pipeline changed; refresh before moving" });
+        if (pipelineLayoutMove.admit ? !canManuallyAdmitToPipeline(contact) : column.canonicalStage && !isSalesOpportunity(contact)) {
+          return res.status(409).json({ error: "Contact is not eligible for this pipeline move" });
+        }
+        body.pipelineStage = column.canonicalStage ?? column.id;
+        body.pipelineCustomStageId = column.canonicalStage ? column.id : null;
       } else if (Object.prototype.hasOwnProperty.call(body, "pipelineStage")) {
         if (isCustomPipelineStageId(body.pipelineStage)) return res.status(400).json({ error: "Use the configured pipeline column" });
         body.pipelineCustomStageId = null;
@@ -725,13 +731,16 @@ export function registerContactRoutes(app: Express): void {
 
       const updated = await storage.updateContact(req.params.id, body, {
         expectedWorkspaceUserId: inboxWorkspaceId(req), expectedActorUserId: req.user.id,
-        ...(pipelineLayoutMove ? { expectedPipelineLayoutRevision: pipelineLayoutMove.revision } : {}),
+        ...(pipelineLayoutMove ? { expectedPipelineLayoutRevision: pipelineLayoutMove.revision, admitToPipeline: pipelineLayoutMove.admit } : {}),
         ...(identityVersion ? { expectedUpdatedAt, requireUnsyncedIdentity: true } : {}),
       });
       if (!updated && pipelineLayoutMove) return res.status(409).json({ error: "Pipeline or workspace changed; refresh before moving" });
       if (!updated && !identityVersion) return res.status(403).json({ error: "Workspace or assignment permission changed" });
       if (identityVersion && !updated) return res.status(409).json({ error: "Customer information changed. Refresh before editing." });
-      if (updated && Object.prototype.hasOwnProperty.call(body, "assignedTo") && contact.assignedTo !== updated.assignedTo) {
+      if (updated && (contact.assignedTo !== updated.assignedTo ||
+          contact.pipelineStage !== updated.pipelineStage ||
+          contact.pipelineCustomStageId !== updated.pipelineCustomStageId ||
+          pipelineLayoutMove?.admit)) {
         notifyUser(inboxWorkspaceId(req), { type: "contact_updated", contactId: updated.id });
       }
       if (clearingFollowUp) await clearActiveAppointmentsForContact(inboxWorkspaceId(req), req.params.id);

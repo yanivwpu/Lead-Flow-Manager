@@ -16,6 +16,8 @@ import { WebSocket } from "ws";
 import { rateLimit } from "express-rate-limit";
 import * as schema from "../shared/schema";
 import { defaultPipelineLayout } from "../shared/pipelineLayout";
+import { isSalesOpportunity } from "../shared/followUpTasks";
+import { inboxPipelineChoices } from "../client/src/lib/data";
 
 // All database calls below use isolated in-memory PostgreSQL. No provider is invoked.
 process.env.DATABASE_URL ||= "postgresql://fixture:fixture@127.0.0.1:1/unused";
@@ -199,6 +201,15 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal(initial.workspaceId, "owner-a");
       assert.equal(initial.revision, 0);
       assert.deepEqual(initial.stages, defaultPipelineLayout());
+      const contactPath = "/api/contacts/contact-a";
+      const defaultAdmission = { pipelineLayoutMove: { workspaceId: "owner-a", revision: 0, columnId: "Lead", admit: true } };
+      const initialContact = (await f.storage.getContact("contact-a"))!;
+      assert.equal(isSalesOpportunity(initialContact), false);
+      const admittedToDefault = await f.request("agent", contactPath, "PATCH", defaultAdmission);
+      assert.equal(admittedToDefault.status, 200);
+      assert.equal(isSalesOpportunity(await admittedToDefault.json()), true);
+      await f.database.update(schema.contacts).set({ sourceDetails: initialContact.sourceDetails })
+        .where(eq(schema.contacts.id, initialContact.id));
       const admin = await editor("admin");
       assert.notEqual(admin.layout.csrfToken, owner.layout.csrfToken);
       const stages = defaultPipelineLayout();
@@ -229,17 +240,30 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal(reset.status, 200);
       assert.equal((await reset.json()).revision, 2);
       const draftId = "custom:" + randomUUID();
-      const draft = [...defaultPipelineLayout(), { id: draftId, label: "Design and measurements", canonicalStage: "Proposal" }];
+      const draft = [...defaultPipelineLayout(), { id: draftId, label: "Design & Measurements", canonicalStage: "Proposal" }];
       const configured = await f.request("owner-a", path, "PATCH", { ...payload, revision: 2, stages: draft }, owner.headers);
       assert.equal(configured.status, 200);
       const configuration = await configured.json();
       const id = configuration.stages[5].id;
       assert.notEqual(id, draftId);
       assert.equal(configuration.revision, 3);
-      const contactPath = "/api/contacts/contact-a";
+      assert.equal((await f.request("agent", contactPath, "PATCH", defaultAdmission)).status, 409);
       const move = { pipelineLayoutMove: { workspaceId: "owner-a", revision: 3, columnId: id } };
       assert.equal((await f.request("agent", contactPath, "PATCH", move)).status, 409, "only existing opportunities are board-movable");
-      assert.equal((await f.request("owner-a", contactPath, "PATCH", { pipelineStage: "Proposal" })).status, 200);
+      const admission = { pipelineLayoutMove: { ...move.pipelineLayoutMove, admit: true } };
+      assert.equal((await f.request("owner-b", contactPath, "PATCH", admission)).status, 404);
+      assert.equal((await f.request("agent", contactPath, "PATCH", admission, { Origin: "https://foreign.example" })).status, 403);
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineLayoutMove: { ...admission.pipelineLayoutMove, revision: 2 } })).status, 409);
+      await f.database.update(schema.contacts).set({ tag: "Do Not Contact" }).where(eq(schema.contacts.id, initialContact.id));
+      assert.equal((await f.request("agent", contactPath, "PATCH", admission)).status, 409);
+      await f.database.update(schema.contacts).set({ tag: initialContact.tag }).where(eq(schema.contacts.id, initialContact.id));
+      const admittedToCustom = await f.request("agent", contactPath, "PATCH", admission);
+      assert.equal(admittedToCustom.status, 200);
+      const admitted = await admittedToCustom.json();
+      assert.equal(isSalesOpportunity(admitted), true);
+      assert.equal(admitted.pipelineStage, "Proposal");
+      assert.equal(admitted.pipelineCustomStageId, id);
+      assert.deepEqual(admitted.sourceDetails, { ...initialContact.sourceDetails as object, pipelineManuallyAdded: true });
       assert.equal((await f.request("owner-b", contactPath, "PATCH", move)).status, 404);
       assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineLayoutMove: { ...move.pipelineLayoutMove, workspaceId: "owner-b" } })).status, 409);
       assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineLayoutMove: { ...move.pipelineLayoutMove, revision: 2 } })).status, 409);
@@ -253,6 +277,14 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal(movedContact.pipelineCustomStageId, id);
       const inbox = await (await f.request("agent", "/api/inbox")).json();
       assert.equal(inbox.find((row: any) => row.contact.id === "contact-a").contact.pipelineCustomStageId, id);
+      const reopened = (await (await f.request("agent", contactPath)).json()).contact;
+      assert.equal(inboxPipelineChoices(configuration.stages, reopened.pipelineStage, reopened.pipelineCustomStageId, false).value, id);
+      // A board move to the mapped canonical column must clear the custom assignment.
+      assert.equal((await f.request("agent", contactPath, "PATCH", { pipelineStage: "Proposal" })).status, 200);
+      const movedBack = (await (await f.request("agent", contactPath)).json()).contact;
+      assert.equal(movedBack.pipelineCustomStageId, null);
+      assert.equal(inboxPipelineChoices(configuration.stages, movedBack.pipelineStage, movedBack.pipelineCustomStageId, false).value, "Proposal");
+      assert.equal((await f.request("agent", contactPath, "PATCH", move)).status, 200);
       // A direct workflow/provider stage update clears a stale custom assignment.
       await f.database.update(schema.contacts).set({ pipelineStage: "Negotiation" }).where(eq(schema.contacts.id, "contact-a"));
       assert.equal((await f.storage.getContact("contact-a"))?.pipelineCustomStageId, null);
@@ -313,7 +345,9 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
         assert.equal((await f.request("owner-a", path, "PATCH", { sourceDetails: { pipelineManuallyAdded: true } })).status, 400);
         assert.equal((await f.request("owner-b", path, "PATCH", { pipelineStage: "Contacted" })).status, 404);
         assert.equal((await f.request("owner-a", path, "PATCH", { tag: "Warm" })).status, 200);
-        assert.equal(((await f.storage.getContact("contact-a"))?.sourceDetails as any)?.pipelineManuallyAdded, undefined);
+        const passive = (await f.storage.getContact("contact-a"))!;
+        assert.equal((passive.sourceDetails as any)?.pipelineManuallyAdded, undefined);
+        assert.equal(isSalesOpportunity(passive), false);
         assert.equal((await f.request("owner-a", path, "PATCH", { pipelineStage: "Contacted" })).status, 200);
         const updated = await f.storage.getContact("contact-a");
         assert.equal(updated?.pipelineStage, "Contacted");

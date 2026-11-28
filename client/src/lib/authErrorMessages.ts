@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 export type LoginErrorKind = "invalid" | "rate_limited" | "server" | "network";
 
 export type LoginAttemptResult = {
@@ -25,18 +27,19 @@ export function minutesFromRetryAfterSec(sec: number): number {
   return Math.max(1, Math.ceil(sec / 60));
 }
 
-export function formatLoginUserMessage(result: LoginAttemptResult): string {
+export function formatLoginUserMessage(result: LoginAttemptResult, t?: TFunction): string {
   if (result.errorKind === "rate_limited") {
     const minutes = minutesFromRetryAfterSec(result.retryAfterSec || 900);
+    if (t) return t("auth.loginRateLimited", { minutes });
     return `Too many login attempts. Please wait ${minutes} minute${minutes === 1 ? "" : "s"} and try again.`;
   }
   if (result.errorKind === "server") {
-    return "The server is temporarily unavailable. Please try again in a few minutes.";
+    return t ? t("auth.loginServerError") : "The server is temporarily unavailable. Please try again in a few minutes.";
   }
   if (result.errorKind === "network") {
-    return "Connection problem. Check your network and try again.";
+    return t ? t("auth.loginNetworkError") : "Connection problem. Check your network and try again.";
   }
-  return "Invalid email or password";
+  return t ? t("auth.loginInvalid") : "Invalid email or password";
 }
 
 export function classifyLoginHttpStatus(status: number): LoginErrorKind {

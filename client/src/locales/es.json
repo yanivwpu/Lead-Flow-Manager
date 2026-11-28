@@ -292,6 +292,7 @@
     "saveAndOpen": "Guardar y Abrir"
   },
   "followups": {
+    "localizedStageNames": "Nombres visibles por idioma (opcional)",
     "dismissRecommendation": "Descartar",
     "markResolved": "Marcar como resuelta",
     "recommendationDismissed": "Recomendación descartada",
@@ -633,6 +634,12 @@
     }
   },
   "auth": {
+    "loginRateLimited": "Demasiados intentos de inicio de sesión. Vuelve a intentarlo en {{minutes}} min.",
+    "loginServerError": "El servidor no está disponible temporalmente. Inténtalo en unos minutos.",
+    "loginNetworkError": "Hubo un problema de conexión. Revisa tu red e inténtalo de nuevo.",
+    "loginInvalid": "El correo electrónico o la contraseña son incorrectos",
+    "needWalkthrough": "¿Quieres ver cómo funciona?",
+    "bookDemo": "Agendar una demo",
     "welcomeBack": "Bienvenido de nuevo",
     "createAccount": "Crea tu cuenta",
     "crmHandoffHeading": "Termina de conectar tu CRM",
@@ -3861,6 +3868,7 @@
     "chooseYear": "Elegir año"
   },
   "inboxUi": {
+    "addToPipeline": "Añadir al pipeline",
     "whatsappSetupIncomplete": "La configuración de WhatsApp está incompleta. Complétala en Configuración para poder enviar mensajes.",
     "conversationOpen": "Abierta",
     "conversationPending": "Pendiente",

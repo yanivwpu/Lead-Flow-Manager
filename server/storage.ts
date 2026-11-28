@@ -194,6 +194,7 @@ export type UpdateContactOptions = {
   /** Optimistic identity edit: never overwrite a newer synchronized customer snapshot. */
   expectedUpdatedAt?: Date;
   expectedPipelineLayoutRevision?: number;
+  admitToPipeline?: boolean;
   requireUnsyncedIdentity?: boolean;
 };
 
@@ -2651,10 +2652,10 @@ export class DbStorage implements IStorage {
       ) OR ((${contacts.assignedTo} IS NULL OR ${contacts.assignedTo} = ${actor})
         AND (${assignee}::varchar IS NULL OR ${assignee} = ${actor})))` : undefined,
       options?.expectedUpdatedAt ? sql`date_trunc('milliseconds', ${contacts.updatedAt}) = ${options.expectedUpdatedAt.toISOString()}::timestamp` : undefined,
-      options?.expectedPipelineLayoutRevision !== undefined ? sql`EXISTS (
-        SELECT 1 FROM workspace_pipeline_layouts layout WHERE layout.workspace_id = ${contacts.userId}
-          AND layout.revision = ${options.expectedPipelineLayoutRevision}
-      )` : undefined,
+      options?.expectedPipelineLayoutRevision !== undefined ? sql`coalesce((
+        SELECT layout.revision FROM workspace_pipeline_layouts layout WHERE layout.workspace_id = ${contacts.userId}
+      ), 0) = ${options.expectedPipelineLayoutRevision}` : undefined,
+      options?.admitToPipeline ? sql`lower(trim(${contacts.tag})) NOT IN ('unqualified', 'do not contact')` : undefined,
       options?.requireUnsyncedIdentity ? sql`coalesce(${contacts.source}, '') <> 'shopify' AND coalesce(${contacts.customFields}->>'lastCommerceSource', '') <> 'shopify' AND ${contacts.customFields}->>'shopifyCustomerId' IS NULL AND ${contacts.sourceDetails}->>'shopifyCustomerId' IS NULL` : undefined);
     const hasBuyerPref = Object.prototype.hasOwnProperty.call(updates, "buyerPreferenceProfile");
 
@@ -2679,17 +2680,24 @@ export class DbStorage implements IStorage {
       return this.updateContact(id, rest, options);
     }
 
+    const values = {
+      ...updates,
+      ...(options?.admitToPipeline ? {
+        sourceDetails: sql`coalesce(${contacts.sourceDetails}, '{}'::jsonb) || '{"pipelineManuallyAdded":true}'::jsonb`,
+      } : {}),
+      updatedAt: new Date(),
+    };
     const before = await this.getContact(id);
     if (!before) {
       const result = await db.update(contacts)
-        .set({ ...updates, updatedAt: new Date() })
+        .set(values)
         .where(writeScope)
         .returning();
       return result[0];
     }
 
     const result = await db.update(contacts)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(values)
       .where(writeScope)
       .returning();
     const after = result[0];

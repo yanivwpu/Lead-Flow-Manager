@@ -290,6 +290,7 @@
     "saveAndOpen": "Save & Open"
   },
   "followups": {
+    "localizedStageNames": "Display names by language (optional)",
     "dismissRecommendation": "Dismiss",
     "markResolved": "Mark resolved",
     "recommendationDismissed": "Recommendation dismissed",
@@ -812,6 +813,12 @@
     }
   },
   "auth": {
+    "loginRateLimited": "Too many login attempts. Try again in {{minutes}} min.",
+    "loginServerError": "The server is temporarily unavailable. Please try again in a few minutes.",
+    "loginNetworkError": "Connection problem. Check your network and try again.",
+    "loginInvalid": "Invalid email or password",
+    "needWalkthrough": "Need a walkthrough?",
+    "bookDemo": "Book a demo",
     "welcomeBack": "Welcome back",
     "createAccount": "Create your account",
     "crmHandoffHeading": "Finish connecting your CRM",
@@ -3836,6 +3843,7 @@
     "chooseYear": "Choose year"
   },
   "inboxUi": {
+    "addToPipeline": "Add to pipeline",
     "whatsappSetupIncomplete": "WhatsApp setup incomplete — finish WhatsApp setup in Settings to send messages.",
     "conversationOpen": "Open",
     "conversationPending": "Pending",

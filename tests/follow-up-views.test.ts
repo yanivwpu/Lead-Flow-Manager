@@ -222,6 +222,27 @@ test('CRM directions and deal labels localize while filter and pipeline selector
   }
 });
 
+test('custom stage display names translate without changing the pipeline column or move value', async () => {
+  reset();
+  const id = 'custom:22222222-2222-4222-8222-222222222222';
+  const labels = { en: 'Design & Measurements', he: 'תכנון ומדידות', es: 'Diseño y mediciones' };
+  state.layout = { workspaceId: 'fixture', canEdit: true, revision: 1, stages: [
+    ...defaultPipelineLayout(), { id, label: labels.en, canonicalStage: 'Proposal', localizedLabels: labels },
+  ] };
+  try {
+    for (const [language, label] of Object.entries(labels)) {
+      await i18n.changeLanguage(language);
+      const document = render('pipeline');
+      assert.equal(document.querySelector(`[data-testid="pipeline-column-${id}"] h3`)?.textContent, label);
+      assert.equal(document.querySelector(`[data-testid="pipeline-move-deal"] option[value="${id}"]`)?.textContent, label);
+    }
+    assert.equal(state.writes, 0);
+  } finally {
+    reset();
+    await i18n.changeLanguage('en');
+  }
+});
+
 test('mobile pipeline exposes stage and quick actions without native dragging', () => {
   reset();
   state.mobile = true;

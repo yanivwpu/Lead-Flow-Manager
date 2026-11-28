@@ -14,8 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
 import { PipelineLayoutEditor } from "@/components/followups/PipelineLayoutEditor";
-import { withUserQueryScope } from "@/lib/accountQueryScope";
-import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, customPipelineColumn, type PipelineLayoutMove, type PipelineLayoutResponse, type PipelineStageLayout } from "@shared/pipelineLayout";
+import { usePipelineLayout } from "@/lib/usePipelineLayout";
+import { defaultPipelineLayout, orderedPipelineStages, pipelineStageDisplayLabel, customPipelineColumn, type PipelineLayoutMove, type PipelineStageLayout } from "@shared/pipelineLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   applyKPIFilter, buildFollowUpItems, getTaskStatus, hasNeedsReply, hasTask,
@@ -50,8 +50,8 @@ function kpiLabel(t: TFunction, filter: Exclude<KPIFilter, null>) {
   }
 }
 
-function localizedPipelineStage(t: Parameters<typeof crmStageLabel>[0], layout: Parameters<typeof pipelineStageDisplayLabel>[0], stage: string) {
-  const label = pipelineStageDisplayLabel(layout, stage);
+function localizedPipelineStage(t: Parameters<typeof crmStageLabel>[0], layout: Parameters<typeof pipelineStageDisplayLabel>[0], stage: string, locale: string) {
+  const label = pipelineStageDisplayLabel(layout, stage, locale);
   return label === stage ? crmStageLabel(t, stage) : label;
 }
 
@@ -281,7 +281,7 @@ function PipelineCard({
       {(chat.channel || chat.tag) && <div className="mt-2 flex flex-wrap gap-1 text-xs text-slate-600">{[chat.channel, chat.tag].filter(Boolean).map((value, index) => <span key={index} className="rounded bg-slate-100 px-1.5 py-0.5">{value}</span>)}</div>}
       <div className="mt-3 space-y-2 border-t border-slate-100 pt-2" onClick={event => event.stopPropagation()}>
         <select className="w-full min-w-0 rounded-md border border-slate-200 bg-white p-1.5 text-xs text-slate-700" aria-label={t("followups.moveDeal")} data-testid={`pipeline-move-${chat.id}`} value={stage} disabled={stagePending} onChange={event => onStageChange(chat.id, event.target.value)}>
-          {stages.map(value => <option key={value} value={value}>{localizedPipelineStage(t, layout, value)}</option>)}
+          {stages.map(value => <option key={value} value={value}>{localizedPipelineStage(t, layout, value, i18n.language)}</option>)}
         </select>
         <div className="flex flex-wrap gap-1">
           <Button type="button" size="sm" variant="ghost" className="h-auto flex-1 px-1.5 py-1 text-xs" onClick={() => onClick(chat.id)} data-testid={`pipeline-open-${chat.id}`}><MessageSquare className="h-3.5 w-3.5 shrink-0" />{t("followups.openConversation")}</Button>
@@ -304,19 +304,12 @@ function PipelineView({
   isMobile: boolean; actorId?: string; stagePending: boolean; sessionAligned: boolean;
   onSetReminder: (chat: Chat) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [filters, setFilters] = useState<PipelineFilters>(EMPTY_PIPELINE_FILTERS);
   const queryClient = useQueryClient();
-  const layoutKey = withUserQueryScope(["/api/inbox/pipeline-layout"], actorId);
-  const layoutQuery = useQuery<PipelineLayoutResponse>({
-    queryKey: layoutKey,
-    enabled: !!actorId && sessionAligned,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    retry: false,
-  });
+  const { query: layoutQuery, queryKey: layoutKey } = usePipelineLayout(actorId, sessionAligned);
   const layoutConfig = sessionAligned ? layoutQuery.data : undefined;
   const layout = layoutConfig?.stages ?? DEFAULT_PIPELINE_LAYOUT;
   const [editingLayout, setEditingLayout] = useState(false);
@@ -434,7 +427,7 @@ function PipelineView({
             <div className="p-3 border-b border-slate-200">
               <div className={cn("h-1 rounded-full mb-3", colors)} />
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0"><h3 className="break-words font-semibold text-slate-900 text-sm">{localizedPipelineStage(t, layout, stage)}</h3>{pipelineStageDisplayLabel(layout, stage) !== stage && <p className="text-[11px] text-slate-500">{crmStageLabel(t, canonical)}</p>}</div>
+                <div className="min-w-0"><h3 className="break-words font-semibold text-slate-900 text-sm">{localizedPipelineStage(t, layout, stage, i18n.language)}</h3>{pipelineStageDisplayLabel(layout, stage) !== stage && <p className="text-[11px] text-slate-500">{crmStageLabel(t, canonical)}</p>}</div>
                 <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums" aria-label={t("followups.opportunitiesCount", { total: stageChats.length })}>{stageChats.length}</span>
               </div>
             </div>
