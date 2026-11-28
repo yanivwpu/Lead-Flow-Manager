@@ -481,7 +481,9 @@ export function NeighborhoodBoundaryEditor({
                   moreRef.current?.focus();
                 }}>{t("rgeMap.undoRemoval")}</Button>}
             </div>
-            {status && <p role="status" className="mt-1 text-sm text-slate-700">{t(status, { defaultValue: t("rgeMap.locationUnavailable") })}</p>}
+            {status && <p role="status" className="mt-1 text-sm text-slate-700">{status.startsWith("rgeNeighborhoodErrors.")
+                ? t(status, { defaultValue: t("rgeMap.locationUnavailable") })
+                : t(status)}</p>}
             {shape && !safeShape && <p role="alert" className="mt-1 text-xs text-amber-700">{t("rgeMap.invalid")}</p>}
           </div>
           <div ref={mapRef} className="relative min-h-0 w-full flex-1 overflow-hidden bg-slate-100"
