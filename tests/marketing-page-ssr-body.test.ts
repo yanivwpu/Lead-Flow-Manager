@@ -10,6 +10,7 @@ import {
   PAGE_META,
 } from "../server/seo";
 import { shouldServeSpaFallback } from "../server/spaRouting";
+import { RGE_GROWTH_COPY } from "../shared/realtorGrowthEngineLandingLocales";
 
 const shell = `<!DOCTYPE html><html><head><title>Home</title><link rel="canonical" href="https://www.whachatcrm.com/" /></head><body><div id="root"></div></body></html>`;
 
@@ -41,7 +42,7 @@ const requiredRoutes = [
 ] as const;
 
 const expectedH1: Record<(typeof requiredRoutes)[number], RegExp> = {
-  "/realtor-growth-engine": /<h1>Realtor Growth Engine<\/h1>/,
+  "/realtor-growth-engine": /<h1>From Local Search to Closed Deals\.<\/h1>/,
   "/waba360-alternative": /<h1>360dialog Alternative for WhatsApp CRM and Automation<\/h1>/,
   "/wati-alternative": /<h1>WATI Alternative:/,
   "/manychat-alternative": /<h1>ManyChat Alternative:/,
@@ -88,6 +89,19 @@ for (const route of requiredRoutes) {
   assert.equal(html.includes('<div id="root"></div>'), false, `root filled for ${route}`);
 }
 
+// The growth-first copy must be present in the crawlable HTML in every locale.
+for (const locale of ["en", "he", "es"] as const) {
+  const growth = RGE_GROWTH_COPY[locale];
+  const route = locale === "en" ? "/realtor-growth-engine" : `/${locale}/realtor-growth-engine`;
+  const body = generateMarketingPageSsrHtml(route);
+  assert.ok(body?.includes(growth.headline), route);
+  assert.ok(body?.includes(growth.neighborhoodTitle), route);
+  assert.ok(body?.includes(growth.showingTitle), route);
+  assert.ok(body?.includes(growth.automationTitle), route);
+  assert.equal(growth.automationItems.length, 8, route);
+  assert.deepEqual(Object.keys(growth).sort(), Object.keys(RGE_GROWTH_COPY.en).sort(), route);
+  assert.doesNotMatch(body!, /\$199|\$99 Early Access/);
+}
 const pricingBody = generateMarketingPageSsrHtml("/pricing");
 assert.ok(pricingBody, "pricing now has crawlable SSR body");
 assert.match(pricingBody!, /Simple pricing\. Everything you need to grow\./);
