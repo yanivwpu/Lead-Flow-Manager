@@ -1233,7 +1233,7 @@ export const RGE_GROWTH_COPY = {
       "New lead capture & response",
       "Buyer qualification & routing",
       "Booking-intent prompts",
-      "Next-day follow-up",
+      "Re-engagement follow-up",
       "Quiet-lead nurture",
       "Week follow-up",
       "Opt-out & lead safety",
@@ -1290,7 +1290,33 @@ export const RGE_GROWTH_COPY = {
     ],
     "seoDescription": "AI real estate CRM with SEO-ready Agent and Neighborhood Pages, eight preconfigured workflows, buyer qualification, supported MLS property matching and showing booking links.",
     "seoKeywords": "real estate lead generation, neighborhood pages for real estate agents, local SEO for Realtors, agent websites, real estate CRM, MLS property matching, showing booking links",
-    "seoOg": "Generate leads, automate follow-ups and move buyers toward showings with a connected real estate growth system."
+    "seoOg": "Generate leads, automate follow-ups and move buyers toward showings with a connected real estate growth system.",
+    "networkEyebrow": "WhachatCRM Agent Network",
+    "enlarge": "Enlarge image",
+    "closeEnlarged": "Close enlarged image",
+    "capabilities": [
+      "SEO-ready Neighborhood Pages",
+      "Branded Agent Pages",
+      "8 preconfigured workflows",
+      "AI buyer qualification",
+      "MLS matching where supported",
+      "Showing booking links",
+      "Unified Inbox & CRM"
+    ],
+    "faqQuestions": [
+      [
+        "Do I need MLS to use the Realtor Growth Engine?",
+        "No. Agent Pages, Neighborhood Pages, CRM and lead capture can work without an MLS feed. Live inventory and AI property matching require a supported connection."
+      ],
+      [
+        "Can I use my own showing booking link?",
+        "Yes. Configure your booking link or connect Calendly to help buyers move from an inquiry toward scheduling a showing."
+      ],
+      [
+        "Is the Agent Network available now?",
+        "Not yet. We are planning an opt-in directory and direct referral requests. Agents and their brokers will handle referral arrangements independently."
+      ]
+    ]
   },
   "es": {
     "headline": "De la búsqueda local al cierre de operaciones.",
@@ -1311,7 +1337,7 @@ export const RGE_GROWTH_COPY = {
       "Captación y respuesta a nuevos leads",
       "Calificación y derivación",
       "Invitación a reservar una cita",
-      "Seguimiento al día siguiente",
+      "Seguimiento para retomar el contacto",
       "Seguimiento de leads inactivos",
       "Seguimiento semanal",
       "Bajas y protección de leads",
@@ -1368,7 +1394,33 @@ export const RGE_GROWTH_COPY = {
     ],
     "seoDescription": "CRM inmobiliario con IA, páginas de agentes y barrios para SEO, ocho flujos preconfigurados, calificación, coincidencias MLS compatibles y enlaces para reservar visitas.",
     "seoKeywords": "captación inmobiliaria, páginas de barrios, SEO local para agentes inmobiliarios, sitios web de agentes, CRM inmobiliario, coincidencias MLS, reservas de visitas",
-    "seoOg": "Capta leads, automatiza el seguimiento y ayuda a los compradores a reservar visitas con una plataforma inmobiliaria conectada."
+    "seoOg": "Capta leads, automatiza el seguimiento y ayuda a los compradores a reservar visitas con una plataforma inmobiliaria conectada.",
+    "networkEyebrow": "Red de agentes de WhachatCRM",
+    "enlarge": "Ampliar imagen",
+    "closeEnlarged": "Cerrar imagen ampliada",
+    "capabilities": [
+      "Páginas de barrios para SEO",
+      "Páginas de agentes con tu marca",
+      "8 flujos preconfigurados",
+      "Calificación de compradores con IA",
+      "Coincidencias MLS cuando estén disponibles",
+      "Enlaces para reservar visitas",
+      "Bandeja unificada y CRM"
+    ],
+    "faqQuestions": [
+      [
+        "¿Necesito MLS para usar Realtor Growth Engine?",
+        "No. Las páginas de agentes y barrios, el CRM y la captación pueden funcionar sin MLS. El inventario en vivo y las coincidencias con IA requieren una conexión compatible."
+      ],
+      [
+        "¿Puedo usar mi propio enlace para reservar visitas?",
+        "Sí. Configura tu enlace de citas o conecta Calendly para ayudar a los compradores a programar una visita."
+      ],
+      [
+        "¿Ya está disponible la red de agentes?",
+        "Todavía no. Estamos planeando un directorio voluntario y solicitudes directas de referencias. Los agentes y sus corredores gestionarán los acuerdos de forma independiente."
+      ]
+    ]
   },
   "he": {
     "headline": "מחיפוש מקומי ועד לסגירת עסקה.",
@@ -1389,7 +1441,7 @@ export const RGE_GROWTH_COPY = {
       "קליטת לידים חדשים ומענה",
       "סינון קונים והפניית פניות",
       "הצעה לתיאום פגישה",
-      "מעקב ביום שלמחרת",
+      "מעקב לחידוש הקשר",
       "מעקב אחר לידים שלא הגיבו",
       "מעקב לאחר שבוע",
       "הסרה מרשימות והגנה על לידים",
@@ -1446,6 +1498,32 @@ export const RGE_GROWTH_COPY = {
     ],
     "seoDescription": "CRM נדל״ן עם AI, דפי סוכן ושכונה לקידום אורגני, שמונה תהליכי אוטומציה מוכנים, סינון קונים, התאמת נכסים ממאגר MLS נתמך וקישורים לתיאום סיורים.",
     "seoKeywords": "יצירת לידים בנדל״ן, דפי שכונה, קידום אורגני למתווכים, אתר למתווך, CRM נדל״ן, התאמת נכסים MLS, תיאום סיורים",
-    "seoOg": "יצירת לידים, אוטומציית מעקב ותיאום סיורים במערכת נדל״ן אחת."
+    "seoOg": "יצירת לידים, אוטומציית מעקב ותיאום סיורים במערכת נדל״ן אחת.",
+    "networkEyebrow": "רשת המתווכים של WhachatCRM",
+    "enlarge": "הגדלת תמונה",
+    "closeEnlarged": "סגירת תמונה מוגדלת",
+    "capabilities": [
+      "דפי שכונה מותאמים ל-SEO",
+      "דפי סוכן ממותגים",
+      "8 תהליכי אוטומציה מוכנים",
+      "סינון קונים עם AI",
+      "התאמת נכסים מ-MLS כשנתמך",
+      "קישורים לתיאום סיורים",
+      "תיבת שיחות מאוחדת ו-CRM"
+    ],
+    "faqQuestions": [
+      [
+        "האם צריך MLS כדי להשתמש ב-Realtor Growth Engine?",
+        "לא. דפי סוכן ושכונה, CRM וקליטת לידים יכולים לפעול ללא מאגר MLS. מלאי חי והתאמת נכסים עם AI דורשים חיבור נתמך."
+      ],
+      [
+        "האם אפשר להשתמש בקישור תיאום סיורים משלי?",
+        "כן. הגדירו קישור תיאום או חברו Calendly כדי לעזור לקונים לעבור מפנייה לתיאום סיור בנכס."
+      ],
+      [
+        "האם רשת המתווכים כבר זמינה?",
+        "עדיין לא. אנו מתכננים מדריך מתווכים בהצטרפות מרצון ובקשות הפניה ישירות. המתווכים ומשרדי התיווך יסדירו את הסכמי ההפניה באופן עצמאי."
+      ]
+    ]
   }
 } as const;
