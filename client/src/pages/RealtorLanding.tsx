@@ -18,7 +18,6 @@ import {
   Search,
   FileText,
   Globe,
-  Layers,
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -40,7 +39,7 @@ import { RGE_GROWTH_COPY } from "@shared/realtorGrowthEngineLandingLocales";
 import {
   REALTOR_GROWTH_ENGINE_PATH,
 } from "@shared/pricingEntitlements";
-import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
+import { getCanonicalUrl, getHreflangLinks, localizedInternalHref } from "@shared/localeRoutes";
 
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
@@ -49,6 +48,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
       <button
         className="flex w-full items-center justify-between p-5 text-start transition-colors hover:bg-gray-50"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         data-testid={`faq-toggle-${question.slice(0, 20).replace(/\s/g, "-")}`}
       >
         <span className="text-sm font-semibold text-gray-900 md:text-base">{question}</span>
@@ -114,6 +114,7 @@ export function RealtorLanding() {
   const content = getLocalizedRgeLanding(RGE_LANDING, RGE_LANDING_SEO, locale);
   const isRTL = locale === "he";
   const growth = RGE_GROWTH_COPY[locale];
+  const screenshotLabels = { enlargeLabel: growth.enlarge, closeEnlargedLabel: growth.closeEnlarged };
   const canonicalUrl = getCanonicalUrl(REALTOR_GROWTH_ENGINE_PATH, locale, MARKETING_URL)!;
   const hreflangs = getHreflangLinks(REALTOR_GROWTH_ENGINE_PATH, MARKETING_URL);
 
@@ -204,7 +205,7 @@ export function RealtorLanding() {
             <p className="mb-8 text-lg leading-relaxed text-emerald-50/90 md:text-xl">{content.hero.support}</p>
             <div className="mb-8 grid gap-3 sm:grid-cols-3">
               {growth.pillars.map((label, index) => {
-                const Icon = [Search, Zap, Calendar][index];
+                const Icon = [Search, Zap, Calendar][index] ?? Sparkles;
                 return <div key={label} className="rounded-2xl border border-white/15 bg-white/5 p-4">
                   <Icon className="mb-2 h-5 w-5 text-emerald-300" aria-hidden />
                   <p className="font-bold text-white">{label}</p>
@@ -218,7 +219,7 @@ export function RealtorLanding() {
                 className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-white px-8 font-semibold text-emerald-950 shadow-lg transition-all hover:bg-emerald-50 hover:shadow-xl sm:w-auto"
                 data-testid="button-hero-install"
               >
-                {content.hero.cta}
+                {user ? content.hero.cta : chrome.startFreeTrial}
                 <ArrowRight className={arrowClass} />
               </button>
               <button
@@ -239,7 +240,7 @@ export function RealtorLanding() {
             className="relative"
           >
             <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-xl sm:rounded-3xl">
-              <MarketingScreenshot {...content.screenshots.inbox} size="hero" className="w-full" priority />
+              <MarketingScreenshot {...screenshotLabels} {...content.screenshots.agentPage} size="hero" className="w-full" priority />
             </div>
           </motion.div>
         </div>
@@ -250,7 +251,7 @@ export function RealtorLanding() {
           <SectionHeading title={growth.automationTitle} subtitle={growth.automationBody} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {growth.automationItems.map((label, i) => {
-              const Icon = [MessageSquare, Brain, Calendar, Clock, Users, Target, Shield, Globe][i];
+              const Icon = [MessageSquare, Brain, Calendar, Clock, Users, Target, Shield, Globe][i] ?? Sparkles;
               return <article key={label} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
                 <div className="mb-4 flex items-center justify-between"><Icon className="h-6 w-6 text-emerald-700" aria-hidden /><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-800" dir="ltr">W{i+1}</span></div>
                 <h3 className="font-semibold text-gray-900">{label}</h3>
@@ -258,7 +259,7 @@ export function RealtorLanding() {
             })}
           </div>
           <p className="mx-auto mt-6 max-w-3xl text-center text-sm text-gray-600">{growth.automationNote}</p>
-          <div className="mx-auto mt-10 max-w-4xl"><MarketingScreenshot {...content.screenshots.workflows} size="hero" /></div>
+          <div className="mx-auto mt-10 max-w-4xl"><MarketingScreenshot {...screenshotLabels} {...content.screenshots.workflows} size="hero" /></div>
         </div>
       </section>
 
@@ -300,10 +301,10 @@ export function RealtorLanding() {
           </div>
           <div className="mb-12 grid items-start gap-8 md:grid-cols-2">
             <div>
-              <MarketingScreenshot {...content.screenshots.agentPage} />
+              <MarketingScreenshot {...screenshotLabels} {...content.screenshots.agentPage} />
             </div>
             <div>
-              <MarketingScreenshot {...content.screenshots.agentSettings} />
+              <MarketingScreenshot {...screenshotLabels} {...content.screenshots.agentSettings} />
               <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5">
                 <h3 className="mb-3 text-sm font-bold text-gray-900">{content.ui.agentPageCapabilitiesTitle}</h3>
                 <CheckList items={content.agentPage.capabilities} />
@@ -368,7 +369,7 @@ export function RealtorLanding() {
             </div>
           </div>
           <div>
-            <MarketingScreenshot {...content.screenshots.leadScore} />
+            <MarketingScreenshot {...screenshotLabels} {...content.screenshots.leadScore} />
           </div>
         </div>
       </section>
@@ -384,7 +385,7 @@ export function RealtorLanding() {
             ))}
           </div>
           <div className="mb-10 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
-            <MarketingScreenshot {...content.screenshots.inventory} size="hero" className="w-full" />
+            <MarketingScreenshot {...screenshotLabels} {...content.screenshots.inventory} size="hero" className="w-full" />
           </div>
 
           <p className="mb-3 text-center text-sm font-semibold text-gray-900">{content.inventory.criteriaIntro}</p>
@@ -422,8 +423,8 @@ export function RealtorLanding() {
           </div>
           <p className="mx-auto mt-8 max-w-3xl text-center text-sm text-gray-500">{content.inventory.accuracyNote}</p>
           <div className="mt-10 grid items-start gap-8 md:grid-cols-2">
-            <MarketingScreenshot {...content.screenshots.inventoryDetail} />
-            <MarketingScreenshot {...content.screenshots.inventorySource} />
+            <MarketingScreenshot {...screenshotLabels} {...content.screenshots.inventoryDetail} />
+            <MarketingScreenshot {...screenshotLabels} {...content.screenshots.inventorySource} />
           </div>
         </div>
       </section>
@@ -549,7 +550,7 @@ export function RealtorLanding() {
             </p>
           </div>
           <div>
-            <MarketingScreenshot {...content.screenshots.workflows} />
+            <MarketingScreenshot {...screenshotLabels} {...content.screenshots.workflows} />
           </div>
         </div>
       </section>
@@ -566,10 +567,10 @@ export function RealtorLanding() {
           </div>
           <div className="grid items-start gap-8 md:grid-cols-[1.4fr_0.8fr]">
             <div>
-              <MarketingScreenshot {...content.screenshots.inbox} size="content" className="w-full" />
+              <MarketingScreenshot {...screenshotLabels} {...content.screenshots.inbox} size="content" className="w-full" />
             </div>
             <div>
-              <MarketingScreenshot {...content.screenshots.copilot} />
+              <MarketingScreenshot {...screenshotLabels} {...content.screenshots.copilot} />
               <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5">
                 <h3 className="mb-3 text-sm font-bold text-gray-900">{content.ui.copilotHelpsTitle}</h3>
                 <CheckList items={content.inbox.copilotHelps} />
@@ -601,13 +602,14 @@ export function RealtorLanding() {
       <section className="bg-emerald-950 px-4 py-16 text-white md:px-6 md:py-24" data-testid="section-agent-network">
         <div className="mx-auto grid max-w-6xl items-center gap-10 md:grid-cols-2">
           <div>
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-emerald-200">{growth.networkEyebrow}</p>
             <span className="inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-950">{growth.comingSoon}</span>
             <h2 className="mt-5 font-display text-3xl font-bold md:text-5xl">{growth.networkTitle}</h2>
             <p className="mt-5 text-lg leading-relaxed text-emerald-100">{growth.networkBody}</p>
             <p className="mt-6 text-sm text-emerald-100">{growth.networkNote}</p>
           </div>
           <div className="grid gap-3">
-            {growth.networkSteps.map((label,i)=>{const Icon=[Search,MessageSquare,Users][i];return <div key={label} className="flex items-center gap-4 rounded-2xl border border-white/15 bg-white/5 p-5"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-800"><Icon className="h-6 w-6" aria-hidden /></div><p className="text-lg font-semibold">{label}</p></div>;})}
+            {growth.networkSteps.map((label,i)=>{const Icon=[Search,MessageSquare,Users][i] ?? Users;return <div key={label} className="flex items-center gap-4 rounded-2xl border border-white/15 bg-white/5 p-5"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-800"><Icon className="h-6 w-6" aria-hidden /></div><p className="text-lg font-semibold">{label}</p></div>;})}
           </div>
         </div>
       </section>
@@ -651,7 +653,7 @@ export function RealtorLanding() {
                 {content.pricing.cta}
                 <ArrowRight className={arrowClass} />
               </button>
-              <Link href="/pricing" className="w-full sm:w-auto">
+              <Link href={localizedInternalHref("/pricing", locale)} className="w-full sm:w-auto">
                 <button
                   className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-10 text-base font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto sm:text-lg"
                   data-testid="button-pricing-plans"
@@ -692,34 +694,6 @@ export function RealtorLanding() {
       </section>
 
 
-      {/* 3. TIME / PROBLEM */}
-      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-time-problem">
-        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
-          <SectionHeading title={content.timeProblem.title} subtitle={content.timeProblem.intro} testId="text-time-title" />
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 md:p-8">
-              <h3 className="mb-4 text-lg font-bold text-gray-900">{content.ui.manualWorkTitle}</h3>
-              <ul className="space-y-2.5">
-                {content.timeProblem.manual.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-gray-700">
-                    <X className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 md:p-8">
-              <h3 className="mb-4 text-lg font-bold text-gray-900">{content.ui.withRgeTitle}</h3>
-              <CheckList items={content.timeProblem.withRge} />
-              <p className="mt-6 border-t border-emerald-100 pt-5 text-sm font-medium text-emerald-900 md:text-base">
-                {content.timeProblem.closer}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
       {/* 13. BEFORE VS WITH */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-comparison">
         <div className="mx-auto max-w-5xl xl:max-w-6xl">
@@ -745,26 +719,6 @@ export function RealtorLanding() {
       </section>
 
 
-      {/* 14. TECH STACK */}
-      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-stack">
-        <div className="mx-auto max-w-5xl xl:max-w-6xl">
-          <SectionHeading title={content.stack.title} testId="text-stack-title" />
-          <div className="mx-auto mb-8 max-w-3xl space-y-4 text-center text-base text-gray-600 md:text-lg">
-            {content.stack.body.map((p) => (
-              <p key={p}>{p}</p>
-            ))}
-          </div>
-          <div className="flex flex-wrap justify-center gap-2">
-            {content.stack.tools.map((tool) => (
-              <span key={tool} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700">
-                {tool}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-
       {/* 15. WHAT'S INCLUDED */}
       <section className="bg-emerald-950 px-4 py-16 text-white md:px-6 md:py-24" data-testid="section-included">
         <div className="mx-auto max-w-5xl xl:max-w-6xl">
@@ -781,36 +735,6 @@ export function RealtorLanding() {
       </section>
 
 
-      {/* 16. WHO IT'S FOR */}
-      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-who-for">
-        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
-          <SectionHeading title={content.whoFor.title} subtitle={content.whoFor.subtitle} testId="text-who-for-title" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {content.whoFor.audiences.map((a, idx) => {
-              const icons = [Home, Target, FileText, Users, Layers];
-              const Icon = icons[idx] ?? Users;
-              return (
-                <motion.div
-                  key={a.title}
-                  initial={{ opacity: 0, y: 16 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="rounded-2xl border border-gray-100 bg-gray-50 p-6"
-                >
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-green/10">
-                    <Icon className="h-6 w-6 text-brand-green" />
-                  </div>
-                  <h3 className="text-base font-bold text-gray-900">{a.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-600">{a.desc}</p>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-
       {/* Related products */}
       <section className="border-t border-gray-100 bg-white px-4 py-12 md:px-6 md:py-16">
         <div className="mx-auto max-w-5xl">
@@ -821,7 +745,7 @@ export function RealtorLanding() {
             {content.ui.relatedLinks.map((link) => (
               <Link
                 key={link.href}
-                href={link.href}
+                href={localizedInternalHref(link.href, locale)}
                 className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 hover:border-emerald-200 hover:bg-emerald-50"
               >
                 {link.label}
@@ -842,7 +766,7 @@ export function RealtorLanding() {
             {content.ui.faqTitle}
           </h2>
           <div className="space-y-3">
-            {content.faq.map((faq) => (
+            {[...content.faq, ...growth.faqQuestions.map(([q, a]) => ({ q, a }))].map((faq) => (
               <FaqItem key={faq.q} question={faq.q} answer={faq.a} />
             ))}
           </div>
@@ -864,7 +788,7 @@ export function RealtorLanding() {
               {content.finalCta.cta}
               <ArrowRight className={arrowClassSm} />
             </button>
-            <Link href="/pricing" className="w-full sm:w-auto">
+            <Link href={localizedInternalHref("/pricing", locale)} className="w-full sm:w-auto">
               <button
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-8 font-medium text-gray-300 transition-colors hover:bg-gray-700 sm:w-auto"
                 data-testid="button-footer-plans"
