@@ -27,12 +27,14 @@ interface LanguageSelectorProps {
   className?: string;
   /** When true (marketing chrome), navigate to the equivalent localized URL. */
   navigateOnChange?: boolean;
+  loginPreference?: boolean;
 }
 
 export function LanguageSelector({
   variant = 'default',
   className,
   navigateOnChange = false,
+  loginPreference = false,
 }: LanguageSelectorProps) {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
@@ -62,10 +64,10 @@ export function LanguageSelector({
 
   const handleLanguageChange = async (lang: SupportedLanguage) => {
     // Explicit session selection first so a slower /api/auth/me cannot overwrite it.
-    const generation = noteExplicitLanguageSelection();
+    const generation = noteExplicitLanguageSelection(!user && loginPreference ? lang : undefined);
     const pathname = window.location.pathname;
     const applied = await changeLanguage(lang, () => isCurrentLanguageSelection(generation) && window.location.pathname === pathname);
-    if (!finishExplicitLanguageSelection(generation, lang, applied)) return;
+    if (!finishExplicitLanguageSelection(generation, lang, applied, user ? "account" : loginPreference ? "login" : "browser", user?.id)) return;
     if (!applied) return;
     setCurrentLang(lang);
 
@@ -86,7 +88,7 @@ export function LanguageSelector({
   const currentLanguageInfo = supportedLanguages[currentLang];
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button 
           variant="ghost" 

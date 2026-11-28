@@ -1,3 +1,4 @@
+import { LanguageSelector } from "@/components/LanguageSelector";
 import { rememberInvitationReturn } from "@/lib/teamInvitationReturn";
 import { useState, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -128,7 +129,7 @@ export function AuthPage() {
       if (isLogin) {
         if (Date.now() < loginLockoutUntil) {
           const waitSec = Math.max(1, Math.ceil((loginLockoutUntil - Date.now()) / 1000));
-          setError(formatLoginUserMessage({ ok: false, errorKind: "rate_limited", retryAfterSec: waitSec }));
+          setError(formatLoginUserMessage({ ok: false, errorKind: "rate_limited", retryAfterSec: waitSec }, t));
           return;
         }
         const result = await login(email, password, rememberMe);
@@ -141,7 +142,7 @@ export function AuthPage() {
             const waitMs = Math.max(1, result.retryAfterSec || 900) * 1000;
             setLoginLockoutUntil(Date.now() + waitMs);
           }
-          setError(formatLoginUserMessage(result));
+          setError(formatLoginUserMessage(result, t));
         }
       } else {
         const attempt = beginSignupTurnstileAttempt({
@@ -227,6 +228,7 @@ export function AuthPage() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 my-4"
         >
+          <div className="mb-2 flex justify-end"><LanguageSelector loginPreference /></div>
           <div className="mb-6 md:mb-8 text-center">
             <h2 className="text-xl md:text-2xl font-bold text-gray-900 font-display">
               {isCrmHandoffAuth
@@ -287,13 +289,13 @@ export function AuthPage() {
               />
               {isLogin && (
                 <p className="text-[10px] text-gray-400 mt-1">
-                  Need a walkthrough?{" "}
+                  {t("auth.needWalkthrough")}{" "}
                   <button
                     type="button"
                     className="underline hover:text-gray-600"
                     onClick={() => setShowDemoModal(true)}
                   >
-                    Book a demo
+                    {t("auth.bookDemo")}
                   </button>
                 </p>
               )}

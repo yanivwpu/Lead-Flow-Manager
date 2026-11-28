@@ -204,8 +204,8 @@ test("LanguageSelector is the only trusted source writer", () => {
   const marketing = readFileSync(join(root, "client/src/lib/marketingLocaleRouting.ts"), "utf8");
   assert.match(pref, /noteExplicitLanguageSelection/);
   assert.match(pref, /TRUSTED_LANGUAGE_SOURCE/);
-  assert.match(selector, /noteExplicitLanguageSelection\(\)/);
-  assert.match(selector, /finishExplicitLanguageSelection\(generation, lang, applied\)/);
+  assert.match(selector, /noteExplicitLanguageSelection\(!user && loginPreference \? lang : undefined\)/);
+  assert.match(selector, /finishExplicitLanguageSelection\(generation, lang, applied, user \? "account" : loginPreference \? "login" : "browser", user\?\.id\)/);
   assert.doesNotMatch(i18n, /LANGUAGE_SOURCE_KEY|whachatcrm_language_source/);
   assert.doesNotMatch(marketing, /LANGUAGE_SOURCE_KEY|whachatcrm_language_source/);
 });
