@@ -8,6 +8,7 @@ export const inventoryMatchListingSummarySchema = z.object({
   state: z.string().nullable(),
   addressLine1: z.string().nullable(),
   priceCents: z.number().nullable(),
+  currency: z.string().nullable().optional(),
   beds: z.number().nullable(),
   baths: z.number().nullable(),
   propertyType: z.string().nullable(),

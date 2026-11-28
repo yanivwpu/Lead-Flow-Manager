@@ -116,6 +116,7 @@ export async function getSavedListingMatchesForContact(
           state: listing.state,
           addressLine1: canShowPublicStreetAddress(compliance) ? listing.addressLine1 : null,
           priceCents: listing.priceCents,
+          currency: listing.currency,
           beds: l.beds,
           baths: l.baths,
           propertyType: listing.propertyType,

@@ -1,3 +1,6 @@
+import { lastSuccessfulSyncIso } from "@/lib/inventorySourceConnectionUi";
+import type { TFunction } from "i18next";
+import { formatRegionalDate, formatRegionalNumber } from "@/lib/regionalFormatting";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -146,8 +149,25 @@ function normalizeMaxListingsSelectValue(value: number | undefined): string {
   return String(normalized ?? DEFAULT_MAX_LISTINGS);
 }
 
+function inventoryProviderError(raw: string, t: TFunction): string {
+  const safeMessage = friendlyInventoryErrorMessage(raw.replace(/^\d+:\s*/, ""));
+  if (/was rejected|were rejected|access was denied|access denied|rejected this connection/i.test(safeMessage)) return t("rgeMatching.providerAuth");
+  if (/^Too many requests/i.test(safeMessage)) return t("rgeMatching.providerRate");
+  if (/required(?: when connecting a new inventory source)?\.$/.test(safeMessage)) return t("rgeMatching.providerFields");
+  if (/^Could not reach/i.test(safeMessage)) return t("rgeMatching.providerReach");
+  return t("rgeMatching.providerUnknown");
+}
+
 export function InventorySourcesSection({ variant = "section", className }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const number = (value: number) => formatRegionalNumber(value, i18n.language);
+  const connectionLabels = {
+    connected: t("rgeMatching.connected"),
+    needs_attention: t("rgeMatching.needsAttention"),
+    disconnected: t("rgeMatching.disconnected"),
+    paused: t("rgeMatching.paused"),
+    syncing: t("rgeInventory.syncing"),
+  };
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -343,11 +363,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       setMaxListingsDraft(null);
       setReplacingSecret(false);
       if (!shouldCloseInventorySourceEditorAfterSave({ syncError: payload.syncError })) {
-        setFormBannerError(friendlyInventoryErrorMessage((payload.syncError || "").replace(/^\d+:\s*/, "")));
+        setFormBannerError(inventoryProviderError(payload.syncError || "", t));
         void refetchSources();
         toast({
           title: t("rgeInventory.savedFailed"),
-          description: friendlyInventoryErrorMessage((payload.syncError || "").replace(/^\d+:\s*/, "")),
+          description: inventoryProviderError(payload.syncError || "", t),
           variant: "destructive",
         });
         return;
@@ -370,10 +390,10 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       });
     },
     onError: (err: Error) => {
-      setFormBannerError(friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")));
+      setFormBannerError(inventoryProviderError(err.message, t));
       toast({
         title: t("rgeInventory.saveError"),
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -411,7 +431,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: err.validationFailed ? t("rgeInventory.validationFailed") : t("rgeInventory.syncFailed"),
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -463,14 +483,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: t("rgeInventory.syncPaused"),
-        description: "No new scheduled, retry, or manual syncs will run. Listings and credentials were kept.",
+        description: t("rgeMatching.pauseHelp"),
       });
       void refetchSources();
     },
     onError: (err: Error) => {
       toast({
         title: t("rgeInventory.pauseError"),
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -490,14 +510,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: t("rgeInventory.syncResumed"),
-        description: "Scheduled and manual syncs can run again. Use Sync now if you want an immediate run.",
+        description: t("rgeMatching.resumeHelp"),
       });
       void refetchSources();
     },
     onError: (err: Error) => {
       toast({
         title: t("rgeInventory.resumeError"),
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -552,7 +572,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onError: (err: Error) => {
       toast({
         title: t("rgeInventory.removeError"),
-        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        description: inventoryProviderError(err.message, t),
         variant: "destructive",
       });
     },
@@ -565,11 +585,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: t("rgeInventory.published"),
-        description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
+        description: t("rgeNeighborhood.publishedListings", { count: result.published }),
       });
     },
     onError: (err: Error) => {
-      toast({ title: t("rgeInventory.publishError"), description: err.message, variant: "destructive" });
+      toast({ title: t("rgeInventory.publishError"), description: inventoryProviderError(err.message, t), variant: "destructive" });
     },
   });
 
@@ -580,11 +600,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: t("rgeInventory.unpublished"),
-        description: `${result.unpublished.toLocaleString()} listing${result.unpublished === 1 ? "" : "s"} removed from your Agent Page.`,
+        description: t("rgeMatching.unpublishedCount", { number: number(result.unpublished) }),
       });
     },
     onError: (err: Error) => {
-      toast({ title: t("rgeInventory.unpublishError"), description: err.message, variant: "destructive" });
+      toast({ title: t("rgeInventory.unpublishError"), description: inventoryProviderError(err.message, t), variant: "destructive" });
     },
   });
 
@@ -661,6 +681,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   {connectedSummaries.map((card) => {
                     const source = sources.find((s) => s.id === card.sourceId);
                     const cardSyncing = source?.lastSyncStatus === "running";
+                    const lastSync = source ? lastSuccessfulSyncIso(source) : null;
+                    const lastSyncDate = lastSync ? new Date(lastSync) : null;
+                    const lastSyncLabel = lastSyncDate && Number.isFinite(lastSyncDate.getTime())
+                      ? formatRegionalDate(lastSyncDate, i18n.language, { dateStyle: "short", timeStyle: "short" })
+                      : t("rgeMatching.never");
                     return (
                       <div
                         key={card.sourceId}
@@ -682,7 +707,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               )}
                               data-testid="inventory-source-connection-state"
                             >
-                              {card.connectionStateLabel}
+                              {connectionLabels[card.connectionState]}
                             </span>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -720,21 +745,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           </div>
                         </div>
                         <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-700">
-                          <span className="font-semibold tabular-nums" data-testid="inventory-total-synced">{card.listingCountLabel}</span>
-                          <span>{cardSyncing ? t("rgeInventory.syncing") : card.syncPaused ? "Sync paused" : `Last successful sync ${card.lastSuccessfulSyncLabel}`}</span>
+                          <span className="font-semibold tabular-nums" data-testid="inventory-total-synced">{t("rgeMatching.syncedCap", { countShown: number(card.listingCount), cap: number(card.listingCap) })}</span>
+                          <span>{cardSyncing ? t("rgeInventory.syncing") : card.syncPaused ? t("rgeMatching.paused") : t("rgeMatching.lastSync", { time: lastSyncLabel })}</span>
                         </p>
                         {(card.listingsScanned > 0 || card.totalStoredRows > card.listingCount) && (
                           <details className="text-sm text-slate-700">
                             <summary className="cursor-pointer">{t("rgeInventory.syncDetails")}</summary>
                             <div className="mt-1 flex flex-wrap gap-3">
-                              <span data-testid="inventory-listings-scanned">{t("rgeInventory.scanned")} {card.listingsScanned.toLocaleString()}</span>
-                              <span data-testid="inventory-stored-rows">{card.totalStoredRows.toLocaleString()} stored rows</span>
+                              <span data-testid="inventory-listings-scanned">{t("rgeInventory.scanned")} {formatRegionalNumber(card.listingsScanned, i18n.language)}</span>
+                              <span data-testid="inventory-stored-rows">{t("rgeMatching.storedRows", { total: formatRegionalNumber(card.totalStoredRows, i18n.language) })}</span>
                             </div>
                           </details>
                         )}
                         {card.lastError ? (
                           <p className="text-xs text-red-700 leading-snug" data-testid="inventory-sync-error">
-                            {card.lastError}
+                            {inventoryProviderError(card.lastError, t)}
                           </p>
                         ) : null}
                         <div className="flex flex-wrap gap-2">
@@ -880,11 +905,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       >
                         {bulkPublishMutation.isPending ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            <Loader2 className="h-4 w-4 me-2 animate-spin" />
                             {t("rgeInventory.publishing")}
                           </>
                         ) : (
-                          "Publish eligible listings to Agent Page"
+                          t("rgeMatching.publishAgent")
                         )}
                       </Button>
                       <Button
@@ -899,11 +924,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       >
                         {bulkUnpublishMutation.isPending ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            <Loader2 className="h-4 w-4 me-2 animate-spin" />
                             {t("rgeInventory.unpublishing")}
                           </>
                         ) : (
-                          "Unpublish all from Agent Page"
+                          t("rgeMatching.unpublishAgent")
                         )}
                       </Button>
                     </div>
@@ -1181,7 +1206,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             type="button"
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                             onClick={() => setShowSecrets((v) => !v)}
-                            aria-label={showSecrets ? "Hide token" : "Show token"}
+                            aria-label={showSecrets ? t("rgeMatching.hideToken") : t("rgeMatching.showToken")}
                           >
                             {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -1240,7 +1265,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             type="button"
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                             onClick={() => setShowSecrets((v) => !v)}
-                            aria-label={showSecrets ? "Hide token" : "Show token"}
+                            aria-label={showSecrets ? t("rgeMatching.hideToken") : t("rgeMatching.showToken")}
                           >
                             {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -1332,7 +1357,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               type="button"
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                               onClick={() => setShowSecrets((v) => !v)}
-                              aria-label={showSecrets ? "Hide secret" : "Show secret"}
+                              aria-label={showSecrets ? t("rgeMatching.hideSecret") : t("rgeMatching.showSecret")}
                             >
                               {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
@@ -1370,11 +1395,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     >
                       {saveMutation.isPending ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <Loader2 className="h-4 w-4 me-2 animate-spin" />
                           {t("rgeInventory.saving")}
                         </>
                       ) : (
-                        "Save changes"
+                        t("rgeMatching.saveChanges")
                       )}
                     </Button>
                   </DialogFooter>
@@ -1399,11 +1424,13 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
               </p>
               {disconnectSource != null && (
                 <p>
-                  This source currently has {(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount).toLocaleString()} synced listing
-                  {(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount) === 1 ? "" : "s"}
-                  {disconnectSource.inventoryStats
-                    ? ` (${disconnectSource.inventoryStats.activeForMatching.toLocaleString()} active listings available, cap ${disconnectSource.inventoryStats.configuredCap.toLocaleString()}).`
-                    : "."}
+                  {t("rgeMatching.syncedTotal", { number: number(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount) })}
+                  {disconnectSource.inventoryStats && (
+                    <> · {t("rgeMatching.matchingCap", {
+                      active: number(disconnectSource.inventoryStats.activeForMatching),
+                      cap: number(disconnectSource.inventoryStats.configuredCap),
+                    })}</>
+                  )}
                 </p>
               )}
             </div>
@@ -1418,7 +1445,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           >
             {deleteMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 me-2 animate-spin" />
                 {t("rgeInventory.removing")}
               </>
             ) : (
@@ -1438,11 +1465,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                This will publish{" "}
-                <span className="font-medium text-gray-900 tabular-nums">
-                  {(publicationStats?.eligibleToPublish ?? 0).toLocaleString()}
-                </span>{" "}
-                MLS-eligible active/coming soon listings to your Agent Page.
+                {t("rgeMatching.publishConfirm", { number: number(publicationStats?.eligibleToPublish ?? 0) })}
               </p>
               <p>
                 {t("rgeInventory.compliance")}
@@ -1458,11 +1481,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           >
             {bulkPublishMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 me-2 animate-spin" />
                 {t("rgeInventory.publishing")}
               </>
             ) : (
-              "Publish listings"
+              t("rgeMatching.publishListings")
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -1478,11 +1501,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                This will unpublish{" "}
-                <span className="font-medium text-gray-900 tabular-nums">
-                  {(publicationStats?.publishedOnAgentPage ?? 0).toLocaleString()}
-                </span>{" "}
-                listings from your Agent Page. Inventory data stays synced — nothing is deleted.
+                {t("rgeMatching.unpublishConfirm", { number: number(publicationStats?.publishedOnAgentPage ?? 0) })}
               </p>
             </div>
           </AlertDialogDescription>
@@ -1496,11 +1515,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           >
             {bulkUnpublishMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 me-2 animate-spin" />
                 {t("rgeInventory.unpublishing")}
               </>
             ) : (
-              "Unpublish all"
+              t("rgeMatching.unpublishAll")
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

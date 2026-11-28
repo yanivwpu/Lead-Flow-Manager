@@ -13,7 +13,7 @@ import {
 } from "@/components/recommendations/RecommendationCard";
 import {
   mapInventoryMatchToRecommendation,
-  shortInventoryMatchReason,
+  localizedInventoryMatchReason,
 } from "@/components/inventory/inventoryMatchRecommendation";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 
@@ -38,10 +38,10 @@ export function InventoryMatchRecommendationCard({
   onInsertComposerDraft,
   layout = "modal",
 }: InventoryMatchRecommendationCardProps) {
-  const { t: inboxText } = useTranslation();
+  const { t: inboxText, i18n } = useTranslation();
   const [detailOpen, setDetailOpen] = useState(false);
   const queryClient = useQueryClient();
-  const recommendation = mapInventoryMatchToRecommendation(match);
+  const recommendation = mapInventoryMatchToRecommendation(match, inboxText, i18n.language);
   const isSidebar = layout === "sidebar";
 
   const saveMutation = useMutation({
@@ -79,7 +79,7 @@ export function InventoryMatchRecommendationCard({
           src: recommendation.imageSrc,
           priority: imagePriority,
           onClick: viewListing,
-          ariaLabel: "View listing",
+          ariaLabel: inboxText("inboxUi.viewListing"),
           fallback: (
             <Home
               className={cn("text-gray-300", isSidebar ? "h-8 w-8" : "h-6 w-6")}
@@ -93,7 +93,7 @@ export function InventoryMatchRecommendationCard({
         attributes={recommendation.attributes}
         score={recommendation.score}
         matchReasons={recommendation.matchReasons}
-        formatMatchReason={shortInventoryMatchReason}
+        formatMatchReason={(reason) => localizedInventoryMatchReason(reason, inboxText)}
         actions={[
           {
             id: "view",
@@ -109,7 +109,7 @@ export function InventoryMatchRecommendationCard({
             ) : (
               <Heart className={cn("h-3.5 w-3.5", saved && "fill-rose-500 text-rose-500")} />
             ),
-            label: inboxText("inboxUi.saveToBuyerShortlist"),
+            label: saved ? inboxText("rgeMatching.removeSaved") : inboxText("inboxUi.saveToBuyerShortlist"),
             onClick: () => saveMutation.mutate(),
             disabled: saveMutation.isPending,
             active: saved,
@@ -117,6 +117,8 @@ export function InventoryMatchRecommendationCard({
           },
         ]}
       />
+
+      {saveMutation.isError && <p role="alert" className="text-xs text-red-600">{inboxText("rgeMatching.saveMatchError")}</p>}
 
       <ListingDetailDialog
         contactId={contactId}
