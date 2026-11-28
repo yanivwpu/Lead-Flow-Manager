@@ -186,37 +186,37 @@ export function RealtorLanding() {
       />
 
       {/* 1. HERO */}
-      <section className="relative overflow-hidden bg-emerald-950 px-4 pb-16 pt-10 text-white md:px-6 md:pb-24 md:pt-20">
+      <section className="relative overflow-hidden bg-gradient-to-br from-white via-sky-50 to-sky-100 px-4 pb-16 pt-10 text-slate-950 md:px-6 md:pb-24 md:pt-20">
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(16,185,129,0.12),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(20,184,166,0.08),_transparent_45%)]"
+          className="pointer-events-none absolute inset-0 bg-white/10"
           aria-hidden
         />
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 md:grid-cols-2 md:gap-14 xl:max-w-[1440px] xl:gap-20">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               {content.hero.eyebrow}
             </p>
             <h1
-              className="mb-5 font-display text-3xl font-bold leading-[1.08] text-white md:text-5xl lg:text-[3.25rem] xl:text-6xl"
+              className="mb-5 font-display text-3xl font-bold leading-[1.08] text-slate-950 md:text-5xl lg:text-[3.25rem] xl:text-6xl"
               data-testid="text-hero-headline"
             >
               {content.hero.h1}
             </h1>
-            <p className="mb-8 text-lg leading-relaxed text-emerald-50/90 md:text-xl">{content.hero.support}</p>
+            <p className="mb-8 text-lg leading-relaxed text-slate-700 md:text-xl">{content.hero.support}</p>
             <div className="mb-8 grid gap-3 sm:grid-cols-3">
               {growth.pillars.map((label, index) => {
                 const Icon = [Search, Zap, Calendar][index] ?? Sparkles;
-                return <div key={label} className="rounded-2xl border border-white/15 bg-white/5 p-4">
-                  <Icon className="mb-2 h-5 w-5 text-emerald-300" aria-hidden />
-                  <p className="font-bold text-white">{label}</p>
-                  <p className="mt-1 text-sm text-emerald-100">{growth.pillarDetails[index]}</p>
+                return <div key={label} className="rounded-2xl border border-slate-200 bg-white/90 p-4">
+                  <Icon className="mb-2 h-5 w-5 text-emerald-700" aria-hidden />
+                  <p className="font-bold text-slate-950">{label}</p>
+                  <p className="mt-1 text-sm text-slate-600">{growth.pillarDetails[index]}</p>
                 </div>;
               })}
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={handleCta}
-                className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-white px-8 font-semibold text-emerald-950 shadow-lg transition-all hover:bg-emerald-50 hover:shadow-xl sm:w-auto"
+                className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-green px-8 font-semibold text-white shadow-lg transition-all hover:bg-emerald-700 hover:shadow-xl sm:w-auto"
                 data-testid="button-hero-install"
               >
                 {user ? content.hero.cta : chrome.startFreeTrial}
@@ -224,13 +224,13 @@ export function RealtorLanding() {
               </button>
               <button
                 onClick={scrollToJourney}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-white/30 bg-white/5 px-8 font-medium text-white transition-colors hover:bg-white/10 sm:w-auto"
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-8 font-medium text-slate-800 transition-colors hover:bg-sky-50 sm:w-auto"
                 data-testid="button-hero-how-it-works"
               >
                 {content.hero.secondaryCta}
               </button>
             </div>
-            <p className="mt-5 text-sm text-emerald-100"><bdi dir="ltr">{content.pricing.layers[0].price}</bdi> · {growth.pricingNote}</p>
+            <p className="mt-5 text-sm text-slate-600"><bdi dir="ltr">{content.pricing.layers[0].price}</bdi> · {growth.pricingNote}</p>
           </motion.div>
 
           <motion.div
@@ -239,8 +239,8 @@ export function RealtorLanding() {
             transition={{ duration: 0.65, delay: 0.15 }}
             className="relative"
           >
-            <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-xl sm:rounded-3xl">
-              <MarketingScreenshot {...screenshotLabels} {...content.screenshots.agentPage} size="hero" className="w-full" priority />
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:rounded-3xl">
+              <img src="https://images.pexels.com/photos/8470805/pexels-photo-8470805.jpeg?auto=compress&cs=tinysrgb&w=1200" alt={growth.heroPhotoAlt} width={1200} height={800} fetchPriority="high" decoding="async" className="aspect-[3/2] w-full object-cover" referrerPolicy="no-referrer" />
             </div>
           </motion.div>
         </div>
@@ -252,7 +252,7 @@ export function RealtorLanding() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {growth.automationItems.map((label, i) => {
               const Icon = [MessageSquare, Brain, Calendar, Clock, Users, Target, Shield, Globe][i] ?? Sparkles;
-              return <article key={label} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+              return <article key={label} className="rounded-2xl border border-slate-200 bg-sky-50 p-5">
                 <div className="mb-4 flex items-center justify-between"><Icon className="h-6 w-6 text-emerald-700" aria-hidden /><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-800" dir="ltr">W{i+1}</span></div>
                 <h3 className="font-semibold text-gray-900">{label}</h3>
               </article>;
@@ -263,7 +263,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      <section className="bg-emerald-50/60 px-4 py-16 md:px-6 md:py-24" data-testid="section-neighborhood-pages">
+      <section className="bg-sky-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-neighborhood-pages">
         <div className="mx-auto grid max-w-6xl items-center gap-10 md:grid-cols-2 xl:max-w-[1440px]">
           <div>
             <Globe className="mb-4 h-9 w-9 text-emerald-700" aria-hidden />
@@ -272,15 +272,9 @@ export function RealtorLanding() {
             <CheckList items={growth.neighborhoodItems} />
             <p className="mt-6 text-sm text-gray-600">{growth.neighborhoodNote}</p>
           </div>
-          <figure className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg sm:p-8">
-            <div className="relative overflow-hidden rounded-2xl bg-emerald-100">
-              <svg viewBox="0 0 420 220" className="w-full" aria-hidden="true">
-                <rect width="420" height="220" fill="#e1f1e9"/>
-                <path d="M0 50 H420 M0 110 H420 M0 175 H420 M75 0 V220 M155 0 V220 M250 0 V220 M350 0 V220" stroke="#fff" strokeWidth="12"/>
-                <path d="M0 200 Q130 110 235 160 T420 30" stroke="#a5d8dc" strokeWidth="28" fill="none"/>
-                <path d="M99 32 L284 28 L329 122 L207 186 L105 143 Z" fill="#34d399" fillOpacity=".23" stroke="#047857" strokeWidth="3" strokeDasharray="7 5"/>
-                <circle cx="207" cy="97" r="10" fill="#047857" stroke="white" strokeWidth="3"/>
-              </svg>
+          <figure className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg sm:p-8">
+            <div className="relative overflow-hidden rounded-2xl bg-sky-100">
+              <img src="https://images.pexels.com/photos/9305070/pexels-photo-9305070.jpeg?auto=compress&cs=tinysrgb&w=1200" alt={growth.neighborhoodPhotoAlt} width={1200} height={675} loading="lazy" decoding="async" className="aspect-video w-full object-cover" referrerPolicy="no-referrer" />
             </div>
             <div className="mt-5 flex items-center gap-3"><Home className="h-7 w-7 text-emerald-700" aria-hidden /><div className="text-xl font-bold text-gray-950">{growth.neighborhoodVisual[0]}</div></div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">{growth.neighborhoodVisual.slice(1,3).map(label=><div key={label} className="rounded-lg bg-gray-50 p-3 text-sm font-medium text-gray-700">{label}</div>)}</div>
@@ -312,7 +306,7 @@ export function RealtorLanding() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-emerald-100 bg-white p-6 md:p-10">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 md:p-10">
             <div className="mb-2 flex items-center gap-2 text-emerald-700">
               <Globe className="h-5 w-5" />
               <p className="text-xs font-bold uppercase tracking-[0.16em]">{content.ui.seoFriendlyEyebrow}</p>
@@ -345,7 +339,7 @@ export function RealtorLanding() {
             <h2 className="font-display text-2xl font-bold text-gray-900 md:text-4xl" data-testid="text-qualify-title">
               {content.qualification.title}
             </h2>
-            <blockquote className="mt-6 rounded-2xl border border-emerald-100 bg-white p-5 text-base italic text-gray-800 shadow-sm md:text-lg">
+            <blockquote className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-base italic text-gray-800 shadow-sm md:text-lg">
               “{content.qualification.exampleQuote}”
               <footer className="mt-2 text-xs font-medium not-italic text-gray-500">
                 {content.qualification.exampleNote}
@@ -362,7 +356,7 @@ export function RealtorLanding() {
             <p className="mt-6 text-sm font-semibold text-gray-900">{content.qualification.powersIntro}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {content.qualification.powers.map((p) => (
-                <span key={p} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                <span key={p} className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-emerald-800">
                   {p}
                 </span>
               ))}
@@ -409,7 +403,7 @@ export function RealtorLanding() {
                 ))}
               </ol>
             </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-6">
+            <div className="rounded-2xl border border-slate-200 bg-sky-50 p-6">
               <h3 className="mb-4 text-base font-bold text-gray-900">{content.inventory.afterTitle}</h3>
               <ol className="space-y-2">
                 {content.inventory.after.map((item, i) => (
@@ -456,7 +450,7 @@ export function RealtorLanding() {
                   ))}
                 </ul>
               </div>
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
+              <div className="rounded-2xl border border-slate-200 bg-sky-50 p-5">
                 <h3 className="mb-3 text-sm font-bold text-gray-900">{content.flyer.afterTitle}</h3>
                 <CheckList items={content.flyer.after} />
               </div>
@@ -471,8 +465,8 @@ export function RealtorLanding() {
         <div className="mx-auto max-w-5xl xl:max-w-6xl">
           <SectionHeading title={growth.showingTitle} subtitle={growth.showingBody} testId="text-showing-title" />
           <div className="mb-10 grid items-center gap-8 md:grid-cols-2">
-            <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-6">
-              <Calendar className="mb-5 h-10 w-10 text-emerald-800" aria-hidden />
+            <div className="rounded-3xl border border-slate-200 bg-sky-50 p-6">
+              <img src="https://images.pexels.com/photos/7641869/pexels-photo-7641869.jpeg?auto=compress&cs=tinysrgb&w=1200" alt={growth.showingPhotoAlt} width={1200} height={800} loading="lazy" decoding="async" className="mb-5 aspect-[3/2] w-full rounded-2xl object-cover" referrerPolicy="no-referrer" />
               {growth.showingVisual.map((label,i)=><div key={label} className={cn("mb-3 rounded-xl p-4 text-center font-semibold",i===1?"bg-emerald-800 text-white":"bg-white text-gray-800")}>{label}</div>)}
               <p className="text-center text-xs text-gray-500">{growth.illustration}</p>
             </div>
@@ -481,7 +475,7 @@ export function RealtorLanding() {
           <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
             {content.showing.flow.map((step, idx) => (
               <div key={step} className="flex items-center gap-2 md:gap-3">
-                <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900 md:px-4 md:text-sm">
+                <span className="rounded-full border border-slate-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-emerald-900 md:px-4 md:text-sm">
                   {step}
                 </span>
                 {idx < content.showing.flow.length - 1 ? (
@@ -599,32 +593,37 @@ export function RealtorLanding() {
       </section>
 
 
-      <section className="bg-emerald-950 px-4 py-16 text-white md:px-6 md:py-24" data-testid="section-agent-network">
+      <section className="bg-sky-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-agent-network">
         <div className="mx-auto grid max-w-6xl items-center gap-10 md:grid-cols-2">
           <div>
-            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-emerald-200">{growth.networkEyebrow}</p>
-            <span className="inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-950">{growth.comingSoon}</span>
-            <h2 className="mt-5 font-display text-3xl font-bold md:text-5xl">{growth.networkTitle}</h2>
-            <p className="mt-5 text-lg leading-relaxed text-emerald-100">{growth.networkBody}</p>
-            <p className="mt-6 text-sm text-emerald-100">{growth.networkNote}</p>
+            <span className="inline-block rounded-full border border-sky-200 bg-white px-3 py-1 text-sm font-semibold text-sky-900">{growth.comingSoon}</span>
+            <h2 className="mt-5 font-display text-3xl font-bold text-slate-950 md:text-5xl">{growth.networkTitle}</h2>
+            <p className="mt-5 text-lg leading-relaxed text-slate-700">{growth.networkBody}</p>
+            <div className="mt-7 space-y-3"><CheckList items={growth.networkSteps} /></div>
           </div>
-          <div className="grid gap-3">
-            {growth.networkSteps.map((label,i)=>{const Icon=[Search,MessageSquare,Users][i] ?? Users;return <div key={label} className="flex items-center gap-4 rounded-2xl border border-white/15 bg-white/5 p-5"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-800"><Icon className="h-6 w-6" aria-hidden /></div><p className="text-lg font-semibold">{label}</p></div>;})}
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+            <img src="https://images.pexels.com/photos/7964479/pexels-photo-7964479.jpeg?auto=compress&cs=tinysrgb&w=1200" alt={growth.networkPhotoAlt} width={1200} height={800} loading="lazy" decoding="async" className="aspect-[3/2] w-full object-cover" referrerPolicy="no-referrer" />
           </div>
         </div>
       </section>
-      <section className="bg-emerald-50 px-4 py-14 md:px-6 md:py-20" data-testid="section-global-availability">
-        <div className="mx-auto max-w-4xl text-center">
-          <Globe className="mx-auto mb-4 h-10 w-10 text-emerald-700" aria-hidden />
-          <h2 className="font-display text-3xl font-bold text-gray-950 md:text-4xl">{growth.globalTitle}</h2>
-          <p className="mt-5 text-lg leading-relaxed text-gray-700">{growth.globalBody}</p>
+      <section className="bg-white px-4 py-14 md:px-6 md:py-20" data-testid="section-global-availability">
+        <div className="mx-auto max-w-5xl">
+          <SectionHeading title={growth.globalTitle} subtitle={growth.globalBody} />
+          <div className="grid gap-5 md:grid-cols-2">
+            {growth.globalLabels.map((label,i)=>(
+              <article key={label} className="rounded-2xl border border-slate-200 bg-sky-50 p-6 md:p-8">
+                <h3 className="mb-5 flex items-center gap-3 text-xl font-bold text-slate-950"><Globe className="h-6 w-6 text-emerald-700" aria-hidden />{label}</h3>
+                <CheckList items={growth.globalLists[i]} />
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* 17. PRICING */}
-      <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-pricing">
+      <section className="bg-sky-50 px-4 py-12 md:px-6 md:py-16" data-testid="section-pricing">
         <div className="mx-auto max-w-4xl">
-          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 text-center sm:rounded-3xl sm:p-8 md:p-12">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 text-center sm:rounded-3xl sm:p-8 md:p-12">
             <h2
               className="mb-4 font-display text-2xl font-bold text-gray-900 md:text-4xl xl:text-5xl"
               data-testid="text-pricing-title"
@@ -634,7 +633,7 @@ export function RealtorLanding() {
             <p className="mx-auto mb-4 max-w-2xl text-base text-gray-600 md:text-lg">{growth.pricingNote}</p>
 
 
-            <div className="mx-auto mb-8 max-w-xl rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="mx-auto mb-8 max-w-xl rounded-2xl border border-slate-200 bg-sky-50 p-6 shadow-sm md:p-8">
               <p className="font-semibold text-gray-700">{content.pricing.layers[0].name}</p>
               <p className="my-4 text-5xl font-bold tracking-tight text-emerald-800" dir="ltr">{content.pricing.layers[0].price}</p>
               <div className="mt-6 text-start"><CheckList items={growth.pricingItems} /></div>
@@ -710,7 +709,7 @@ export function RealtorLanding() {
                 ))}
               </ul>
             </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-6 md:p-8">
+            <div className="rounded-2xl border border-slate-200 bg-sky-50 p-6 md:p-8">
               <h3 className="mb-5 text-lg font-bold text-gray-900">{content.comparison.afterTitle}</h3>
               <CheckList items={content.comparison.after} />
             </div>
@@ -720,14 +719,14 @@ export function RealtorLanding() {
 
 
       {/* 15. WHAT'S INCLUDED */}
-      <section className="bg-emerald-950 px-4 py-16 text-white md:px-6 md:py-24" data-testid="section-included">
+      <section className="bg-sky-50 px-4 py-16 text-slate-950 md:px-6 md:py-24" data-testid="section-included">
         <div className="mx-auto max-w-5xl xl:max-w-6xl">
-          <SectionHeading title={content.included.title} subtitle={content.included.subtitle} testId="text-included-title" light />
+          <SectionHeading title={content.included.title} subtitle={content.included.subtitle} testId="text-included-title" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {content.included.items.map((item) => (
-              <div key={item} className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="text-emerald-50">{item}</span>
+              <div key={item} className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+                <span className="text-slate-700">{item}</span>
               </div>
             ))}
           </div>
@@ -746,7 +745,7 @@ export function RealtorLanding() {
               <Link
                 key={link.href}
                 href={localizedInternalHref(link.href, locale)}
-                className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 hover:border-emerald-200 hover:bg-emerald-50"
+                className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 hover:border-slate-200 hover:bg-sky-50"
               >
                 {link.label}
               </Link>
