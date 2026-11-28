@@ -195,6 +195,7 @@ export type UpdateContactOptions = {
   expectedUpdatedAt?: Date;
   expectedPipelineLayoutRevision?: number;
   admitToPipeline?: boolean;
+  removeFromPipeline?: boolean;
   requireUnsyncedIdentity?: boolean;
 };
 
@@ -2682,8 +2683,10 @@ export class DbStorage implements IStorage {
 
     const values = {
       ...updates,
-      ...(options?.admitToPipeline ? {
-        sourceDetails: sql`coalesce(${contacts.sourceDetails}, '{}'::jsonb) || '{"pipelineManuallyAdded":true}'::jsonb`,
+      ...(options?.removeFromPipeline ? {
+        sourceDetails: sql`(coalesce(${contacts.sourceDetails}, '{}'::jsonb) - 'pipelineManuallyAdded') || '{"pipelineManuallyRemoved":true}'::jsonb`,
+      } : options?.admitToPipeline ? {
+        sourceDetails: sql`(coalesce(${contacts.sourceDetails}, '{}'::jsonb) - 'pipelineManuallyRemoved') || '{"pipelineManuallyAdded":true}'::jsonb`,
       } : {}),
       updatedAt: new Date(),
     };

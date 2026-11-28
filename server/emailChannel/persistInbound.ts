@@ -1,6 +1,7 @@
 import { inboundOptOutText } from "./authoredEmailText";
-import { and, eq } from "drizzle-orm";
-import { conversations, type Conversation, type EmailMailbox } from "@shared/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { contacts, conversations, type Conversation, type EmailMailbox } from "@shared/schema";
+import { qualifiesEmailPipelineSalesEvidence, isPassiveEmailIdentity } from "@shared/followUpTasks";
 import type { NormalizedEmailMessage } from "@shared/emailChannel";
 import { isCalendarOrInviteEmail } from "@shared/emailChannel";
 import { nextEmailConversationUnreadCount } from "@shared/emailUnreadState";
@@ -349,6 +350,22 @@ export async function persistNormalizedEmailMessage(params: {
     });
   } catch {
     /* non-fatal */
+  }
+
+  // Record actual inbound sales evidence, not an automatic tag, subject alone, or notification.
+  // This metadata is additive, tenant-scoped and does not change stages or contact visibility.
+  if (normalized.direction === "inbound" && !formMeta && isPassiveEmailIdentity(contact) &&
+      qualifiesEmailPipelineSalesEvidence({
+        senderEmail: normalized.from.email, subject: normalized.subject, body: rawTextContent,
+        headers: normalized.selectedHeaders,
+      })) {
+    try {
+      await db.update(contacts).set({
+        sourceDetails: sql`coalesce(${contacts.sourceDetails}, '{}'::jsonb) || '{"emailPipelineSalesEvidence":true}'::jsonb`,
+      }).where(and(eq(contacts.id, contact.id), eq(contacts.userId, mailbox.workspaceUserId)));
+    } catch (error) {
+      console.warn("[EmailPersist] sales evidence could not be recorded", error instanceof Error ? error.name : "unknown");
+    }
   }
 
   if (!params.silent) {

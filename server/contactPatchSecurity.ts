@@ -11,5 +11,6 @@ export const contactPatchSchema = insertContactSchema.pick({
   leadScore: true,
 }).partial().extend({
   pipelineLayoutMove: pipelineLayoutMoveSchema.optional(),
+  pipelineRemove: z.literal(true).optional(),
   followUpDate: z.union([z.string().datetime({ offset: true }), z.date()]).nullable().optional(),
 }).strict();

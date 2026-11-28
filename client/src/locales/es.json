@@ -292,6 +292,10 @@
     "saveAndOpen": "Guardar y Abrir"
   },
   "followups": {
+    "removeFromPipeline": "Quitar del pipeline",
+    "pipelineRemoved": "Oportunidad retirada del pipeline",
+    "pipelineRemoveFailed": "No se pudo retirar la oportunidad. Actualiza e inténtalo de nuevo.",
+    "pipelineRemoveConfirm": "¿Quitar esta oportunidad del pipeline? Se conservarán el contacto, los mensajes y los recordatorios. Puedes volver a añadirla desde la bandeja de entrada.",
     "localizedStageNames": "Nombres visibles por idioma (opcional)",
     "dismissRecommendation": "Descartar",
     "markResolved": "Marcar como resuelta",

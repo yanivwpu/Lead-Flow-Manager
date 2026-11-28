@@ -360,6 +360,43 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
         }).where(eq(schema.contacts.id, "contact-a"));
       }
     });
+    await t.test("pipeline removal is workspace scoped, preserves contact state and permits explicit re-admission", async () => {
+      const path = "/api/contacts/contact-a";
+      const before = (await f.storage.getContact("contact-a"))!;
+      await f.database.update(schema.contacts).set({
+        source: "email", sourceDetails: { pipelineManuallyAdded: true, otherMetadata: "preserved" },
+        pipelineStage: "Proposal", tag: "Warm Lead",
+      }).where(eq(schema.contacts.id, before.id));
+      try {
+        assert.equal((await f.request("owner-b", path, "PATCH", { pipelineRemove: true })).status, 404);
+        assert.equal((await f.request("agent", path, "PATCH", { pipelineRemove: true }, { Origin: "https://foreign.example" })).status, 403);
+        assert.equal((await f.request("agent", path, "PATCH", { pipelineRemove: true, name: "changed" })).status, 400);
+        assert.equal((await f.request("agent", path, "PATCH", { pipelineRemove: true })).status, 200);
+        const removed = (await f.storage.getContact(before.id))!;
+        assert.equal(removed.pipelineStage, "Proposal");
+        assert.equal(removed.tag, "Warm Lead");
+        assert.equal(removed.followUp, before.followUp);
+        assert.equal(removed.followUpDate?.getTime(), before.followUpDate?.getTime());
+        assert.equal((removed.sourceDetails as any).otherMetadata, "preserved");
+        assert.equal((removed.sourceDetails as any).pipelineManuallyRemoved, true);
+        assert.equal(isSalesOpportunity(removed), false);
+        await f.storage.updateContact(before.id, { tag: "Hot Lead", pipelineStage: "Negotiation" });
+        assert.equal(isSalesOpportunity((await f.storage.getContact(before.id))!), false);
+        const layoutResponse = await f.request("agent", "/api/inbox/pipeline-layout");
+        const layout = await layoutResponse.json();
+        const readmitted = await f.request("agent", path, "PATCH", { pipelineLayoutMove: { workspaceId: "owner-a", revision: layout.revision, columnId: "Lead", admit: true } });
+        assert.equal(readmitted.status, 200);
+        const added = await readmitted.json();
+        assert.equal(isSalesOpportunity(added), true);
+        assert.equal(added.sourceDetails.pipelineManuallyRemoved, undefined);
+        assert.equal(added.sourceDetails.otherMetadata, "preserved");
+        assert.ok(await f.storage.getConversation("conv-a"));
+      } finally {
+        await f.database.update(schema.contacts).set({
+          source: before.source, sourceDetails: before.sourceDetails, pipelineStage: before.pipelineStage, pipelineCustomStageId: before.pipelineCustomStageId, tag: before.tag,
+        }).where(eq(schema.contacts.id, before.id));
+      }
+    });
     await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
       const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
       assert.deepEqual(await (await f.request("agent","/api/inbox?mine=true")).json(),[]);
