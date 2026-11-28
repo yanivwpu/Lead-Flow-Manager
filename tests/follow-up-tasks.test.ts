@@ -317,6 +317,7 @@ test('only direct inbound sales requests establish durable email pipeline eviden
   assert.equal(check('I would like to book a consultation.'), true);
   assert.equal(check('You have used $2.51 of usage so far'), false);
   assert.equal(check('Can you help with my account?'), false);
+  assert.equal(check('Thanks!\nOn Tuesday Alex wrote:\nCould you send a quote?'), false);
   assert.equal(check('Can you reschedule my appointment?'), false);
   assert.equal(check('Can you share your availability for a demo of our product?'), false);
   assert.equal(check('Could you send a quote?', { 'Auto-Submitted': 'auto-generated' }), false);

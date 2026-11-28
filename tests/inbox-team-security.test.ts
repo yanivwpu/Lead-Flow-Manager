@@ -380,8 +380,11 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
         assert.equal((removed.sourceDetails as any).otherMetadata, "preserved");
         assert.equal((removed.sourceDetails as any).pipelineManuallyRemoved, true);
         assert.equal(isSalesOpportunity(removed), false);
-        await f.storage.updateContact(before.id, { tag: "Hot Lead", pipelineStage: "Negotiation" });
-        assert.equal(isSalesOpportunity((await f.storage.getContact(before.id))!), false);
+        await f.storage.updateContact(before.id, { tag: "Hot Lead", pipelineStage: "Negotiation", sourceDetails: { pipelineManuallyAdded: true, otherMetadata: "preserved" } });
+        const afterAutomaticUpdate = (await f.storage.getContact(before.id))!;
+        assert.equal(isSalesOpportunity(afterAutomaticUpdate), false);
+        assert.equal((afterAutomaticUpdate.sourceDetails as any).pipelineManuallyRemoved, true);
+        assert.equal((afterAutomaticUpdate.sourceDetails as any).pipelineManuallyAdded, undefined);
         const layoutResponse = await f.request("agent", "/api/inbox/pipeline-layout");
         const layout = await layoutResponse.json();
         const readmitted = await f.request("agent", path, "PATCH", { pipelineLayoutMove: { workspaceId: "owner-a", revision: layout.revision, columnId: "Lead", admit: true } });

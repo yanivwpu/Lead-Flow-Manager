@@ -2687,6 +2687,17 @@ export class DbStorage implements IStorage {
         sourceDetails: sql`(coalesce(${contacts.sourceDetails}, '{}'::jsonb) - 'pipelineManuallyAdded') || '{"pipelineManuallyRemoved":true}'::jsonb`,
       } : options?.admitToPipeline ? {
         sourceDetails: sql`(coalesce(${contacts.sourceDetails}, '{}'::jsonb) - 'pipelineManuallyRemoved') || '{"pipelineManuallyAdded":true}'::jsonb`,
+      } : Object.prototype.hasOwnProperty.call(updates, "sourceDetails") && (updates.sourceDetails == null || typeof updates.sourceDetails === "object" && !Array.isArray(updates.sourceDetails)) ? {
+        // Preserve the current server-owned board decisions when a caller replaces
+        // sourceDetails using an older contact snapshot (provider enrichment, CRM sync).
+        sourceDetails: sql`CASE WHEN coalesce(${contacts.sourceDetails}, '{}'::jsonb) ?| ARRAY['pipelineManuallyAdded', 'pipelineManuallyRemoved', 'emailPipelineSalesEvidence']
+          THEN (coalesce(nullif(${JSON.stringify(updates.sourceDetails ?? null)}::jsonb, 'null'::jsonb), '{}'::jsonb)
+                - 'pipelineManuallyAdded' - 'pipelineManuallyRemoved' - 'emailPipelineSalesEvidence') ||
+               jsonb_strip_nulls(jsonb_build_object(
+                 'pipelineManuallyAdded', ${contacts.sourceDetails}->'pipelineManuallyAdded',
+                 'pipelineManuallyRemoved', ${contacts.sourceDetails}->'pipelineManuallyRemoved',
+                 'emailPipelineSalesEvidence', ${contacts.sourceDetails}->'emailPipelineSalesEvidence'))
+          ELSE ${JSON.stringify(updates.sourceDetails ?? null)}::jsonb END`,
       } : {}),
       updatedAt: new Date(),
     };

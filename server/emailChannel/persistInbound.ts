@@ -356,7 +356,7 @@ export async function persistNormalizedEmailMessage(params: {
   // This metadata is additive, tenant-scoped and does not change stages or contact visibility.
   if (normalized.direction === "inbound" && !formMeta && isPassiveEmailIdentity(contact) &&
       qualifiesEmailPipelineSalesEvidence({
-        senderEmail: normalized.from.email, subject: normalized.subject, body: rawTextContent,
+        senderEmail: normalized.from.email, subject: normalized.subject, body: inboundOptOutText(normalized),
         headers: normalized.selectedHeaders,
       })) {
     try {
