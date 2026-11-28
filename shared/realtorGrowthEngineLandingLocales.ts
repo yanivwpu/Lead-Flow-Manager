@@ -1268,18 +1268,18 @@ export const RGE_GROWTH_COPY = {
       "Book a showing",
       "Your scheduling link"
     ],
-    "networkTitle": "Your next referral could be one connection away.",
-    "networkBody": "We are planning an opt-in directory of real estate agents using WhachatCRM. Find an agent in another market and send a referral opportunity request directly.",
+    "networkTitle": "Join the WhachatCRM Agent Network",
+    "networkBody": "Opt-in directory of real estate agents using WhachatCRM. Find an agent in another market and send a referral opportunity request directly.",
     "comingSoon": "Coming soon",
     "networkSteps": [
-      "Find an agent by location",
-      "Send a referral request",
-      "Connect directly if accepted"
+      "Search agents by market",
+      "Send referral opportunity requests",
+      "Build cross-market relationships"
     ],
-    "networkNote": "Planned feature, not yet available. Agents and their brokers handle referral agreements and commissions independently.",
-    "globalTitle": "Grow in your market, with or without MLS.",
+    "networkNote": "Referral agreements and commissions are handled independently by the respective brokers.",
+    "globalTitle": "Grow your business with or without MLS access.",
     "globalBody": "Agent Pages, Neighborhood Pages, lead capture, CRM and messaging tools are available without a US MLS feed. Connected inventory and AI property matching require a supported provider.",
-    "pricingTitle": "One platform. One subscription.",
+    "pricingTitle": "Simple pricing. Everything in one platform.",
     "pricingNote": "Realtor Growth Engine and AI Brain are included with an active Pro plan. No separate activation fee.",
     "pricingItems": [
       "8 preconfigured real estate workflows",
@@ -1313,10 +1313,32 @@ export const RGE_GROWTH_COPY = {
         "Yes. Configure your booking link or connect Calendly to help buyers move from an inquiry toward scheduling a showing."
       ],
       [
-        "Is the Agent Network available now?",
-        "Not yet. We are planning an opt-in directory and direct referral requests. Agents and their brokers will handle referral arrangements independently."
+        "How will agent referrals work?",
+        "The upcoming opt-in directory will let agents search by market and send direct referral requests. Referral agreements and commissions are handled independently by the respective brokers."
       ]
-    ]
+    ],
+    "globalLabels": [
+      "Without MLS",
+      "With supported MLS"
+    ],
+    "globalLists": [
+      [
+        "Branded Agent Pages",
+        "SEO-ready Neighborhood Pages",
+        "Lead capture & CRM",
+        "Unified Inbox & automated follow-ups"
+      ],
+      [
+        "Everything available without MLS",
+        "AI property matching",
+        "Connected listing inventory",
+        "Property flyers and listing experiences"
+      ]
+    ],
+    "heroPhotoAlt": "Real estate agent handing keys to home buyers outside a house",
+    "neighborhoodPhotoAlt": "Sunny residential neighborhood with homes and blue sky",
+    "showingPhotoAlt": "Real estate agent discussing a home with prospective buyers",
+    "networkPhotoAlt": "Professionals meeting outdoors"
   },
   "es": {
     "headline": "De la búsqueda local al cierre de operaciones.",
@@ -1372,18 +1394,18 @@ export const RGE_GROWTH_COPY = {
       "Reservar una visita",
       "Tu enlace de citas"
     ],
-    "networkTitle": "Tu próxima referencia puede estar a una conexión.",
-    "networkBody": "Estamos planeando un directorio voluntario de agentes que usan WhachatCRM. Encuentra un agente en otro mercado y envíale directamente una solicitud de referencia.",
+    "networkTitle": "Únete a la red de agentes de WhachatCRM",
+    "networkBody": "Directorio voluntario de agentes inmobiliarios que usan WhachatCRM. Encuentra un agente en otro mercado y envíale directamente una solicitud de referencia.",
     "comingSoon": "Próximamente",
     "networkSteps": [
-      "Encuentra un agente por ubicación",
-      "Envía una solicitud de referencia",
-      "Conecta directamente si la acepta"
+      "Busca agentes por mercado",
+      "Envía solicitudes de referencia",
+      "Crea relaciones en otros mercados"
     ],
-    "networkNote": "Función prevista, aún no disponible. Los agentes y sus corredores gestionan los acuerdos y comisiones por separado.",
-    "globalTitle": "Crece en tu mercado, con o sin MLS.",
+    "networkNote": "Los acuerdos y las comisiones de referencia se gestionan de forma independiente entre los corredores correspondientes.",
+    "globalTitle": "Haz crecer tu negocio con o sin acceso a MLS.",
     "globalBody": "Las páginas de agentes y barrios, la captación, el CRM y las herramientas de mensajería funcionan sin un MLS de EE. UU. El inventario conectado y las coincidencias con IA requieren un proveedor compatible.",
-    "pricingTitle": "Una plataforma. Una suscripción.",
+    "pricingTitle": "Precios simples. Todo en una plataforma.",
     "pricingNote": "Realtor Growth Engine y AI Brain están incluidos en un plan Pro activo. Sin cargo de activación independiente.",
     "pricingItems": [
       "8 flujos inmobiliarios preconfigurados",
@@ -1417,10 +1439,32 @@ export const RGE_GROWTH_COPY = {
         "Sí. Configura tu enlace de citas o conecta Calendly para ayudar a los compradores a programar una visita."
       ],
       [
-        "¿Ya está disponible la red de agentes?",
-        "Todavía no. Estamos planeando un directorio voluntario y solicitudes directas de referencias. Los agentes y sus corredores gestionarán los acuerdos de forma independiente."
+        "¿Cómo funcionarán las referencias entre agentes?",
+        "El próximo directorio voluntario permitirá buscar agentes por mercado y enviar solicitudes directas. Los acuerdos y las comisiones se gestionan de forma independiente entre los corredores correspondientes."
       ]
-    ]
+    ],
+    "globalLabels": [
+      "Sin MLS",
+      "Con MLS compatible"
+    ],
+    "globalLists": [
+      [
+        "Páginas de agentes con tu marca",
+        "Páginas de barrios para SEO",
+        "Captación y CRM",
+        "Bandeja unificada y seguimiento automático"
+      ],
+      [
+        "Todo lo disponible sin MLS",
+        "Coincidencias de propiedades con IA",
+        "Inventario conectado",
+        "Folletos y experiencias de propiedades"
+      ]
+    ],
+    "heroPhotoAlt": "Agente inmobiliario entregando llaves a compradores frente a una casa",
+    "neighborhoodPhotoAlt": "Barrio residencial soleado con casas y cielo azul",
+    "showingPhotoAlt": "Agente inmobiliario conversando con compradores de una vivienda",
+    "networkPhotoAlt": "Profesionales reunidos al aire libre"
   },
   "he": {
     "headline": "מחיפוש מקומי ועד לסגירת עסקה.",
@@ -1476,18 +1520,18 @@ export const RGE_GROWTH_COPY = {
       "תיאום סיור",
       "קישור התיאום שלכם"
     ],
-    "networkTitle": "ההפניה הבאה שלכם יכולה להתחיל בקשר אחד.",
-    "networkBody": "אנחנו מתכננים מדריך מתווכים בהצטרפות מרצון עבור משתמשי WhachatCRM. חפשו מתווך באזור אחר ושלחו לו בקשה להפניית לקוח באופן ישיר.",
+    "networkTitle": "הצטרפו לרשת המתווכים של WhachatCRM",
+    "networkBody": "מדריך מתווכים בהצטרפות מרצון למשתמשי WhachatCRM. חפשו מתווך באזור אחר ושלחו לו בקשה להפניית לקוח באופן ישיר.",
     "comingSoon": "בקרוב",
     "networkSteps": [
-      "חיפוש מתווך לפי אזור",
-      "שליחת בקשת הפניה",
-      "יצירת קשר ישיר לאחר אישור"
+      "חיפוש מתווכים לפי אזור",
+      "שליחת בקשות להפניה",
+      "יצירת קשרים מקצועיים באזורים נוספים"
     ],
-    "networkNote": "תכונה מתוכננת שעדיין אינה זמינה. המתווכים ומשרדי התיווך מסדירים את הסכמי ההפניה והעמלות באופן עצמאי.",
-    "globalTitle": "צמחו בשוק שלכם, עם או בלי MLS.",
+    "networkNote": "הסכמי הפניה ועמלות מוסדרים באופן עצמאי בין משרדי התיווך הרלוונטיים.",
+    "globalTitle": "הצמיחו את העסק עם או בלי גישה ל-MLS.",
     "globalBody": "דפי סוכן ושכונה, קליטת לידים, CRM וכלי תקשורת זמינים ללא מאגר MLS אמריקאי. מלאי מחובר והתאמת נכסים עם AI דורשים ספק נתמך.",
-    "pricingTitle": "מערכת אחת. מנוי אחד.",
+    "pricingTitle": "תמחור פשוט. הכול במערכת אחת.",
     "pricingNote": "Realtor Growth Engine ו-AI Brain כלולים במנוי Pro פעיל. ללא דמי הפעלה נפרדים.",
     "pricingItems": [
       "8 תהליכי אוטומציה מוכנים לנדל״ן",
@@ -1521,9 +1565,31 @@ export const RGE_GROWTH_COPY = {
         "כן. הגדירו קישור תיאום או חברו Calendly כדי לעזור לקונים לעבור מפנייה לתיאום סיור בנכס."
       ],
       [
-        "האם רשת המתווכים כבר זמינה?",
-        "עדיין לא. אנו מתכננים מדריך מתווכים בהצטרפות מרצון ובקשות הפניה ישירות. המתווכים ומשרדי התיווך יסדירו את הסכמי ההפניה באופן עצמאי."
+        "איך יפעלו הפניות בין מתווכים?",
+        "מדריך המתווכים שייפתח בקרוב יאפשר חיפוש לפי אזור ושליחת בקשות ישירות. הסכמי ההפניה והעמלות יוסדרו באופן עצמאי בין משרדי התיווך הרלוונטיים."
       ]
-    ]
+    ],
+    "globalLabels": [
+      "ללא MLS",
+      "עם MLS נתמך"
+    ],
+    "globalLists": [
+      [
+        "דפי סוכן ממותגים",
+        "דפי שכונה מותאמים ל-SEO",
+        "קליטת לידים ו-CRM",
+        "תיבת שיחות מאוחדת ומעקב אוטומטי"
+      ],
+      [
+        "כל מה שזמין ללא MLS",
+        "התאמת נכסים עם AI",
+        "מלאי נכסים מחובר",
+        "פליירים ודפי נכסים"
+      ]
+    ],
+    "heroPhotoAlt": "מתווך מוסר מפתחות לרוכשי בית מחוץ לבית",
+    "neighborhoodPhotoAlt": "שכונת מגורים שטופת שמש עם בתים ושמיים כחולים",
+    "showingPhotoAlt": "מתווך משוחח עם רוכשים פוטנציאליים בבית",
+    "networkPhotoAlt": "אנשי מקצוע נפגשים בחוץ"
   }
 } as const;
