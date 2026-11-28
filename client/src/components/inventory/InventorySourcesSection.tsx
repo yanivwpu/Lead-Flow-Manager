@@ -1,7 +1,6 @@
 import { lastSuccessfulSyncIso } from "@/lib/inventorySourceConnectionUi";
 import type { TFunction } from "i18next";
 import { formatRegionalDate, formatRegionalNumber } from "@/lib/regionalFormatting";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
