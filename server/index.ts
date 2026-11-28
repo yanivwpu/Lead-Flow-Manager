@@ -478,6 +478,7 @@ app.use((req, res, next) => {
   const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
   const schemaPatches = await applyStartupSchemaPatches();
   await (await import("./inboxCollaborationSchema")).ensureInboxCollaborationSchema();
+  await (await import("./agentNetworkRoutes")).ensureAgentNetworkSchema();
   (await import("./inboxRealtimeBus")).startInboxRealtimeBus();
   try {
     const { backfillLegacyDefaultWidgetSettings } = await import("./widgetSettingsBackfill");
