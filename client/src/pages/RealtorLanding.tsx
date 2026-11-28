@@ -36,6 +36,7 @@ import {
   getMarketingChrome,
 } from "@shared/localizeMarketingContent";
 import { cn } from "@/lib/utils";
+import { RGE_GROWTH_COPY } from "@shared/realtorGrowthEngineLandingLocales";
 import {
   REALTOR_GROWTH_ENGINE_PATH,
 } from "@shared/pricingEntitlements";
@@ -112,6 +113,7 @@ export function RealtorLanding() {
   const chrome = getMarketingChrome(locale);
   const content = getLocalizedRgeLanding(RGE_LANDING, RGE_LANDING_SEO, locale);
   const isRTL = locale === "he";
+  const growth = RGE_GROWTH_COPY[locale];
   const canonicalUrl = getCanonicalUrl(REALTOR_GROWTH_ENGINE_PATH, locale, MARKETING_URL)!;
   const hreflangs = getHreflangLinks(REALTOR_GROWTH_ENGINE_PATH, MARKETING_URL);
 
@@ -183,38 +185,37 @@ export function RealtorLanding() {
       />
 
       {/* 1. HERO */}
-      <section className="relative overflow-hidden px-4 pb-16 pt-6 md:px-6 md:pb-24 md:pt-10">
+      <section className="relative overflow-hidden bg-emerald-950 px-4 pb-16 pt-10 text-white md:px-6 md:pb-24 md:pt-20">
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(16,185,129,0.12),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(20,184,166,0.08),_transparent_45%)]"
           aria-hidden
         />
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 md:grid-cols-2 md:gap-14 xl:max-w-[1440px] xl:gap-20">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
               {content.hero.eyebrow}
             </p>
             <h1
-              className="mb-5 font-display text-3xl font-bold leading-[1.08] text-gray-900 md:text-5xl lg:text-[3.25rem] xl:text-6xl"
+              className="mb-5 font-display text-3xl font-bold leading-[1.08] text-white md:text-5xl lg:text-[3.25rem] xl:text-6xl"
               data-testid="text-hero-headline"
             >
               {content.hero.h1}
             </h1>
-            <p className="mb-8 text-lg leading-relaxed text-gray-600 md:text-xl">{content.hero.support}</p>
-            <div className="mb-8 flex flex-wrap gap-2">
-              {content.hero.capabilities.map((cap) => (
-                <span
-                  key={cap}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-white/80 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-sm"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-brand-green" />
-                  {cap}
-                </span>
-              ))}
+            <p className="mb-8 text-lg leading-relaxed text-emerald-50/90 md:text-xl">{content.hero.support}</p>
+            <div className="mb-8 grid gap-3 sm:grid-cols-3">
+              {growth.pillars.map((label, index) => {
+                const Icon = [Search, Zap, Calendar][index];
+                return <div key={label} className="rounded-2xl border border-white/15 bg-white/5 p-4">
+                  <Icon className="mb-2 h-5 w-5 text-emerald-300" aria-hidden />
+                  <p className="font-bold text-white">{label}</p>
+                  <p className="mt-1 text-sm text-emerald-100">{growth.pillarDetails[index]}</p>
+                </div>;
+              })}
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={handleCta}
-                className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-green px-8 font-semibold text-white shadow-lg transition-all hover:bg-emerald-700 hover:shadow-xl sm:w-auto"
+                className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-white px-8 font-semibold text-emerald-950 shadow-lg transition-all hover:bg-emerald-50 hover:shadow-xl sm:w-auto"
                 data-testid="button-hero-install"
               >
                 {content.hero.cta}
@@ -222,12 +223,13 @@ export function RealtorLanding() {
               </button>
               <button
                 onClick={scrollToJourney}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-8 font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto"
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-white/30 bg-white/5 px-8 font-medium text-white transition-colors hover:bg-white/10 sm:w-auto"
                 data-testid="button-hero-how-it-works"
               >
                 {content.hero.secondaryCta}
               </button>
             </div>
+            <p className="mt-5 text-sm text-emerald-100"><bdi dir="ltr">{content.pricing.layers[0].price}</bdi> · {growth.pricingNote}</p>
           </motion.div>
 
           <motion.div
@@ -243,66 +245,96 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      {/* 2. JOURNEY */}
-      <section id="journey-section" className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-journey">
+      <section id="automation-package" className="bg-white px-4 py-16 md:px-6 md:py-24" data-testid="section-automation-package">
         <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
-          <SectionHeading title={content.journey.title} subtitle={content.journey.subtitle} testId="text-journey-title" />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7 lg:gap-2">
-            {content.journey.steps.map((step, idx) => {
-              const Icon = journeyIcons[idx] ?? Sparkles;
-              return (
-                <motion.div
-                  key={step.label}
-                  initial={{ opacity: 0, y: 16 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="relative rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
-                >
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-brand-green text-white">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                    {chrome.step} {idx + 1}
-                  </p>
-                  <h3 className="mt-1 text-sm font-bold text-gray-900">{step.label}</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500">{step.detail}</p>
-                  {idx < content.journey.steps.length - 1 ? (
-                    <div className="absolute -bottom-2 left-1/2 hidden h-4 w-px -translate-x-1/2 bg-emerald-200 lg:left-auto lg:right-[-6px] lg:top-1/2 lg:h-px lg:w-3 lg:translate-x-0 lg:-translate-y-1/2" />
-                  ) : null}
-                </motion.div>
-              );
+          <SectionHeading title={growth.automationTitle} subtitle={growth.automationBody} />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {growth.automationItems.map((label, i) => {
+              const Icon = [MessageSquare, Brain, Calendar, Clock, Users, Target, Shield, Globe][i];
+              return <article key={label} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+                <div className="mb-4 flex items-center justify-between"><Icon className="h-6 w-6 text-emerald-700" aria-hidden /><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-800" dir="ltr">W{i+1}</span></div>
+                <h3 className="font-semibold text-gray-900">{label}</h3>
+              </article>;
             })}
+          </div>
+          <p className="mx-auto mt-6 max-w-3xl text-center text-sm text-gray-600">{growth.automationNote}</p>
+          <div className="mx-auto mt-10 max-w-4xl"><MarketingScreenshot {...content.screenshots.workflows} size="hero" /></div>
+        </div>
+      </section>
+
+      <section className="bg-emerald-50/60 px-4 py-16 md:px-6 md:py-24" data-testid="section-neighborhood-pages">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 md:grid-cols-2 xl:max-w-[1440px]">
+          <div>
+            <Globe className="mb-4 h-9 w-9 text-emerald-700" aria-hidden />
+            <h2 className="font-display text-3xl font-bold text-gray-950 md:text-5xl">{growth.neighborhoodTitle}</h2>
+            <p className="my-6 text-lg leading-relaxed text-gray-700">{growth.neighborhoodBody}</p>
+            <CheckList items={growth.neighborhoodItems} />
+            <p className="mt-6 text-sm text-gray-600">{growth.neighborhoodNote}</p>
+          </div>
+          <figure className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg sm:p-8">
+            <div className="relative overflow-hidden rounded-2xl bg-emerald-100">
+              <svg viewBox="0 0 420 220" className="w-full" aria-hidden="true">
+                <rect width="420" height="220" fill="#e1f1e9"/>
+                <path d="M0 50 H420 M0 110 H420 M0 175 H420 M75 0 V220 M155 0 V220 M250 0 V220 M350 0 V220" stroke="#fff" strokeWidth="12"/>
+                <path d="M0 200 Q130 110 235 160 T420 30" stroke="#a5d8dc" strokeWidth="28" fill="none"/>
+                <path d="M99 32 L284 28 L329 122 L207 186 L105 143 Z" fill="#34d399" fillOpacity=".23" stroke="#047857" strokeWidth="3" strokeDasharray="7 5"/>
+                <circle cx="207" cy="97" r="10" fill="#047857" stroke="white" strokeWidth="3"/>
+              </svg>
+            </div>
+            <div className="mt-5 flex items-center gap-3"><Home className="h-7 w-7 text-emerald-700" aria-hidden /><div className="text-xl font-bold text-gray-950">{growth.neighborhoodVisual[0]}</div></div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">{growth.neighborhoodVisual.slice(1,3).map(label=><div key={label} className="rounded-lg bg-gray-50 p-3 text-sm font-medium text-gray-700">{label}</div>)}</div>
+            <div className="mt-4 rounded-xl bg-emerald-800 p-3 text-center font-semibold text-white">{growth.neighborhoodVisual[3]}</div>
+            <figcaption className="mt-3 text-center text-xs text-gray-500">{growth.illustration}</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      {/* 10–11. AGENT PAGE + SEO */}
+      <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-agent-page">
+        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
+          <SectionHeading title={content.agentPage.title} testId="text-agent-page-title" />
+          <div className="mx-auto mb-10 max-w-3xl space-y-4 text-center text-base text-gray-600 md:text-lg">
+            {content.agentPage.body.map((p) => (
+              <p key={p}>{p}</p>
+            ))}
+          </div>
+          <div className="mb-12 grid items-start gap-8 md:grid-cols-2">
+            <div>
+              <MarketingScreenshot {...content.screenshots.agentPage} />
+            </div>
+            <div>
+              <MarketingScreenshot {...content.screenshots.agentSettings} />
+              <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5">
+                <h3 className="mb-3 text-sm font-bold text-gray-900">{content.ui.agentPageCapabilitiesTitle}</h3>
+                <CheckList items={content.agentPage.capabilities} />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-emerald-100 bg-white p-6 md:p-10">
+            <div className="mb-2 flex items-center gap-2 text-emerald-700">
+              <Globe className="h-5 w-5" />
+              <p className="text-xs font-bold uppercase tracking-[0.16em]">{content.ui.seoFriendlyEyebrow}</p>
+            </div>
+            <h3 className="font-display text-xl font-bold text-gray-900 md:text-3xl">{content.agentPageSeo.title}</h3>
+            <div className="mt-4 max-w-3xl space-y-3 text-sm text-gray-600 md:text-base">
+              {content.agentPageSeo.body.map((p) => (
+                <p key={p}>{p}</p>
+              ))}
+            </div>
+            <div className="mt-6 grid gap-2 sm:grid-cols-2">
+              {content.agentPageSeo.benefits.map((b) => (
+                <div key={b} className="flex items-start gap-2 text-sm text-gray-700">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
+                  {b}
+                </div>
+              ))}
+            </div>
+            <p className="mt-6 text-xs text-gray-500">{content.agentPageSeo.disclaimer}</p>
           </div>
         </div>
       </section>
 
-      {/* 3. TIME / PROBLEM */}
-      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-time-problem">
-        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
-          <SectionHeading title={content.timeProblem.title} subtitle={content.timeProblem.intro} testId="text-time-title" />
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 md:p-8">
-              <h3 className="mb-4 text-lg font-bold text-gray-900">{content.ui.manualWorkTitle}</h3>
-              <ul className="space-y-2.5">
-                {content.timeProblem.manual.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-gray-700">
-                    <X className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 md:p-8">
-              <h3 className="mb-4 text-lg font-bold text-gray-900">{content.ui.withRgeTitle}</h3>
-              <CheckList items={content.timeProblem.withRge} />
-              <p className="mt-6 border-t border-emerald-100 pt-5 text-sm font-medium text-emerald-900 md:text-base">
-                {content.timeProblem.closer}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* 4. AI QUALIFICATION */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-qualification">
@@ -340,6 +372,7 @@ export function RealtorLanding() {
           </div>
         </div>
       </section>
+
 
       {/* 5. INVENTORY MATCHING */}
       <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-inventory">
@@ -395,6 +428,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
       {/* 6. PROPERTY FLYERS */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-flyers">
         <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
@@ -430,6 +464,70 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
+      {/* 12. CONVERSATION → SHOWING */}
+      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-showing">
+        <div className="mx-auto max-w-5xl xl:max-w-6xl">
+          <SectionHeading title={growth.showingTitle} subtitle={growth.showingBody} testId="text-showing-title" />
+          <div className="mb-10 grid items-center gap-8 md:grid-cols-2">
+            <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-6">
+              <Calendar className="mb-5 h-10 w-10 text-emerald-800" aria-hidden />
+              {growth.showingVisual.map((label,i)=><div key={label} className={cn("mb-3 rounded-xl p-4 text-center font-semibold",i===1?"bg-emerald-800 text-white":"bg-white text-gray-800")}>{label}</div>)}
+              <p className="text-center text-xs text-gray-500">{growth.illustration}</p>
+            </div>
+            <CheckList items={growth.showingItems} />
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
+            {content.showing.flow.map((step, idx) => (
+              <div key={step} className="flex items-center gap-2 md:gap-3">
+                <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900 md:px-4 md:text-sm">
+                  {step}
+                </span>
+                {idx < content.showing.flow.length - 1 ? (
+                  <ArrowRight className={cn("hidden h-4 w-4 text-emerald-400 sm:block", isRTL && "rotate-180")} />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+
+      {/* 2. JOURNEY */}
+      <section id="journey-section" className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-journey">
+        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
+          <SectionHeading title={content.journey.title} subtitle={content.journey.subtitle} testId="text-journey-title" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7 lg:gap-2">
+            {content.journey.steps.map((step, idx) => {
+              const Icon = journeyIcons[idx] ?? Sparkles;
+              return (
+                <motion.div
+                  key={step.label}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="relative rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                >
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-brand-green text-white">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                    {chrome.step} {idx + 1}
+                  </p>
+                  <h3 className="mt-1 text-sm font-bold text-gray-900">{step.label}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500">{step.detail}</p>
+                  {idx < content.journey.steps.length - 1 ? (
+                    <div className="absolute -bottom-2 start-1/2 hidden h-4 w-px bg-emerald-200 lg:start-auto lg:end-[-6px] lg:top-1/2 lg:h-px lg:w-3 lg:-translate-y-1/2" />
+                  ) : null}
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+
       {/* 7. NURTURE */}
       <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-nurture">
         <div className="mx-auto grid max-w-6xl items-center gap-10 md:grid-cols-2 xl:max-w-[1440px]">
@@ -456,6 +554,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
       {/* 8. INBOX + COPILOT */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-inbox">
         <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
@@ -480,6 +579,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
       {/* 9. LEAD SCORING */}
       <section className="px-4 py-16 md:px-6 md:py-20" data-testid="section-scoring">
         <div className="mx-auto max-w-4xl text-center xl:max-w-5xl">
@@ -497,70 +597,128 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      {/* 10–11. AGENT PAGE + SEO */}
-      <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-agent-page">
-        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
-          <SectionHeading title={content.agentPage.title} testId="text-agent-page-title" />
-          <div className="mx-auto mb-10 max-w-3xl space-y-4 text-center text-base text-gray-600 md:text-lg">
-            {content.agentPage.body.map((p) => (
-              <p key={p}>{p}</p>
-            ))}
-          </div>
-          <div className="mb-12 grid items-start gap-8 md:grid-cols-2">
-            <div>
-              <MarketingScreenshot {...content.screenshots.agentPage} />
-            </div>
-            <div>
-              <MarketingScreenshot {...content.screenshots.agentSettings} />
-              <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5">
-                <h3 className="mb-3 text-sm font-bold text-gray-900">{content.ui.agentPageCapabilitiesTitle}</h3>
-                <CheckList items={content.agentPage.capabilities} />
-              </div>
-            </div>
-          </div>
 
-          <div className="rounded-3xl border border-emerald-100 bg-white p-6 md:p-10">
-            <div className="mb-2 flex items-center gap-2 text-emerald-700">
-              <Globe className="h-5 w-5" />
-              <p className="text-xs font-bold uppercase tracking-[0.16em]">{content.ui.seoFriendlyEyebrow}</p>
+      <section className="bg-emerald-950 px-4 py-16 text-white md:px-6 md:py-24" data-testid="section-agent-network">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 md:grid-cols-2">
+          <div>
+            <span className="inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-950">{growth.comingSoon}</span>
+            <h2 className="mt-5 font-display text-3xl font-bold md:text-5xl">{growth.networkTitle}</h2>
+            <p className="mt-5 text-lg leading-relaxed text-emerald-100">{growth.networkBody}</p>
+            <p className="mt-6 text-sm text-emerald-100">{growth.networkNote}</p>
+          </div>
+          <div className="grid gap-3">
+            {growth.networkSteps.map((label,i)=>{const Icon=[Search,MessageSquare,Users][i];return <div key={label} className="flex items-center gap-4 rounded-2xl border border-white/15 bg-white/5 p-5"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-800"><Icon className="h-6 w-6" aria-hidden /></div><p className="text-lg font-semibold">{label}</p></div>;})}
+          </div>
+        </div>
+      </section>
+      <section className="bg-emerald-50 px-4 py-14 md:px-6 md:py-20" data-testid="section-global-availability">
+        <div className="mx-auto max-w-4xl text-center">
+          <Globe className="mx-auto mb-4 h-10 w-10 text-emerald-700" aria-hidden />
+          <h2 className="font-display text-3xl font-bold text-gray-950 md:text-4xl">{growth.globalTitle}</h2>
+          <p className="mt-5 text-lg leading-relaxed text-gray-700">{growth.globalBody}</p>
+        </div>
+      </section>
+
+      {/* 17. PRICING */}
+      <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-pricing">
+        <div className="mx-auto max-w-4xl">
+          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 text-center sm:rounded-3xl sm:p-8 md:p-12">
+            <h2
+              className="mb-4 font-display text-2xl font-bold text-gray-900 md:text-4xl xl:text-5xl"
+              data-testid="text-pricing-title"
+            >
+              {growth.pricingTitle}
+            </h2>
+            <p className="mx-auto mb-4 max-w-2xl text-base text-gray-600 md:text-lg">{growth.pricingNote}</p>
+
+
+            <div className="mx-auto mb-8 max-w-xl rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm md:p-8">
+              <p className="font-semibold text-gray-700">{content.pricing.layers[0].name}</p>
+              <p className="my-4 text-5xl font-bold tracking-tight text-emerald-800" dir="ltr">{content.pricing.layers[0].price}</p>
+              <div className="mt-6 text-start"><CheckList items={growth.pricingItems} /></div>
             </div>
-            <h3 className="font-display text-xl font-bold text-gray-900 md:text-3xl">{content.agentPageSeo.title}</h3>
-            <div className="mt-4 max-w-3xl space-y-3 text-sm text-gray-600 md:text-base">
-              {content.agentPageSeo.body.map((p) => (
-                <p key={p}>{p}</p>
-              ))}
+
+            <p className="mb-8 text-sm text-gray-500" data-testid="text-meta-note">
+              {content.pricing.metaNote}
+            </p>
+
+            <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
+              <button
+                onClick={handleCta}
+                className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-green px-10 text-base font-semibold text-white shadow-lg transition-all hover:bg-emerald-700 hover:shadow-xl sm:w-auto sm:text-lg"
+                data-testid="button-pricing-install"
+              >
+                {content.pricing.cta}
+                <ArrowRight className={arrowClass} />
+              </button>
+              <Link href="/pricing" className="w-full sm:w-auto">
+                <button
+                  className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-10 text-base font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto sm:text-lg"
+                  data-testid="button-pricing-plans"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                  {content.pricing.viewPlans}
+                </button>
+              </Link>
             </div>
-            <div className="mt-6 grid gap-2 sm:grid-cols-2">
-              {content.agentPageSeo.benefits.map((b) => (
-                <div key={b} className="flex items-start gap-2 text-sm text-gray-700">
+          </div>
+        </div>
+      </section>
+
+
+      {/* 18. WHITE-GLOVE */}
+      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-white-glove">
+        <div className="mx-auto grid max-w-5xl items-center gap-10 md:grid-cols-2 xl:max-w-6xl">
+          <div>
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-green/10">
+              <Shield className="h-7 w-7 text-brand-green" />
+            </div>
+            <h2 className="font-display text-2xl font-bold text-gray-900 md:text-4xl" data-testid="text-setup-title">
+              {content.whiteGlove.title}
+            </h2>
+            <p className="mt-4 text-base text-gray-600 md:text-lg">{content.whiteGlove.subtitle}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-100 bg-gray-900 p-6 text-white sm:p-8">
+            <ul className="space-y-3">
+              {content.whiteGlove.items.map((item) => (
+                <li key={item} className="flex items-start gap-3 text-sm text-gray-200">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-                  {b}
-                </div>
+                  {item}
+                </li>
               ))}
-            </div>
-            <p className="mt-6 text-xs text-gray-500">{content.agentPageSeo.disclaimer}</p>
+            </ul>
           </div>
         </div>
       </section>
 
-      {/* 12. CONVERSATION → SHOWING */}
-      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-showing">
-        <div className="mx-auto max-w-5xl xl:max-w-6xl">
-          <SectionHeading title={content.showing.title} subtitle={content.showing.subtitle} testId="text-showing-title" />
-          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
-            {content.showing.flow.map((step, idx) => (
-              <div key={step} className="flex items-center gap-2 md:gap-3">
-                <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900 md:px-4 md:text-sm">
-                  {step}
-                </span>
-                {idx < content.showing.flow.length - 1 ? (
-                  <ArrowRight className={cn("hidden h-4 w-4 text-emerald-400 sm:block", isRTL && "rotate-180")} />
-                ) : null}
-              </div>
-            ))}
+
+      {/* 3. TIME / PROBLEM */}
+      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-time-problem">
+        <div className="mx-auto max-w-6xl xl:max-w-[1440px]">
+          <SectionHeading title={content.timeProblem.title} subtitle={content.timeProblem.intro} testId="text-time-title" />
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 md:p-8">
+              <h3 className="mb-4 text-lg font-bold text-gray-900">{content.ui.manualWorkTitle}</h3>
+              <ul className="space-y-2.5">
+                {content.timeProblem.manual.map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-sm text-gray-700">
+                    <X className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 md:p-8">
+              <h3 className="mb-4 text-lg font-bold text-gray-900">{content.ui.withRgeTitle}</h3>
+              <CheckList items={content.timeProblem.withRge} />
+              <p className="mt-6 border-t border-emerald-100 pt-5 text-sm font-medium text-emerald-900 md:text-base">
+                {content.timeProblem.closer}
+              </p>
+            </div>
           </div>
         </div>
       </section>
+
 
       {/* 13. BEFORE VS WITH */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-comparison">
@@ -586,6 +744,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
       {/* 14. TECH STACK */}
       <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-stack">
         <div className="mx-auto max-w-5xl xl:max-w-6xl">
@@ -605,6 +764,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
       {/* 15. WHAT'S INCLUDED */}
       <section className="bg-emerald-950 px-4 py-16 text-white md:px-6 md:py-24" data-testid="section-included">
         <div className="mx-auto max-w-5xl xl:max-w-6xl">
@@ -619,6 +779,7 @@ export function RealtorLanding() {
           </div>
         </div>
       </section>
+
 
       {/* 16. WHO IT'S FOR */}
       <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-who-for">
@@ -649,97 +810,6 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      {/* 17. PRICING */}
-      <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24" data-testid="section-pricing">
-        <div className="mx-auto max-w-4xl">
-          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 text-center sm:rounded-3xl sm:p-8 md:p-12">
-            <h2
-              className="mb-4 font-display text-2xl font-bold text-gray-900 md:text-4xl xl:text-5xl"
-              data-testid="text-pricing-title"
-            >
-              {content.pricing.title}
-            </h2>
-            <p className="mx-auto mb-4 max-w-2xl text-base text-gray-600 md:text-lg">{content.pricing.subtitle}</p>
-            <p className="mx-auto mb-10 max-w-2xl text-sm text-gray-500">{content.pricing.explain}</p>
-
-            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {content.pricing.layers.map((layer, idx) => (
-                <div
-                  key={layer.name}
-                  className={`rounded-xl border bg-white p-5 text-left shadow-sm ${
-                    idx === 2 ? "border-emerald-200 ring-2 ring-emerald-100" : "border-gray-100"
-                  }`}
-                >
-                  <p
-                    className={`mb-2 text-xs font-semibold uppercase tracking-wider ${
-                      idx === 2 ? "text-emerald-600" : "text-gray-500"
-                    }`}
-                  >
-                    {layer.label}
-                  </p>
-                  <p className="text-lg font-bold text-gray-900">{layer.name}</p>
-                  <p className={`mt-1 text-base ${idx === 2 ? "font-semibold text-emerald-600" : "text-gray-600"}`}>
-                    {layer.price}
-                    {"priceNote" in layer && layer.priceNote ? (
-                      <span className="ml-1 text-sm font-normal text-gray-500">{layer.priceNote}</span>
-                    ) : null}
-                  </p>
-                  <p className="mt-3 text-xs leading-relaxed text-gray-500">{layer.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <p className="mb-8 text-sm text-gray-500" data-testid="text-meta-note">
-              {content.pricing.metaNote}
-            </p>
-
-            <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
-              <button
-                onClick={handleCta}
-                className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-green px-10 text-base font-semibold text-white shadow-lg transition-all hover:bg-emerald-700 hover:shadow-xl sm:w-auto sm:text-lg"
-                data-testid="button-pricing-install"
-              >
-                {content.pricing.cta}
-                <ArrowRight className={arrowClass} />
-              </button>
-              <Link href="/pricing" className="w-full sm:w-auto">
-                <button
-                  className="flex h-14 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-10 text-base font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto sm:text-lg"
-                  data-testid="button-pricing-plans"
-                >
-                  <BarChart3 className="h-5 w-5" />
-                  {content.pricing.viewPlans}
-                </button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 18. WHITE-GLOVE */}
-      <section className="px-4 py-16 md:px-6 md:py-24" data-testid="section-white-glove">
-        <div className="mx-auto grid max-w-5xl items-center gap-10 md:grid-cols-2 xl:max-w-6xl">
-          <div>
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-green/10">
-              <Shield className="h-7 w-7 text-brand-green" />
-            </div>
-            <h2 className="font-display text-2xl font-bold text-gray-900 md:text-4xl" data-testid="text-setup-title">
-              {content.whiteGlove.title}
-            </h2>
-            <p className="mt-4 text-base text-gray-600 md:text-lg">{content.whiteGlove.subtitle}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-100 bg-gray-900 p-6 text-white sm:p-8">
-            <ul className="space-y-3">
-              {content.whiteGlove.items.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm text-gray-200">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
 
       {/* Related products */}
       <section className="border-t border-gray-100 bg-white px-4 py-12 md:px-6 md:py-16">
@@ -761,6 +831,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+
       {/* FAQ */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24">
         <div className="mx-auto max-w-3xl xl:max-w-4xl">
@@ -777,6 +848,7 @@ export function RealtorLanding() {
           </div>
         </div>
       </section>
+
 
       {/* 19. FINAL CTA */}
       <section className="bg-gray-900 px-4 py-12 text-white md:px-6 md:py-16" data-testid="section-final-cta">
