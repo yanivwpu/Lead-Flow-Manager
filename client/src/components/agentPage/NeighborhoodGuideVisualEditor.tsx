@@ -113,7 +113,7 @@ function restoreEditor(editor: HTMLElement, text: string, photos: NeighborhoodPh
     if (block.type === "photo") {
       const photo = photos.find((item) => neighborhoodGuidePhotoId(item.url) === block.id);
       if (photo) {
-        const node = createPhotoNode(photo, block.width, resizeLabel);
+        const node = createPhotoNode(photo, block.width ?? 100, resizeLabel);
         if (node) editor.append(node);
       }
       continue;
