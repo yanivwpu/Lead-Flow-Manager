@@ -33,7 +33,7 @@ import {
 } from "@shared/localizeMarketingContent";
 import { getLocalizedPageMeta } from "@shared/marketingPageMetaLocales";
 import { PROSPECT_AI_LANDING_LOCALES } from "@shared/prospectAiLandingLocales";
-import { RGE_LANDING_LOCALES } from "@shared/realtorGrowthEngineLandingLocales";
+import { RGE_GROWTH_COPY } from "@shared/realtorGrowthEngineLandingLocales";
 import { formatHeadingHtmlWithLeadingLtrIsolate } from "@shared/rtlLeadingLtrIsolate";
 import { getLocalizedSiteFooter } from "@shared/siteFooterContent";
 import { WHACHAT_SOCIAL_LINK_REL } from "@shared/whachatSocialProfiles";
@@ -435,8 +435,8 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/shopify-growth-engine`,
   },
   "/realtor-growth-engine": {
-    title: "Realtor Growth Engine – Turn Real Estate Leads Into Showings | WhachatCRM",
-    description: "AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents.",
+    title: "Realtor Growth Engine | AI CRM for Real Estate Agents | WhachatCRM",
+    description: RGE_GROWTH_COPY.en.seoDescription,
     canonical: `${BASE_URL}/realtor-growth-engine`,
     ogImage: `${BASE_URL}/og/og-realtor-growth-engine.png`
   },
@@ -600,9 +600,8 @@ const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
     linksHtml: '<a href="/solutions/ecommerce">E-commerce CRM overview</a> · <a href="/pricing">View pricing</a> · <a href="/auth">Start free</a>',
   },
   "/realtor-growth-engine": {
-    h1: "Realtor Growth Engine",
-    lead:
-      "From new lead to booked showing — automatically. An AI-assisted real estate workspace inside WhachatCRM for agents and teams. Qualify buyers from conversation, capture preferences, match connected live inventory where supported, create personalized property presentations, run channel-aware follow-up, and move conversations toward a showing.",
+    h1: RGE_GROWTH_COPY.en.headline,
+    lead: RGE_GROWTH_COPY.en.support,
     bullets: [
       "AI-assisted lead qualification and buyer preference capture",
       "Realtor workflows from inquiry to follow-up and booking",
@@ -833,22 +832,20 @@ function resolveMarketingSsrPage(
   if (englishPath === "/realtor-growth-engine") {
     const base = MARKETING_SSR_PAGES["/realtor-growth-engine"];
     if (!base) return null;
+    const growth = RGE_GROWTH_COPY[locale];
     const offerLines = buildCanonicalRealtorGrowthEngineCrawlableLines();
-    if (locale !== "en") {
-      const overlay = RGE_LANDING_LOCALES[locale];
-      return {
-        h1: overlay.hero.h1,
-        lead: overlay.hero.support,
-        bullets: [
-          ...offerLines,
-          ...(overlay.hero.capabilities?.length ? overlay.hero.capabilities : base.bullets),
-        ],
-        linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
-      };
-    }
     return {
-      ...base,
-      bullets: [...offerLines, ...base.bullets],
+      h1: growth.headline,
+      lead: growth.support,
+      bullets: [
+        ...offerLines,
+        ...growth.capabilities,
+        growth.automationTitle,
+        growth.neighborhoodTitle,
+        growth.showingTitle,
+        growth.globalBody,
+      ],
+      linksHtml: locale === "en" ? base.linksHtml : localizeSsrLinksHtml(base.linksHtml, locale),
     };
   }
 
