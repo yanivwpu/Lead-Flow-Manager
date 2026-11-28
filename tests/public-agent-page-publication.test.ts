@@ -330,6 +330,14 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   assert.match(flyerHtml, /"telephone":"\+1 \(954\) 555-0100"/);
   assert.ok(flyerHtml.includes(`action="${inquiryPath}"`));
   assert.match(flyerHtml, /brokerage\.png|Summit Realty/);
+  assert.match(flyerHtml, /<html lang="en" dir="ltr">/);
+  assert.equal((await update({ agentPageLanguage: "es" })).status, 200);
+  const spanishFlyer = await (await request(flyerPath, { headers: { "Accept-Language": "he" } })).text();
+  assert.match(spanishFlyer, /<html lang="es" dir="ltr">/);
+  assert.ok(spanishFlyer.includes(`<link rel="canonical" href="${origin}${flyerPath}"`));
+  assert.doesNotMatch(spanishFlyer, /jane-public|mailto:|42 Private Street/);
+  assert.equal((await update({ agentPageLanguage: "en" })).status, 200);
+
   const postFlyer = (body: Record<string, unknown>, path = inquiryPath) => request(path, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
@@ -486,6 +494,27 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   assert.match(pilotHtml, /content="index, follow"/);
   assert.match(pilotHtml, /NEIGHBORHOOD LOCAL GUIDE/);
   assert.match(pilotHtml, /Living in Victoria Park/);
+  // A published neighborhood keeps its own explicit language across saves and reads.
+  assert.equal((await update({ agentPageLanguage: "he" })).status, 200);
+  assert.match(await (await request(parent)).text(), /<html lang="he" dir="rtl">/);
+  assert.match(await (await request(pilot)).text(), /<html lang="en" dir="ltr">/);
+  const spanishGuide = await publishNeighborhood(true, { publicLanguage: "es" });
+  assert.equal(spanishGuide.status, 200, await spanishGuide.clone().text());
+  assert.equal((await spanishGuide.json()).publicLanguage, "es");
+  const refreshed = await (await request(endpoint)).json();
+  assert.equal(refreshed.pages.find((page: { id: string }) => page.id === row.id).publicLanguage, "es");
+  for (const path of [pilot, previewUrl]) {
+    const response = await request(path, { headers: { "Accept-Language": "he" } });
+    assert.equal(response.status, 200);
+    const spanishHtml = await response.text();
+    assert.match(spanishHtml, /<html lang="es" dir="ltr">/);
+    assert.ok(spanishHtml.includes(draft.content.split("\n\n")[0]));
+    if (path === pilot) assert.ok(spanishHtml.includes(`<link rel="canonical" href="${origin}${pilot}"`));
+  }
+  assert.equal((await publishNeighborhood(true, { publicLanguage: "fr" })).status, 400);
+  assert.equal((await publishNeighborhood(true, { publicLanguage: "en" })).status, 200);
+  assert.equal((await update({ agentPageLanguage: "en" })).status, 200);
+
   assert.match(pilotHtml, /class="neighborhood-agent-sidebar" id="agent-contact"/);
   assert.match(pilotHtml, /id="btn-message">Contact Agent/);
   assert.doesNotMatch(pilotHtml, /<header class="agent-header">/);

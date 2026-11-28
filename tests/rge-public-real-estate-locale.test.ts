@@ -1,3 +1,4 @@
+import { publicRealEstateLocale } from "../shared/agent/publicRealEstateLocale";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
@@ -12,7 +13,7 @@ const shareUrl = origin + "/share/listings/sample";
 const authored = "Texto original של הסוכן — preserve this article.";
 const row = inventoryRowToFlyerListing({
   id: "listing-1", providerListingId: "MLS-1", status: "active", priceCents: 45000000, currency: "MXN",
-  beds: 3, baths: 2, squareFeet: 1800, yearBuilt: 1998, hoaFeeCents: null, propertyType: "house",
+  beds: 3, baths: 2, squareFeet: 1800, yearBuilt: 1998, hoaFeeCents: 25150, propertyType: "house",
   propertySubtype: null, description: authored, features: [], photos: [], addressLine1: "12 רחוב Herzl",
   addressLine2: null, city: "México", state: "CDMX", zip: null, latitude: 19.4, longitude: -99.1,
   listingDetails: {},
@@ -57,6 +58,8 @@ for (const language of ["en", "he", "es"]) {
     assert.ok(guide.includes(publicRealEstateText(language, "Contact Agent")));
     assert.ok(flyer(language).includes('"priceCurrency":"MXN"'));
     assert.ok(flyer(language).includes('"price":"450000"'));
+    const fee = new Intl.NumberFormat(publicRealEstateLocale(language), { style: "currency", currency: "MXN" }).format(251.5);
+    assert.ok(flyer(language).includes(publicRealEstateText(language, "HOA {price}/mo", { price: fee })));
     assert.ok(flyer(language).includes(publicRealEstateText(language, "Print flyer")));
     assert.ok(agent.includes('data-label="FOR SALE"'));
     assert.match(buildPublicAgentPageHtml({ ...settings, publicLanguage: "he", neighborhood }), /<html lang="en" dir="ltr">/);

@@ -9,6 +9,14 @@ export function publicRealEstateLocale(value: unknown): string {
 }
 
 export const publicRealEstateCopy = {
+  "MLS#: {id} · Data Source: {source}": {
+    he: "מספר MLS: {id} · מקור הנתונים: {source}",
+    es: "N.º de MLS: {id} · Fuente de datos: {source}",
+  },
+  "HOA {price}/mo": {
+    he: "ועד בעלי נכסים: {price} לחודש",
+    es: "Cuota de asociación: {price}/mes",
+  },
   "Home": {
     "he": "בית",
     "es": "Inicio"
@@ -554,7 +562,7 @@ export const publicRealEstateCopy = {
     "es": "{amount} pies²"
   },
   "{count} Bed": {
-    "he": "חדר שינה אחד",
+    "he": "{count} חדר שינה",
     "es": "{count} habitación"
   },
   "{count} Beds": {
@@ -562,7 +570,7 @@ export const publicRealEstateCopy = {
     "es": "{count} habitaciones"
   },
   "{count} Bath": {
-    "he": "חדר רחצה אחד",
+    "he": "{count} חדר רחצה",
     "es": "{count} baño"
   },
   "{count} Baths": {

@@ -963,7 +963,7 @@ function renderListingComplianceAttribution(text: FlyerText,
   const mlsSource = normalized.mlsSourceName?.trim();
   if (!office || !mlsId || !mlsSource) return "";
 
-  const mlsLine = `MLS#: ${escapeHtml(mlsId)} · Data Source: ${escapeHtml(mlsSource)}`;
+  const mlsLine = escapeHtml(text("MLS#: {id} · Data Source: {source}", { id: mlsId, source: mlsSource }));
   return `<footer class="listing-compliance-attribution" data-testid="listing-compliance-attribution">
     <p class="listing-attribution-office">${escapeHtml(text("Listed By: {name}", { name: office }))}</p>
     <p class="listing-attribution-mls">${mlsLine}</p>
@@ -1072,7 +1072,14 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const structuredDataJson = buildListingStructuredDataJson({ listing: seoListing, agent, shareUrl, publicLanguage: language });
   const listingLabel = text(resolveFlyerListingLabel(listing));
   const price = localizedFlyerPrice(listing, language) || text("Price on request");
-  const { sqft, hoa, yearBuilt } = resolveFlyerSpecFields(listing);
+  const { sqft, hoa: legacyHoa, yearBuilt } = resolveFlyerSpecFields(listing);
+  const hoaCents = formatHoaFee(listing.hoaFeeCents) ? listing.hoaFeeCents : parseHoaCentsFromText(listingHaystack(listing));
+  // Text-derived HOA amounts are legacy dollar amounts; the stored fee uses the listing currency.
+  const hoaCurrency = formatHoaFee(listing.hoaFeeCents) ? flyerCurrency(listing) : "USD";
+  const hoa = hoaCents == null || (language === "en" && hoaCurrency === "USD") ? legacyHoa
+    : text("HOA {price}/mo", { price: new Intl.NumberFormat(publicRealEstateLocale(language), {
+      style: "currency", currency: hoaCurrency,
+    }).format(hoaCents / 100) });
   // Free-form remarks may repeat the street address.
   const description = allowStreetAddress
     ? truncateFlyerDescription((listing.description || "").trim())
