@@ -200,7 +200,7 @@ The short Hebrew shell label is **תיבת שיחות**, appropriate for an omni
 
 ## Batch 4B Agent Pages and Neighborhood Pages
 
-- Integrated main `8f35fe3b`, including the authentication and multilingual pipeline changes in #405 and the cross-origin login fix in #406. Railway reports the newer revision live. #392 was closed unmerged, and the existing editor and publishing rules on main were retained. #378 remains open and overlaps the neighborhood boundary and management files.
+- Integrated main `8f35fe3b`, including the authentication and multilingual pipeline changes in #405 and the cross-origin login fix in #406. Railway reports the newer revision live. #378 and #392 are open drafts and overlap the neighborhood management and publishing files. Batch 4B retains the editor and publishing rules on main.
 - Localized Neighborhood Page management, draft recovery, preview and publishing, editor formatting and image controls, cover photo and media library, map lookup feedback, and validation in EN, HE and ES. Completed Agent Page profile and URL validation, market-area fields, embed copy feedback, listing publication status, provider connection and background sync feedback, and selected illustrative labels.
 - The existing international publication path still supports country codes and custom boundaries with no MLS inventory. Geocoding and listing eligibility keep the existing provider and geographic rules. Public URLs, metadata and authored copy are independent of dashboard localization.
 - The concierge fallback exposes IANA zones supported by the browser and retains the existing value if it is missing from the available options. The submitted timezone and existing appointment data retain their original semantics.
