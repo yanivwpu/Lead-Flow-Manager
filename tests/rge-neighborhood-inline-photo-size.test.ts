@@ -61,7 +61,7 @@ test("selected image width is carried into published inline photo, not small gal
   const position = html.indexOf('class="neighborhood-guide-inline-photo" style="width:55%"');
   assert.ok(position > 0);
   assert.ok(position > html.indexOf("Around the block</h3>"));
-  assert.ok(position < html.indexOf("<p>After the image"));
+  assert.ok(position < html.indexOf('<p dir="auto">After the image'));
   assert.match(html, /src="https:\/\/images\.example\.test.*\.jpg"/);
   assert.doesNotMatch(html, /class="neighborhood-guide-gallery"/);
   assert.doesNotMatch(html, /\[\[photo:/);
