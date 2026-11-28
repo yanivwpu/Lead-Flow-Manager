@@ -767,11 +767,14 @@ export const publicRealEstateCopy = {
     "he": "מוצגים {loaded} מתוך לפחות {total} נכסים שנסרקו",
     "es": "Se muestran {loaded} de al menos {total} coincidencias revisadas"
   },
-  "No verified homes match these filters. Ask the agent for other options.": {
-    "he": "אין נכסים מאומתים התואמים למסננים. פנו לסוכן לאפשרויות נוספות.",
-    "es": "Ninguna vivienda verificada coincide con estos filtros. Consulta al agente sobre otras opciones."
+  "No verified rental homes match these filters. Ask the agent for other options.": {
+    "he": "אין נכסים מאומתים להשכרה התואמים למסננים. פנו לסוכן לאפשרויות נוספות.",
+    "es": "Ninguna vivienda de alquiler verificada coincide con estos filtros. Consulta al agente sobre otras opciones."
   },
-  "This page is visible only to its owner while previewing.": {
+  "No verified for-sale homes match these filters. Ask the agent for other options.": {
+    "he": "אין נכסים מאומתים למכירה התואמים למסננים. פנו לסוכן לאפשרויות נוספות.",
+    "es": "Ninguna vivienda en venta verificada coincide con estos filtros. Consulta al agente sobre otras opciones."
+  },  "This page is visible only to its owner while previewing.": {
     "he": "רק בעל הדף יכול לצפות בתצוגה המקדימה.",
     "es": "Solo el propietario puede ver esta vista previa."
   },

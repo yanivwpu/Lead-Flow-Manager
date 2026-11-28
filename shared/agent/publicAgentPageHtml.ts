@@ -905,10 +905,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
             </label>
           </div>
           <div class="browse-panel-advanced">
-            <label>Min price ($)
+            <label>${text("Min price")} ($)
               <input type="number" id="filter-min-price" min="0" step="1000" placeholder="${text("Any")}" inputmode="numeric" />
             </label>
-            <label>Max price ($)
+            <label>${text("Max price")} ($)
               <input type="number" id="filter-max-price" min="0" step="1000" placeholder="${text("Any")}" inputmode="numeric" />
             </label>
             <label>${text("Beds")}
@@ -1137,7 +1137,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           if (!loaded) {
             var empty = document.createElement("div");
             empty.className = "neighborhood-property-empty";
-            empty.textContent = ${JSON.stringify(text("No verified homes match these filters. Ask the agent for other options."))};
+            empty.textContent = kind === "rent"
+              ? ${JSON.stringify(text("No verified rental homes match these filters. Ask the agent for other options."))}
+              : ${JSON.stringify(text("No verified for-sale homes match these filters. Ask the agent for other options."))};
             gridEl.appendChild(empty);
           }
           if (countEl) {
