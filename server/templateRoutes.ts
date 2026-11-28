@@ -1,3 +1,4 @@
+import { registerAgentNetworkRoutes } from "./agentNetworkRoutes";
 import type { Express } from "express";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
@@ -115,6 +116,7 @@ function buildRgeSubscriptionPayload(ge: Awaited<ReturnType<typeof evaluateGrowt
 }
 
 export function registerTemplateRoutes(app: Express) {
+  registerAgentNetworkRoutes(app);
   app.get("/api/templates/realtor-growth-engine/check-subscription", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
